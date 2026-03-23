@@ -1,0 +1,114 @@
+# PDF Layout Configuration
+# This file defines the layout structure for PDF reports
+
+global:
+  width: 842  # A4 landscape width in points
+  height: 595 # A4 landscape height in points
+  
+  fonts:
+    title:
+      name: "Helvetica-Bold"
+      size: 24
+    subtitle:
+      name: "Helvetica-Bold"
+      size: 18
+    body:
+      name: "Helvetica"
+      size: 12
+    small:
+      name: "Helvetica"
+      size: 10
+  
+  colors:
+    primary: "#1f77b4"
+    secondary: "#ff7f0e"
+    success: "#2ca02c"
+    warning: "#d62728"
+    text: "#333333"
+    muted: "#666666"
+
+pages:
+  general:
+    placeholders:
+      title:
+        x: 50
+        y: 550
+        width: 400
+        height: 30
+        type: "text"
+        style: "title"
+      
+      kpi_grid:
+        x: 50
+        y: 500
+        width: 400
+        height: 200
+        type: "table"
+        style: "kpi"
+      
+      chart_left:
+        x: 50
+        y: 300
+        width: 350
+        height: 200
+        type: "image"
+        style: "chart"
+      
+      chart_right:
+        x: 450
+        y: 300
+        width: 350
+        height: 200
+        type: "image"
+        style: "chart"
+      
+      table_bottom:
+        x: 50
+        y: 50
+        width: 750
+        height: 200
+        type: "table"
+        style: "data"
+
+  market:
+    placeholders:
+      title:
+        x: 50
+        y: 550
+        width: 400
+        height: 30
+        type: "text"
+        style: "title"
+      
+      kpi_grid:
+        x: 50
+        y: 500
+        width: 400
+        height: 200
+        type: "table"
+        style: "kpi"
+      
+      chart_left:
+        x: 50
+        y: 300
+        width: 350
+        height: 200
+        type: "image"
+        style: "chart"
+      
+      chart_right:
+        x: 450
+        y: 300
+        width: 350
+        height: 200
+        type: "image"
+        style: "chart"
+      
+      table_bottom:
+        x: 50
+        y: 50
+        width: 750
+        height: 200
+        type: "table"
+        style: "data"
+

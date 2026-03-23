@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Frontend
+node_modules/
+.next/
+out/
+*.log
+
+# Data
+data/
+charts/
+reports/
+
+# Cache
+cache/
+*.cache
+
+# Local dev server PIDs
+.devserver/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+weekly_report/data/
