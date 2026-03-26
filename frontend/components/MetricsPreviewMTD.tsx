@@ -13,11 +13,6 @@ const METRIC_LABELS = [
   'Returns',
   'Return Rate %',
   'Online Net Revenue',
-  'Retail Concept Store',
-  'Retail Pop-ups, Outlets',
-  'Retail Net Revenue',
-  'Wholesale Net Revenue',
-  'Total Net Revenue',
   'Returning Customers',
   'New customers',
   'Marketing Spend',
@@ -30,11 +25,6 @@ const METRIC_KEYS = [
   'returns',
   'return_rate_pct',
   'online_net_revenue',
-  'retail_concept_store',
-  'retail_popups_outlets',
-  'retail_net_revenue',
-  'wholesale_net_revenue',
-  'total_net_revenue',
   'returning_customers',
   'new_customers',
   'marketing_spend',
@@ -72,8 +62,12 @@ export default function MetricsPreviewMTD({
     }
     if (value === 0) return '0'
     const thousandsValue = value / 1000
-    const roundedThousands = Math.round(thousandsValue)
-    return roundedThousands.toLocaleString('sv-SE')
+    const roundedThousands = Math.round(Math.abs(thousandsValue))
+    const formattedThousands = roundedThousands.toLocaleString('sv-SE')
+    if ((metricKey === 'returns' || metricKey === 'marketing_spend') && value < 0) {
+      return `(${formattedThousands})`
+    }
+    return value < 0 ? `-${formattedThousands}` : formattedThousands
   }
 
   if (!mtdData) {

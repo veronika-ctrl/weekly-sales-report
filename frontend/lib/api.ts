@@ -57,6 +57,8 @@ export interface OnlineKPIsResponse {
     sessions: number
     new_customer_cac: number
     total_orders: number
+    return_rate_new_pct?: number
+    return_rate_returning_pct?: number
     last_year: {
       week: string
       aov_new_customer: number
@@ -69,6 +71,8 @@ export interface OnlineKPIsResponse {
       sessions: number
       new_customer_cac: number
       total_orders: number
+      return_rate_new_pct?: number
+      return_rate_returning_pct?: number
     } | null
   }>
   period_info: {
@@ -795,13 +799,23 @@ export async function getActualsMarketsDetailed(week: string): Promise<Record<st
 export interface AudienceMetricsCountryData {
   total_aov: number
   total_customers: number
+  total_orders: number
+  new_customers: number
+  returning_customers: number
   return_rate_pct: number
+  return_rate_new_pct?: number
+  return_rate_returning_pct?: number
   cos_pct: number
   cac: number
   last_year?: {
     total_aov: number
     total_customers: number
+    total_orders: number
+    new_customers: number
+    returning_customers: number
     return_rate_pct: number
+    return_rate_new_pct?: number
+    return_rate_returning_pct?: number
     cos_pct: number
     cac: number
   } | null
@@ -885,6 +899,30 @@ export interface DiscountsMonthlyResponse {
   last_year: Record<string, Record<string, number>> | null
 }
 
+export interface DiscountLevelPointYoY {
+  discounted_sales: number
+  full_price_sales: number
+  total_sales: number
+  discounted_share_pct: number
+  discount_amount: number
+  discount_level_pct: number
+}
+
+export interface DiscountLevelPoint extends DiscountLevelPointYoY {
+  last_year?: { week: string } & DiscountLevelPointYoY
+}
+
+export interface DiscountLevelResponse {
+  base_week: string
+  num_weeks: number
+  markets: string[]
+  weeks: Array<{
+    week: string
+    total: DiscountLevelPoint
+    markets: Record<string, DiscountLevelPoint>
+  }>
+}
+
 export async function getDiscountsSalesYoY(
   baseWeek: string,
   numWeeks: number = 8,
@@ -896,6 +934,19 @@ export async function getDiscountsSalesYoY(
   )
   if (!response.ok) {
     throw new Error(`Failed to fetch Discounts YoY: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function getDiscountsLevel(
+  baseWeek: string,
+  numWeeks: number = 8
+): Promise<DiscountLevelResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/level?base_week=${baseWeek}&num_weeks=${numWeeks}`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch discount level: ${response.statusText}`)
   }
   return response.json()
 }

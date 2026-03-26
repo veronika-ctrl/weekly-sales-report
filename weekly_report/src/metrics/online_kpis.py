@@ -230,6 +230,8 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
             'new_customer_cac': 0.0,
             'total_orders': 0,
             'return_rate_pct': 0.0,
+            'return_rate_new_pct': 0.0,
+            'return_rate_returning_pct': 0.0,
         }
 
     # Filter for online sales only
@@ -303,6 +305,25 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         returns_amount = max(0.0, float(gross_revenue - net_revenue))
     return_rate_pct = (returns_amount / gross_revenue * 100) if gross_revenue > 0 else 0.0
 
+    # Segment-level return rates (new vs returning). Uses same returns fallback logic at row level.
+    if 'Returns' in online_df.columns:
+        seg_returns_raw = pd.to_numeric(online_df['Returns'], errors='coerce')
+    else:
+        seg_returns_raw = pd.Series(pd.NA, index=online_df.index, dtype='Float64')
+    seg_returns_effective = seg_returns_raw.where(
+        seg_returns_raw.notna() & (seg_returns_raw > 0),
+        (pd.to_numeric(online_df['Gross Revenue'], errors='coerce').fillna(0.0) - pd.to_numeric(online_df['Net Revenue'], errors='coerce').fillna(0.0)).clip(lower=0),
+    )
+    seg = online_df['New/Returning Customer'].astype(str).str.strip().str.lower()
+    new_mask = seg.eq('new')
+    ret_mask = seg.eq('returning')
+    new_gross = pd.to_numeric(online_df.loc[new_mask, 'Gross Revenue'], errors='coerce').fillna(0.0).sum()
+    new_returns = pd.to_numeric(seg_returns_effective.loc[new_mask], errors='coerce').fillna(0.0).sum()
+    ret_gross = pd.to_numeric(online_df.loc[ret_mask, 'Gross Revenue'], errors='coerce').fillna(0.0).sum()
+    ret_returns = pd.to_numeric(seg_returns_effective.loc[ret_mask], errors='coerce').fillna(0.0).sum()
+    return_rate_new_pct = (new_returns / new_gross * 100) if new_gross > 0 else 0.0
+    return_rate_returning_pct = (ret_returns / ret_gross * 100) if ret_gross > 0 else 0.0
+
     return {
         'week': week_str,
         'aov_new_customer': float(aov_new_customer),
@@ -316,5 +337,7 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         'new_customer_cac': float(new_customer_cac),
         'total_orders': int(total_orders),
         'return_rate_pct': round(return_rate_pct, 1),
+        'return_rate_new_pct': round(return_rate_new_pct, 1),
+        'return_rate_returning_pct': round(return_rate_returning_pct, 1),
     }
 

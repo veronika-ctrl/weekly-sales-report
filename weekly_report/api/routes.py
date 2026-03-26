@@ -121,6 +121,8 @@ class KPIData(BaseModel):
     new_customer_cac: float
     total_orders: int
     return_rate_pct: float = 0.0
+    return_rate_new_pct: float = 0.0
+    return_rate_returning_pct: float = 0.0
     last_year: Optional[Dict[str, Any]] = None
 
 
@@ -334,7 +336,12 @@ class TotalContributionPerCountryResponse(BaseModel):
 class AudienceMetricsCountryDataInner(BaseModel):
     total_aov: float
     total_customers: int
+    total_orders: int = 0
+    new_customers: int = 0
+    returning_customers: int = 0
     return_rate_pct: float
+    return_rate_new_pct: float = 0.0
+    return_rate_returning_pct: float = 0.0
     cos_pct: float
     cac: float
 
@@ -342,7 +349,12 @@ class AudienceMetricsCountryDataInner(BaseModel):
 class AudienceMetricsCountryData(BaseModel):
     total_aov: float
     total_customers: int
+    total_orders: int = 0
+    new_customers: int = 0
+    returning_customers: int = 0
     return_rate_pct: float
+    return_rate_new_pct: float = 0.0
+    return_rate_returning_pct: float = 0.0
     cos_pct: float
     cac: float
     last_year: Optional[AudienceMetricsCountryDataInner] = None
@@ -910,58 +922,80 @@ def _load_mtd_budget_direct(base_week: str, data_root: Path) -> Dict[str, Any]:
 
     # Layout D: long format — columns Metric, Month, Value (and optionally Market, Year, Type)
     if "Metric" in df.columns and "Value" in df.columns and "Month" in df.columns:
-        # Prefer BUDGET type if present and has rows, else use all rows
-        type_vals = df["Type"].astype(str).str.strip().str.upper() if "Type" in df.columns else pd.Series(dtype=object)
-        if "Type" in df.columns and (type_vals == "BUDGET").any():
-            df_sub = df[type_vals == "BUDGET"].copy()
-        else:
-            df_sub = df.copy()
-        # Filter by target month (and year if column exists)
+        # Filter by target month/year first, then pick the best type/market slice.
+        df_sub = df.copy()
         year_col = "Year" if "Year" in df_sub.columns else None
         month_col = "Month"
         mask = df_sub.apply(
             lambda r: month_value_matches(r.get(month_col), r.get(year_col) if year_col else None),
             axis=1,
         )
-        df_month = df_sub.loc[mask]
-        # If we filtered to BUDGET but got no rows for target month, try all types (e.g. ACTUAL)
-        if df_month.empty and "Type" in df.columns and (type_vals == "BUDGET").any():
-            df_sub = df.copy()
-            mask = df_sub.apply(
-                lambda r: month_value_matches(r.get(month_col), r.get(year_col) if year_col else None),
-                axis=1,
-            )
-            df_month = df_sub.loc[mask]
-        # Optionally filter to totals (e.g. Market == "Total CDLP" or contains "Total")
-        if "Market" in df_month.columns and len(df_month["Market"].dropna().unique()) > 1:
-            total_mask = df_month["Market"].astype(str).str.strip().str.lower().str.contains("total", na=False)
-            if total_mask.any():
-                df_month = df_month.loc[total_mask]
+        df_month = df_sub.loc[mask].copy()
+
+        # Prefer planned data types for budget-like values (BUDGET/ESTIMATE/FORECAST/PLAN).
+        if not df_month.empty and "Type" in df_month.columns:
+            type_vals_month = df_month["Type"].astype(str).str.strip().str.upper()
+            selected = None
+            for t in ("BUDGET", "ESTIMATE", "FORECAST", "PLAN"):
+                cand = df_month.loc[type_vals_month == t]
+                if not cand.empty:
+                    selected = cand
+                    break
+            if selected is not None:
+                df_month = selected
+
+        # Prefer exact market "Total CDLP" when available.
+        if not df_month.empty and "Market" in df_month.columns:
+            market_vals = df_month["Market"].astype(str).str.strip().str.lower()
+            exact_total_cdlp = df_month.loc[market_vals == "total cdlp"]
+            if not exact_total_cdlp.empty:
+                # Keep exact "Total CDLP" rows plus global aMER rows that are stored
+                # in the first column with empty Metric.
+                amer_extra_mask = market_vals.eq("amer") | market_vals.eq("a mer")
+                if "Metric" in df_month.columns:
+                    metric_vals = df_month["Metric"].astype(str).str.strip().str.lower()
+                    amer_extra_mask = amer_extra_mask | metric_vals.eq("amer")
+                df_month = pd.concat([exact_total_cdlp, df_month.loc[amer_extra_mask]], ignore_index=True)
+            elif len(df_month["Market"].dropna().unique()) > 1:
+                total_mask = market_vals.str.contains("total", na=False)
+                if total_mask.any():
+                    df_month = df_month.loc[total_mask]
         if not df_month.empty:
             out = {}
             for _, row in df_month.iterrows():
-                label = str(row.get("Metric", "")).strip()
+                # In some files (including aMER), label is in first column with empty Metric.
+                metric_raw = row.get("Metric", "")
+                market_raw = row.get("Market", "")
+                metric_label = "" if pd.isna(metric_raw) else str(metric_raw).strip()
+                market_label = "" if pd.isna(market_raw) else str(market_raw).strip()
+                label = metric_label or market_label
                 if not label:
                     continue
                 v = _parse_budget_number(row.get("Value"))
-                if metric_row_matches(label, "Total Gross Revenue", "Online Gross Revenue"):
+                # Long-format files have a clean "Metric" column; use strict matching to avoid
+                # accidentally mapping share rows (e.g. "ROW Marketing Spend Share").
+                metric_norm = "".join(ch for ch in label.lower() if ch.isalnum())
+                if metric_norm in ("totalgrossrevenue", "onlinegrossrevenue"):
                     out["online_gross_revenue"] = v
-                elif metric_row_matches(label, "Returns"):
+                elif metric_norm == "returns":
                     out["returns"] = v
+                elif metric_norm in ("returnrate",):
+                    # Convert decimal-form percentages (0.025) to percent points (2.5)
+                    out["return_rate_pct"] = v * 100 if abs(v) <= 1 else v
+                elif metric_norm in ("netrevenue", "onlinenetrevenue"):
+                    out["online_net_revenue"] = out["total_net_revenue"] = v
+                elif metric_norm == "returningcustomers":
+                    out["returning_customers"] = int(round(v))
+                elif metric_norm == "newcustomers":
+                    out["new_customers"] = int(round(v))
+                elif metric_norm in ("onlinemarketingspend", "marketingspend"):
+                    out["marketing_spend"] = v
+                elif metric_norm in ("cos", "onlinecostofsale"):
+                    out["online_cost_of_sale_3"] = (v * 100 if abs(v) <= 1 else v)
+                elif metric_norm == "amer":
+                    out["emer"] = v
                 elif metric_row_matches(label, "Return rate (%)", "Return rate", "Return Rate %"):
                     out["return_rate_pct"] = v
-                elif metric_row_matches(label, "Net Revenue", "Online Net Revenue"):
-                    out["online_net_revenue"] = out["total_net_revenue"] = v
-                elif metric_row_matches(label, "Returning Customers"):
-                    out["returning_customers"] = int(round(v))
-                elif metric_row_matches(label, "New Customers"):
-                    out["new_customers"] = int(round(v))
-                elif metric_row_matches(label, "Online Marketing Spend", "Marketing Spend"):
-                    out["marketing_spend"] = v
-                elif metric_row_matches(label, "COS %", "COS", "Online Cost of Sale"):
-                    out["online_cost_of_sale_3"] = v
-                elif metric_row_matches(label, "aMER"):
-                    out["emer"] = v
             if out:
                 return_rate = out.get("return_rate_pct", 0) or (
                     (out.get("returns", 0) / out.get("online_gross_revenue", 1) * 100
@@ -3073,14 +3107,24 @@ async def get_audience_metrics_per_country(
                         last_year_inner = AudienceMetricsCountryDataInner(
                             total_aov=float(ly.get("total_aov", 0)),
                             total_customers=int(ly.get("total_customers", 0)),
+                            total_orders=int(ly.get("total_orders", 0)),
+                            new_customers=int(ly.get("new_customers", 0)),
+                            returning_customers=int(ly.get("returning_customers", 0)),
                             return_rate_pct=float(ly.get("return_rate_pct", 0)),
+                            return_rate_new_pct=float(ly.get("return_rate_new_pct", 0)),
+                            return_rate_returning_pct=float(ly.get("return_rate_returning_pct", 0)),
                             cos_pct=float(ly.get("cos_pct", 0)),
                             cac=float(ly.get("cac", 0)),
                         )
                     countries_typed[country] = AudienceMetricsCountryData(
                         total_aov=float(vals.get("total_aov", 0)),
                         total_customers=int(vals.get("total_customers", 0)),
+                        total_orders=int(vals.get("total_orders", 0)),
+                        new_customers=int(vals.get("new_customers", 0)),
+                        returning_customers=int(vals.get("returning_customers", 0)),
                         return_rate_pct=float(vals.get("return_rate_pct", 0)),
+                        return_rate_new_pct=float(vals.get("return_rate_new_pct", 0)),
+                        return_rate_returning_pct=float(vals.get("return_rate_returning_pct", 0)),
                         cos_pct=float(vals.get("cos_pct", 0)),
                         cac=float(vals.get("cac", 0)),
                         last_year=last_year_inner,
@@ -3923,6 +3967,27 @@ async def get_discounts_category_series(
     except Exception as e:
         logger.error(f"Error loading discounts category series: {e}")
         raise HTTPException(status_code=500, detail="Failed to load discounts category series")
+
+
+@app.get("/api/discounts/level")
+async def get_discounts_level(
+    base_week: str = Query(...),
+    num_weeks: int = Query(8),
+):
+    """Get discount level metrics (total + per market) with YoY."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        if num_weeks < 1 or num_weeks > 52:
+            raise HTTPException(status_code=400, detail="num_weeks must be between 1 and 52")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.discounts_sales import calculate_discount_level_for_weeks
+        return calculate_discount_level_for_weeks(base_week, num_weeks, config.data_root)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading discounts level metrics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load discounts level metrics")
 
 
 @app.get("/api/customer-quality/scorecard")

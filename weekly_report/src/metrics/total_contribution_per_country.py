@@ -5,6 +5,7 @@ from loguru import logger
 from pathlib import Path
 
 from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.metrics.discounts_sales import _pick_column
 
 
 def calculate_total_contribution_per_country_for_week(
@@ -22,8 +23,16 @@ def calculate_total_contribution_per_country_for_week(
             'countries': {}
         }
     
-    # Filter for online sales only
-    online_df = qlik_df[qlik_df['Sales Channel'] == 'Online'].copy()
+    # Resolve key Qlik columns with alias support.
+    sales_channel_col = _pick_column(qlik_df, ["Sales Channel", "Försäljningskanal", "Channel", "Kanal"])
+    qlik_country_col = _pick_column(qlik_df, ["Country", "Land", "Market"])
+    gross_col = _pick_column(qlik_df, ["Gross Revenue", "Gross sales", "Bruttoförsäljning", "Bruttointäkt"])
+    if not sales_channel_col or not qlik_country_col or not gross_col:
+        logger.warning(f"Missing required Qlik columns for week {week_str}")
+        return {'week': week_str, 'countries': {}}
+
+    # Filter for online sales only (case-insensitive).
+    online_df = qlik_df[qlik_df[sales_channel_col].astype(str).str.strip().str.lower().str.contains('online')].copy()
     
     if online_df.empty:
         logger.warning(f"No online sales found for week {week_str}")
@@ -33,32 +42,45 @@ def calculate_total_contribution_per_country_for_week(
         }
     
     # Get total marketing spend per country (100% allocation)
-    country_spend = dema_df.groupby('Country').agg({
-        'Marketing spend': 'sum'
-    }).reset_index()
+    dema_country_col = _pick_column(dema_df, ["Country", "Land", "Market"])
+    spend_col = _pick_column(dema_df, ["Marketing spend", "Marketing Spend", "Spend", "Cost", "Kostnad"])
+    if not dema_country_col or not spend_col:
+        logger.warning(f"Missing required DEMA spend columns for week {week_str}")
+        return {'week': week_str, 'countries': {}}
+    country_spend = dema_df.groupby(dema_country_col).agg({spend_col: 'sum'}).reset_index()
+    country_spend.columns = ['Country', 'Marketing spend']
     country_spend['Total marketing spend'] = country_spend['Marketing spend'] * 1.0
     
     # Get gross revenue per country for all online customers
-    country_revenue = online_df.groupby('Country').agg({
-        'Gross Revenue': 'sum'
-    }).reset_index()
+    country_revenue = online_df.groupby(qlik_country_col).agg({gross_col: 'sum'}).reset_index()
     country_revenue.columns = ['Country', 'gross_revenue']
     
     # Get overall GM2 (average across all customers)
     logger.info(f"Week {week_str}: GM2 columns: {dema_gm2_df.columns.tolist()}")
     
-    if 'Country' in dema_gm2_df.columns:
+    gm2_country_col = _pick_column(dema_gm2_df, ["Country", "Land", "Market"])
+    gm2_col = _pick_column(
+        dema_gm2_df,
+        [
+            "Gross margin 2 - Dema MTA",
+            "Gross Margin 2 - Dema MTA",
+            "Gross margin 2",
+            "GM2",
+            "GM2 %",
+            "GM2 pct",
+        ],
+    )
+
+    if gm2_country_col and gm2_col:
         # GM2 has country dimension
-        logger.info(f"Week {week_str}: GM2 countries: {dema_gm2_df['Country'].unique().tolist()}")
-        country_gm2 = dema_gm2_df.groupby('Country').agg({
-            'Gross margin 2 - Dema MTA': 'mean'
-        }).reset_index()
+        logger.info(f"Week {week_str}: GM2 countries: {dema_gm2_df[gm2_country_col].unique().tolist()}")
+        country_gm2 = dema_gm2_df.groupby(gm2_country_col).agg({gm2_col: 'mean'}).reset_index()
         country_gm2.columns = ['Country', 'gm2_pct']
         logger.info(f"Week {week_str}: GM2 per country:\n{country_gm2}")
     else:
-        # GM2 doesn't have country dimension - use overall average
-        logger.info(f"Week {week_str}: No country dimension in GM2, using overall average")
-        overall_gm2_pct = dema_gm2_df['Gross margin 2 - Dema MTA'].mean() if 'Gross margin 2 - Dema MTA' in dema_gm2_df.columns else 0
+        # GM2 column missing or no country dim: use overall average if possible, else 0.
+        logger.info(f"Week {week_str}: No country-level GM2 column, using overall fallback")
+        overall_gm2_pct = dema_gm2_df[gm2_col].mean() if gm2_col and gm2_col in dema_gm2_df.columns else 0
         
         # Create a dummy country_gm2 with the overall percentage for all countries
         country_gm2 = country_revenue[['Country']].copy()

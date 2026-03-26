@@ -47,6 +47,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/products/summary': { title: 'Products Summary', subtitle: 'Overview of product performance' },
       '/products/product': { title: 'Products', subtitle: 'Product sales by category' },
       '/products/discounts': { title: 'Discounts', subtitle: 'Discount sales analysis' },
+      '/products/discount-level': { title: 'Discount Level', subtitle: 'Discount level trend by market with YoY' },
       '/products/customer': { title: 'Customer Quality', subtitle: 'Customer discount behavior analysis' },
       '/countries/sweden': { title: 'Sweden', subtitle: 'Country-specific KPIs' },
       '/countries/uk': { title: 'United Kingdom', subtitle: 'Country-specific KPIs' },
@@ -111,7 +112,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/contribution-new-per-country') || isActive('/contribution-new-total-per-country') || 
                     isActive('/contribution-returning-per-country') || isActive('/contribution-returning-total-per-country') || 
                     isActive('/total-contribution-per-country') || isActive('/products/summary') || 
-                    isActive('/products/product') || isActive('/products/discounts') || isActive('/products/customer') ||
+                    isActive('/products/product') || isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer') ||
                     isActive('/countries/sweden') || isActive('/countries/uk') || isActive('/countries/usa') ||
                     isActive('/countries/germany') || isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') || isActive('/countries/uae') ||
@@ -140,7 +141,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/contribution') || isActive('/gender-sales') || isActive('/men-category-sales') || 
                     isActive('/women-category-sales') || isActive('/category-sales') || isActive('/products-new') || 
                     isActive('/products-gender') || isActive('/products/summary') || isActive('/products/product') ||
-                    isActive('/products/discounts') || isActive('/products/customer')
+                    isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -485,7 +486,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                 <div
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
                     isActive('/products/summary') || isActive('/products/product') || 
-                    isActive('/products/discounts') || isActive('/products/customer')
+                    isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600'
                   }`}
@@ -529,6 +530,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   >
                     <IconFileChart className="h-4 w-4" />
                     {!isCollapsed && <span>Discounts</span>}
+                  </Link>
+                  <Link
+                    href="/products/discount-level"
+                    prefetch={true}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                      isActive('/products/discount-level')
+                        ? 'bg-gray-200 text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <IconFileChart className="h-4 w-4" />
+                    {!isCollapsed && <span>Discount Level</span>}
                   </Link>
                   <Link
                     href="/products/customer"

@@ -1,11 +1,258 @@
-"""Audience metrics per country: Total AOV, Total customers, Return rate, COS, CAC (no split by customer type)."""
-from typing import Dict, Any, List
+"""Audience metrics per country: Total AOV, customers, return rates (overall/new/returning), COS, CAC."""
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 from loguru import logger
 from pathlib import Path
 
+from weekly_report.src.metrics.discounts_sales import _normalize_customer_segment, _pick_column
 from weekly_report.src.metrics.table1 import load_all_raw_data
 from weekly_report.src.periods.calculator import get_week_date_range
+
+# Lowercase Qlik/DEMA labels -> exact names used by Audience frontend (see SLUG_TO_NAME).
+_COUNTRY_ALIASES_LOWER_TO_CANONICAL: Dict[str, str] = {
+    # Sweden
+    "sverige": "Sweden",
+    "sweden": "Sweden",
+    # United Kingdom
+    "united kingdom": "United Kingdom",
+    "uk": "United Kingdom",
+    "great britain": "United Kingdom",
+    "britain": "United Kingdom",
+    "gb": "United Kingdom",
+    "g.b.": "United Kingdom",
+    "storbritannien": "United Kingdom",
+    # United States
+    "united states": "United States",
+    "united states of america": "United States",
+    "usa": "United States",
+    "us": "United States",
+    "u.s.": "United States",
+    "u.s.a.": "United States",
+    # Germany
+    "germany": "Germany",
+    "deutschland": "Germany",
+    "tyskland": "Germany",
+    "allemagne": "Germany",
+    # France
+    "france": "France",
+    "frankreich": "France",
+    "frankrike": "France",
+    # Canada
+    "canada": "Canada",
+    "kanada": "Canada",
+    # Australia
+    "australia": "Australia",
+    "australien": "Australia",
+    # Switzerland (Audience has /audience/switzerland)
+    "switzerland": "Switzerland",
+    "schweiz": "Switzerland",
+    "suisse": "Switzerland",
+    "svizzera": "Switzerland",
+    # UAE
+    "uae": "UAE",
+    "united arab emirates": "UAE",
+    "förenade arabemiraten": "UAE",
+    "forenade arabemiraten": "UAE",
+}
+
+# Canonical names that have their own Audience pages (excluded from ROW).
+_AUDIENCE_CORE_MARKETS_LOWER: frozenset = frozenset(
+    n.lower()
+    for n in (
+        "Sweden",
+        "United Kingdom",
+        "United States",
+        "Germany",
+        "France",
+        "Canada",
+        "Australia",
+        "Switzerland",
+        "UAE",
+    )
+)
+
+
+def _audience_canonical_country(raw: Any) -> Any:
+    """Map export country label to the Audience UI country key; unknown labels pass through."""
+    if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+        return pd.NA
+    s = str(raw).strip()
+    if not s or s.lower() in ("nan", "none", "-"):
+        return pd.NA
+    return _COUNTRY_ALIASES_LOWER_TO_CANONICAL.get(s.lower(), s)
+
+
+def _normalize_sales_channel(val: Any) -> Optional[str]:
+    """Map raw channel labels to 'online' for filtering (locale / casing tolerant)."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    s = str(val).strip().strip('"').strip("'").lower()
+    if not s or s == "nan":
+        return None
+    if "online" in s:
+        return "online"
+    if "e-handel" in s or "ecommerce" in s or "e-commerce" in s or "ecom" in s:
+        return "online"
+    if s in ("web", "www", "digital", "d2c", "dtc"):
+        return "online"
+    if "webb" in s:  # Swedish "webbshop" etc.
+        return "online"
+    return None
+
+
+def _prepare_online_frame(qlik_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """
+    Resolve Qlik column aliases, filter to online sales, and add standard internal columns:
+    _Country, _CountryCanonical, _Gross, _Net, _Returns_raw, _Order, _Email, _Seg
+    """
+    if qlik_df.empty:
+        return None
+
+    df = qlik_df.copy()
+    df.columns = df.columns.astype(str).str.strip()
+
+    sales_col = _pick_column(
+        df,
+        [
+            "Sales Channel",
+            "Försäljningskanal",
+            "Sales channel",
+            "Channel",
+            "Kanal",
+            "Forsaljningskanal",
+        ],
+    )
+    country_col = _pick_column(
+        df,
+        [
+            "Country",
+            "Land",
+            "Market",
+            "Country/Region",
+            "Ship country",
+            "Shipping country",
+        ],
+    )
+    gross_col = _pick_column(
+        df,
+        [
+            "Gross Revenue",
+            "Bruttointäkt",
+            "Bruttoförsäljning",
+            "Gross sales",
+            "Gross Sales",
+        ],
+    )
+    net_col = _pick_column(
+        df,
+        [
+            "Net Revenue",
+            "Nettoförsäljning",
+            "Net sales",
+            "Net Sales",
+            "Net amount",
+        ],
+    )
+    returns_pick = _pick_column(df, ["Returns", "Returer", "Return amount", "Returns amount"])
+    order_col = _pick_column(
+        df,
+        [
+            "Order No",
+            "Order No.",
+            "Order number",
+            "Order Number",
+            "Ordernummer",
+            "Order",
+            "Order name",
+            "Order Name",
+            "Order ID",
+            "Order Id",
+            "Beställning",
+            "Bestallning",
+        ],
+    )
+    email_col = _pick_column(
+        df,
+        [
+            "Customer E-mail",
+            "Customer Email",
+            "Customer email",
+            "E-mail",
+            "Email",
+            "Kund e-post",
+            "Kund epost",
+            "E-post",
+            "Epost",
+            "Customer E mail",
+            "Kundens e-postadress",
+        ],
+    )
+    seg_col = _pick_column(
+        df,
+        [
+            "New/Returning Customer",
+            "New or returning customer",
+            "Ny eller återkommande kund",
+            "Ny eller återkommande kund (New/Returning)",
+        ],
+    )
+
+    if not sales_col or not country_col or not gross_col:
+        logger.warning(
+            "Audience per country: missing required Qlik columns (sales channel, country, and/or gross). "
+            f"Columns present: {df.columns.tolist()}"
+        )
+        return None
+
+    mask = df[sales_col].map(_normalize_sales_channel).eq("online")
+    online = df.loc[mask].copy()
+    if online.empty:
+        return online
+
+    online["_Country"] = online[country_col].map(
+        lambda x: str(x).strip()
+        if pd.notna(x) and str(x).strip() and str(x).strip().lower() not in ("nan", "none")
+        else pd.NA
+    )
+    online["_CountryCanonical"] = online["_Country"].map(_audience_canonical_country)
+    online["_Gross"] = pd.to_numeric(online[gross_col], errors="coerce").fillna(0.0)
+
+    if net_col:
+        online["_Net"] = pd.to_numeric(online[net_col], errors="coerce").fillna(0.0)
+    else:
+        online["_Net"] = 0.0
+
+    if returns_pick:
+        online["_Returns_raw"] = pd.to_numeric(online[returns_pick], errors="coerce")
+    else:
+        online["_Returns_raw"] = pd.Series(pd.NA, index=online.index, dtype="Float64")
+
+    if order_col:
+        online["_Order"] = online[order_col].map(lambda x: str(x).strip() if pd.notna(x) else "")
+        online.loc[online["_Order"].isin(("", "nan", "None")), "_Order"] = pd.NA
+    else:
+        online["_Order"] = pd.NA
+        logger.warning("Audience per country: no order id column found; total_orders will be 0.")
+
+    if email_col:
+        online["_Email"] = (
+            online[email_col].map(lambda x: str(x).strip().lower() if pd.notna(x) else "")
+        )
+        online.loc[online["_Email"].isin(("", "nan", "none")), "_Email"] = pd.NA
+    else:
+        online["_Email"] = pd.NA
+        logger.warning("Audience per country: no customer email column; new/returning counts will be 0.")
+
+    if seg_col:
+        online["_Seg"] = online[seg_col].map(_normalize_customer_segment)
+    else:
+        online["_Seg"] = pd.NA
+        logger.warning(
+            "Audience per country: no new/returning segment column; new/returning counts will be 0."
+        )
+
+    return online
 
 
 def _build_weeks(base_week: str, num_weeks: int) -> List[str]:
@@ -39,38 +286,40 @@ def calculate_audience_metrics_per_country_for_week(
     week_str: str,
 ) -> Dict[str, Any]:
     """
-    For one week, compute per country (and Total): total_aov, total_customers, return_rate_pct, cos_pct, cac.
-    Uses online sales only; no split by new/returning in the displayed metrics.
+    For one week, compute per country (and Total): total_aov, total_customers, total_orders,
+    new_customers, returning_customers, return_rate_pct, return_rate_new_pct,
+    return_rate_returning_pct, cos_pct, cac.
+    Uses online sales only.
     """
     if qlik_df.empty:
         return {"week": week_str, "countries": {}}
 
-    online = qlik_df[qlik_df["Sales Channel"] == "Online"].copy()
+    online = _prepare_online_frame(qlik_df)
+    if online is None or online.empty:
+        return {"week": week_str, "countries": {}}
+
+    online = online[online["_CountryCanonical"].notna()].copy()
     if online.empty:
         return {"week": week_str, "countries": {}}
 
     # Per country: gross, net, returns (amount). Return rate % = returns / gross (typically 5–6%).
     # Prefer "Returns" column when it gives a plausible rate (0–30%); else use Gross - Net.
-    rev_orders = online.groupby("Country").agg(
-        gross_revenue=("Gross Revenue", "sum"),
-        orders=("Order No", "nunique"),
+    rev_orders = online.groupby("_CountryCanonical", dropna=False).agg(
+        gross_revenue=("_Gross", "sum"),
+        orders=("_Order", "nunique"),
     ).reset_index()
-    if "Net Revenue" in online.columns:
-        net_by_country = online.groupby("Country")["Net Revenue"].sum().reset_index()
-        net_by_country.columns = ["Country", "net_revenue"]
-        rev_orders = rev_orders.merge(net_by_country, on="Country", how="left")
-        rev_orders["net_revenue"] = rev_orders["net_revenue"].fillna(0)
-        rev_orders["returns_gross_minus_net"] = (rev_orders["gross_revenue"] - rev_orders["net_revenue"]).clip(lower=0)
-    else:
-        rev_orders["net_revenue"] = 0.0
-        rev_orders["returns_gross_minus_net"] = 0.0
-    if "Returns" in online.columns:
-        returns_by_country = online.groupby("Country")["Returns"].sum().reset_index()
-        returns_by_country.columns = ["Country", "returns_col"]
-        rev_orders = rev_orders.merge(returns_by_country, on="Country", how="left")
-        rev_orders["returns_col"] = rev_orders["returns_col"].fillna(0)
-    else:
-        rev_orders["returns_col"] = None
+    rev_orders.rename(columns={"_CountryCanonical": "Country"}, inplace=True)
+
+    net_by_country = online.groupby("_CountryCanonical", dropna=False)["_Net"].sum().reset_index()
+    net_by_country.columns = ["Country", "net_revenue"]
+    rev_orders = rev_orders.merge(net_by_country, on="Country", how="left")
+    rev_orders["net_revenue"] = rev_orders["net_revenue"].fillna(0)
+    rev_orders["returns_gross_minus_net"] = (rev_orders["gross_revenue"] - rev_orders["net_revenue"]).clip(lower=0)
+
+    returns_by_country = online.groupby("_CountryCanonical", dropna=False)["_Returns_raw"].sum().reset_index()
+    returns_by_country.rename(columns={"_CountryCanonical": "Country", "_Returns_raw": "returns_col"}, inplace=True)
+    rev_orders = rev_orders.merge(returns_by_country, on="Country", how="left")
+    rev_orders["returns_col"] = rev_orders["returns_col"].fillna(0)
     # Prefer Returns column when present and > 0; else use Gross - Net (so we don't show flat 0 when Gross > Net)
     def _pick_returns(row: pd.Series) -> float:
         gross = float(row["gross_revenue"])
@@ -82,23 +331,67 @@ def calculate_audience_metrics_per_country_for_week(
         return float(row["returns_gross_minus_net"])
     rev_orders["returns_amount"] = rev_orders.apply(_pick_returns, axis=1)
 
-    new_df = online[online["New/Returning Customer"] == "New"].groupby("Country").agg(
-        new_customers=("Customer E-mail", "nunique")
-    ).reset_index()
-    ret_df = online[online["New/Returning Customer"] == "Returning"].groupby("Country").agg(
-        returning_customers=("Customer E-mail", "nunique")
-    ).reset_index()
+    # Per-row effective returns for segment-level return rates.
+    # Prefer Returns when > 0; otherwise use Gross - Net fallback.
+    online["_returns_effective"] = online["_Returns_raw"]
+    online["_returns_effective"] = online["_returns_effective"].where(
+        online["_returns_effective"].notna() & (online["_returns_effective"] > 0),
+        (online["_Gross"] - online["_Net"]).clip(lower=0),
+    )
+
+    seg_returns = (
+        online[online["_Seg"].isin(["new", "returning"]).fillna(False)]
+        .groupby(["_CountryCanonical", "_Seg"], dropna=False)
+        .agg(seg_gross=("_Gross", "sum"), seg_returns=("_returns_effective", "sum"))
+        .reset_index()
+    )
+    seg_pivot = seg_returns.pivot(index="_CountryCanonical", columns="_Seg", values=["seg_gross", "seg_returns"])
+    if isinstance(seg_pivot.columns, pd.MultiIndex):
+        seg_pivot.columns = [f"{a}_{b}" for a, b in seg_pivot.columns]
+    seg_pivot = seg_pivot.reset_index().rename(columns={"_CountryCanonical": "Country"})
+    rev_orders = rev_orders.merge(seg_pivot, on="Country", how="left")
+    for c in ("seg_gross_new", "seg_returns_new", "seg_gross_returning", "seg_returns_returning"):
+        if c not in rev_orders.columns:
+            rev_orders[c] = 0.0
+        rev_orders[c] = rev_orders[c].fillna(0.0)
+
+    new_df = (
+        online[online["_Seg"].eq("new").fillna(False)]
+        .groupby("_CountryCanonical", dropna=False)
+        .agg(new_customers=("_Email", "nunique"))
+        .reset_index()
+        .rename(columns={"_CountryCanonical": "Country"})
+    )
+    ret_df = (
+        online[online["_Seg"].eq("returning").fillna(False)]
+        .groupby("_CountryCanonical", dropna=False)
+        .agg(returning_customers=("_Email", "nunique"))
+        .reset_index()
+        .rename(columns={"_CountryCanonical": "Country"})
+    )
 
     merged = rev_orders.merge(new_df, on="Country", how="left").merge(ret_df, on="Country", how="left")
     merged["new_customers"] = merged["new_customers"].fillna(0).astype(int)
     merged["returning_customers"] = merged["returning_customers"].fillna(0).astype(int)
     merged["total_customers"] = merged["new_customers"] + merged["returning_customers"]
 
-    # Marketing spend per country from DEMA
-    if not dema_df.empty and "Country" in dema_df.columns:
-        spend = dema_df.groupby("Country")["Marketing spend"].sum().reset_index()
-        spend.columns = ["Country", "marketing_spend"]
-        merged = merged.merge(spend, on="Country", how="left")
+    # Marketing spend per country from DEMA (canonicalize labels to match Qlik / Audience keys)
+    if not dema_df.empty:
+        dema_cc = dema_df.copy()
+        dema_cc.columns = dema_cc.columns.astype(str).str.strip()
+        spend_col = _pick_column(
+            dema_cc,
+            ["Marketing spend", "Marketing Spend", "Spend", "Cost", "Kostnad", "Ad spend"],
+        )
+        if spend_col and "Country" in dema_cc.columns:
+            spend = dema_cc.groupby("Country")[spend_col].sum().reset_index()
+            spend.columns = ["_dema_country", "marketing_spend"]
+            spend["Country"] = spend["_dema_country"].map(_audience_canonical_country)
+            spend = spend.dropna(subset=["Country"])
+            spend = spend.groupby("Country", as_index=False)["marketing_spend"].sum()
+            merged = merged.merge(spend, on="Country", how="left")
+        else:
+            merged["marketing_spend"] = 0.0
     else:
         merged["marketing_spend"] = 0.0
     merged["marketing_spend"] = merged["marketing_spend"].fillna(0)
@@ -122,20 +415,66 @@ def calculate_audience_metrics_per_country_for_week(
 
         total_aov = (gross_revenue / orders) if orders > 0 else 0.0
         return_rate_pct = (returns_amount / gross_revenue * 100) if gross_revenue > 0 else 0.0
+        new_gross = float(row.get("seg_gross_new", 0.0))
+        new_returns = float(row.get("seg_returns_new", 0.0))
+        ret_gross = float(row.get("seg_gross_returning", 0.0))
+        ret_returns = float(row.get("seg_returns_returning", 0.0))
+        return_rate_new_pct = (new_returns / new_gross * 100) if new_gross > 0 else 0.0
+        return_rate_returning_pct = (ret_returns / ret_gross * 100) if ret_gross > 0 else 0.0
         cos_pct = (spend / gross_revenue * 100) if gross_revenue > 0 else 0.0
         cac = (new_spend / new_c) if new_c > 0 else 0.0
 
         result["countries"][country] = {
             "total_aov": round(total_aov, 2),
             "total_customers": total_c,
+            "total_orders": orders,
+            "new_customers": new_c,
+            "returning_customers": ret_c,
             "return_rate_pct": round(return_rate_pct, 2),
+            "return_rate_new_pct": round(return_rate_new_pct, 2),
+            "return_rate_returning_pct": round(return_rate_returning_pct, 2),
             "cos_pct": round(cos_pct, 2),
             "cac": round(cac, 2),
+        }
+
+    # ROW aggregate (Rest of World): all countries outside main Audience market pages.
+    merged_valid = merged[~merged["Country"].isna()].copy()
+    merged_valid["CountryNorm"] = merged_valid["Country"].astype(str).str.strip().str.lower()
+    merged_valid = merged_valid[merged_valid["CountryNorm"] != "-"]
+    row_df = merged_valid[~merged_valid["CountryNorm"].isin(_AUDIENCE_CORE_MARKETS_LOWER)]
+    if not row_df.empty:
+        row_revenue = float(row_df["gross_revenue"].sum() or 0.0)
+        row_returns = float(row_df["returns_amount"].sum() or 0.0)
+        row_new_gross = float(row_df["seg_gross_new"].sum() or 0.0)
+        row_new_returns = float(row_df["seg_returns_new"].sum() or 0.0)
+        row_ret_gross = float(row_df["seg_gross_returning"].sum() or 0.0)
+        row_ret_returns = float(row_df["seg_returns_returning"].sum() or 0.0)
+        row_orders = int(row_df["orders"].sum() or 0)
+        row_new = int(row_df["new_customers"].sum() or 0)
+        row_ret = int(row_df["returning_customers"].sum() or 0)
+        row_total_customers = row_new + row_ret
+        row_spend = float(row_df["marketing_spend"].sum() or 0.0)
+        row_new_spend = float(row_df["new_customer_spend"].sum() or 0.0)
+        result["countries"]["ROW"] = {
+            "total_aov": round((row_revenue / row_orders) if row_orders > 0 else 0.0, 2),
+            "total_customers": row_total_customers,
+            "total_orders": row_orders,
+            "new_customers": row_new,
+            "returning_customers": row_ret,
+            "return_rate_pct": round((row_returns / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
+            "return_rate_new_pct": round((row_new_returns / row_new_gross * 100) if row_new_gross > 0 else 0.0, 2),
+            "return_rate_returning_pct": round((row_ret_returns / row_ret_gross * 100) if row_ret_gross > 0 else 0.0, 2),
+            "cos_pct": round((row_spend / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
+            "cac": round((row_new_spend / row_new) if row_new > 0 else 0.0, 2),
         }
 
     # Total row
     tot_revenue = merged["gross_revenue"].sum()
     tot_returns = merged["returns_amount"].sum()
+    tot_new_gross = merged["seg_gross_new"].sum()
+    tot_new_returns = merged["seg_returns_new"].sum()
+    tot_ret_gross = merged["seg_gross_returning"].sum()
+    tot_ret_returns = merged["seg_returns_returning"].sum()
     tot_orders = merged["orders"].sum()
     tot_new = merged["new_customers"].sum()
     tot_ret = merged["returning_customers"].sum()
@@ -145,7 +484,12 @@ def calculate_audience_metrics_per_country_for_week(
     result["countries"]["Total"] = {
         "total_aov": round((tot_revenue / tot_orders) if tot_orders > 0 else 0.0, 2),
         "total_customers": int(tot_cust),
+        "total_orders": int(tot_orders),
+        "new_customers": int(tot_new),
+        "returning_customers": int(tot_ret),
         "return_rate_pct": round((tot_returns / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
+        "return_rate_new_pct": round((tot_new_returns / tot_new_gross * 100) if tot_new_gross > 0 else 0.0, 2),
+        "return_rate_returning_pct": round((tot_ret_returns / tot_ret_gross * 100) if tot_ret_gross > 0 else 0.0, 2),
         "cos_pct": round((tot_spend / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
         "cac": round((tot_new_spend / tot_new) if tot_new > 0 else 0.0, 2),
     }
@@ -158,7 +502,7 @@ def calculate_audience_metrics_per_country_for_weeks(
 ) -> Dict[str, Any]:
     """
     Returns audience metrics per country for the last N weeks.
-    Response: { "audience_metrics_per_country": [ { week, countries: { country: { total_aov, total_customers, return_rate_pct, cos_pct, cac } } } ], "period_info": { ... } }
+    Response: { "audience_metrics_per_country": [ { week, countries: { country: { total_aov, total_customers, total_orders, new_customers, returning_customers, return_rate_pct, cos_pct, cac } } } ], "period_info": { ... } }
     """
     raw_path = data_root / "raw" / base_week
     raw = load_all_raw_data(raw_path)

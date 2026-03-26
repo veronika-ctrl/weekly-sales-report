@@ -2188,6 +2188,165 @@ def calculate_discount_category_series(
     }
 
 
+def calculate_discount_level_for_weeks(
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+) -> Dict[str, Any]:
+    """
+    Discount level metrics for last N weeks with YoY, for Total and per market.
+
+    Metrics:
+    - discounted_sales
+    - full_price_sales
+    - total_sales
+    - discounted_share_pct
+    - discount_amount
+    - discount_level_pct
+    """
+    raw_path = Path(data_root) / "raw" / base_week / "discounts"
+    files = [f for f in raw_path.glob("*.*") if not f.name.startswith(".")]
+    if not files:
+        return {"base_week": base_week, "num_weeks": num_weeks, "weeks": [], "markets": []}
+
+    latest_file = max(files, key=lambda f: f.stat().st_mtime)
+    df = _read_csv_flexible(latest_file)
+    df.columns = [c.strip().replace('"', "") for c in df.columns]
+
+    date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
+    net_sales_col = _pick_column(df, ["Nettoförsäljning", "Net Revenue", "Net sales", "Net amount"])
+    ordinary_price_col = _pick_column(
+        df,
+        [
+            "Produktvariantens ordinare pris",
+            "Produktvariantens ordinarie pris",
+            "Ordinarie pris",
+            "Regular price",
+            "Compare at price",
+        ],
+    )
+    price_col = _pick_column(df, ["Produktvariantpris", "Produktvariantpris (SEK)", "Variant price", "Price"])
+    qty_col = _pick_column(df, ["Antal", "Quantity", "Qty"])
+    country_col = _pick_column(
+        df,
+        [
+            "Leveransland",
+            "Country",
+            "Shipping country",
+            "Delivery country",
+            "Ship country",
+        ],
+    )
+
+    if not date_col or not net_sales_col or not ordinary_price_col:
+        return {
+            "base_week": base_week,
+            "num_weeks": num_weeks,
+            "error": "Missing required columns",
+            "detected": {
+                "date": date_col,
+                "net_sales": net_sales_col,
+                "ordinary_price": ordinary_price_col,
+                "price": price_col,
+                "qty": qty_col,
+                "country": country_col,
+                "columns": df.columns.tolist(),
+                "filename": latest_file.name,
+            },
+            "weeks": [],
+            "markets": [],
+        }
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col]).copy()
+    df["_week"] = _iso_week_series(df[date_col])
+    df["_net_sales"] = _to_number(df[net_sales_col])
+    df["_ordinary_price"] = _to_number(df[ordinary_price_col])
+    df["_price"] = _to_number(df[price_col]) if price_col else 0.0
+    df["_qty"] = _to_number(df[qty_col]) if qty_col else 1.0
+    df["_qty"] = df["_qty"].replace(0, 1.0)
+    df["_is_discounted"] = df["_ordinary_price"] > 0
+
+    # Discount amount estimation from row price deltas.
+    df["_discount_amount"] = ((df["_ordinary_price"] - df["_price"]).clip(lower=0.0) * df["_qty"]).fillna(0.0)
+    df["_gross_before_discount"] = (
+        (df["_ordinary_price"].where(df["_ordinary_price"] > 0, df["_price"]) * df["_qty"]).fillna(0.0)
+    )
+
+    if country_col:
+        m = df[country_col].astype(str).str.strip()
+        df["_market"] = m.replace({"": "Unknown", "nan": "Unknown", "None": "Unknown"})
+    else:
+        df["_market"] = "Total"
+
+    expected_weeks = _build_display_weeks(base_week, num_weeks)
+    expected_last_year = [f"{int(w.split('-')[0]) - 1}-{w.split('-')[1]}" for w in expected_weeks]
+    df = df[df["_week"].isin(set(expected_weeks + expected_last_year))]
+
+    def _agg(sub: pd.DataFrame) -> Dict[str, float]:
+        if sub.empty:
+            return {
+                "discounted_sales": 0.0,
+                "full_price_sales": 0.0,
+                "total_sales": 0.0,
+                "discounted_share_pct": 0.0,
+                "discount_amount": 0.0,
+                "discount_level_pct": 0.0,
+            }
+        discounted_sales = float(sub.loc[sub["_is_discounted"], "_net_sales"].sum() or 0.0)
+        full_price_sales = float(sub.loc[~sub["_is_discounted"], "_net_sales"].sum() or 0.0)
+        total_sales = discounted_sales + full_price_sales
+        discount_amount = float(sub["_discount_amount"].sum() or 0.0)
+        gross_before = float(sub["_gross_before_discount"].sum() or 0.0)
+        discounted_share_pct = (discounted_sales / total_sales * 100.0) if total_sales > 0 else 0.0
+        discount_level_pct = (discount_amount / gross_before * 100.0) if gross_before > 0 else 0.0
+        return {
+            "discounted_sales": discounted_sales,
+            "full_price_sales": full_price_sales,
+            "total_sales": total_sales,
+            "discounted_share_pct": round(discounted_share_pct, 2),
+            "discount_amount": discount_amount,
+            "discount_level_pct": round(discount_level_pct, 2),
+        }
+
+    markets = sorted([m for m in df["_market"].dropna().astype(str).unique().tolist() if m and m != "Total"])
+    weeks_out: List[Dict[str, Any]] = []
+    for w in expected_weeks:
+        ly_w = f"{int(w.split('-')[0]) - 1}-{w.split('-')[1]}"
+        cur = df[df["_week"] == w]
+        ly = df[df["_week"] == ly_w]
+        total_cur = _agg(cur)
+        total_ly = _agg(ly)
+        per_market: Dict[str, Any] = {}
+        for market in markets:
+            m_cur = _agg(cur[cur["_market"] == market])
+            m_ly = _agg(ly[ly["_market"] == market])
+            per_market[market] = {**m_cur, "last_year": {"week": ly_w, **m_ly}}
+        weeks_out.append(
+            {
+                "week": w,
+                "total": {**total_cur, "last_year": {"week": ly_w, **total_ly}},
+                "markets": per_market,
+            }
+        )
+
+    return {
+        "base_week": base_week,
+        "num_weeks": num_weeks,
+        "filename": latest_file.name,
+        "columns_used": {
+            "date": date_col,
+            "net_sales": net_sales_col,
+            "ordinary_price": ordinary_price_col,
+            "price": price_col,
+            "qty": qty_col,
+            "country": country_col,
+        },
+        "markets": markets,
+        "weeks": weeks_out,
+    }
+
+
 def preview_discounts_file(week: str, data_root: Path, nrows: int = 10) -> Dict[str, Any]:
     raw_path = Path(data_root) / "raw" / week / "discounts"
     files = [f for f in raw_path.glob("*.*") if not f.name.startswith(".")]

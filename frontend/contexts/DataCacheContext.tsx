@@ -186,7 +186,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Bump cache version to invalidate stale data after backend calc changes
-  const CACHE_VERSION = 'v2'
+  const CACHE_VERSION = 'v3'
   const getCacheKey = (week: string) => `dashboard_cache_${CACHE_VERSION}_${week}`
 
   const getCachedData = (week: string): CacheData | null => {

@@ -40,7 +40,15 @@ export default function AudienceMarketPage() {
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
 
-  const [audienceData, setAudienceData] = useState<Array<{ week: string; weekLabel: string; last_year?: AudienceMetricsCountryData['last_year'] } & AudienceMetricsCountryData> | null>(null)
+  const [audienceData, setAudienceData] = useState<
+    Array<
+      {
+        week: string
+        weekLabel: string
+        last_year?: AudienceMetricsCountryData['last_year']
+      } & AudienceMetricsCountryData
+    > | null
+  >(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,7 +81,13 @@ export default function AudienceMarketPage() {
             ...c,
             last_year: c.last_year ?? null,
           }
-        }).filter(Boolean) as Array<{ week: string; weekLabel: string; last_year?: AudienceMetricsCountryData['last_year'] } & AudienceMetricsCountryData>
+        }).filter(Boolean) as Array<
+          {
+            week: string
+            weekLabel: string
+            last_year?: AudienceMetricsCountryData['last_year']
+          } & AudienceMetricsCountryData
+        >
         setAudienceData(series.length ? series : null)
         setFetchError(series.length ? null : `No data for market "${marketName}"`)
       })
@@ -99,6 +113,13 @@ export default function AudienceMarketPage() {
   const cards = [
     { key: 'total_aov', label: 'Total AOV', format: (v: number) => `${Math.round(v)}` },
     { key: 'total_customers', label: 'Total Customers', format: (v: number) => v.toLocaleString() },
+    { key: 'total_orders', label: 'Total Orders', format: (v: number) => v.toLocaleString() },
+    { key: 'new_customers', label: 'New Customers', format: (v: number) => v.toLocaleString() },
+    { key: 'returning_customers', label: 'Returning Customers', format: (v: number) => v.toLocaleString() },
+    { key: 'new_customer_share_pct', label: 'New Customer Share', format: (v: number) => `${v.toFixed(1)}%` },
+    { key: 'returning_customer_share_pct', label: 'Returning Customer Share', format: (v: number) => `${v.toFixed(1)}%` },
+    { key: 'return_rate_new_pct', label: 'Return Rate (New)', format: (v: number) => `${v.toFixed(1)}%` },
+    { key: 'return_rate_returning_pct', label: 'Return Rate (Returning)', format: (v: number) => `${v.toFixed(1)}%` },
     { key: 'return_rate_pct', label: 'Return Rate', format: (v: number) => `${v.toFixed(1)}%` },
     { key: 'cos_pct', label: 'COS', format: (v: number) => `${v.toFixed(1)}%` },
     { key: 'cac', label: 'CAC', format: (v: number) => `${Math.round(v)}` },
@@ -137,14 +158,44 @@ export default function AudienceMarketPage() {
       {hasData && (
         <>
           <h2 className="text-lg font-semibold text-gray-900">Audience — {marketName}</h2>
-          <p className="text-sm text-muted-foreground mb-2">Total AOV, Total customers, Return rate in market, COS, CAC (no split by customer type). Comparison to last year uses the same ISO week (matching weekdays).</p>
+          <p className="text-sm text-muted-foreground mb-2">Total AOV, Total customers, Total orders, New customers, Returning customers, Return rate in market, COS, CAC. Comparison to last year uses the same ISO week (matching weekdays).</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {cards.map(({ key, label, format }) => {
-              const chartData = audienceData!.map((m) => ({
-                week: m.weekLabel,
-                value: (m as any)[key] as number,
-                lastYear: m.last_year != null ? (m.last_year as any)[key] as number : null,
-              }))
+              const chartData = audienceData!.map((m) => {
+                const currentTotal = Number(m.total_customers) || 0
+                const lyTotal = Number(m.last_year?.total_customers) || 0
+                const value =
+                  key === 'new_customer_share_pct'
+                    ? currentTotal > 0
+                      ? (Number(m.new_customers) / currentTotal) * 100
+                      : 0
+                    : key === 'returning_customer_share_pct'
+                      ? currentTotal > 0
+                        ? (Number(m.returning_customers) / currentTotal) * 100
+                        : 0
+                      : (m as any)[key]
+                const lastYear =
+                  key === 'new_customer_share_pct'
+                      ? m.last_year != null
+                        ? lyTotal > 0
+                          ? (Number(m.last_year.new_customers) / lyTotal) * 100
+                          : 0
+                        : null
+                      : key === 'returning_customer_share_pct'
+                        ? m.last_year != null
+                          ? lyTotal > 0
+                            ? (Number(m.last_year.returning_customers) / lyTotal) * 100
+                            : 0
+                          : null
+                        : m.last_year != null
+                          ? (m.last_year as any)[key]
+                          : null
+                return {
+                  week: m.weekLabel,
+                  value: Number(value) || 0,
+                  lastYear: lastYear == null ? null : Number(lastYear),
+                }
+              })
               return (
                 <Card key={key}>
                   <CardHeader>
@@ -155,8 +206,16 @@ export default function AudienceMarketPage() {
                       <LineChart data={chartData} margin={{ top: 36, right: 12, left: 12, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} width={40} tickFormatter={(v) => (key === 'total_customers' && v >= 1000 ? `${v / 1000}k` : String(v))} />
-                        <ChartTooltip content={<ChartTooltipContent formatter={(v) => format(Number(v))} />} />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          width={40}
+                          tickFormatter={(v) => (
+                            (key === 'total_customers' || key === 'total_orders' || key === 'new_customers' || key === 'returning_customers') && v >= 1000
+                              ? `${v / 1000}k`
+                              : String(v)
+                          )}
+                        />
+                        <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => format(Number(v))} />} />
                         <Line
                           type="monotone"
                           dataKey="value"
