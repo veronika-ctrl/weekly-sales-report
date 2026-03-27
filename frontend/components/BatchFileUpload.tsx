@@ -27,6 +27,13 @@ interface BatchFileUploadProps {
   loadingProgress?: { message: string; percentage: number } | null
 }
 
+/** Base 5 min covers slow hosts (e.g. Render free cold start); +1 min per MB over 10 MB; max 15 min. */
+function computeUploadTimeoutMs(fileSizeMB: number): number {
+  const baseMs = 5 * 60 * 1000
+  const extraOver10Mb = Math.max(0, fileSizeMB - 10) * 60 * 1000
+  return Math.min(15 * 60 * 1000, baseMs + extraOver10Mb)
+}
+
 export default function BatchFileUpload({
   fileTypes,
   currentWeek,
@@ -96,8 +103,7 @@ export default function BatchFileUpload({
       // Använd fetch med timeout - längre timeout för större filer (QLIK kan vara stora)
       const controller = new AbortController()
       const fileSizeMB = file.size / (1024 * 1024)
-      // Base timeout: 2 minuter, +1 minut per MB över 10MB, max 10 minuter
-      const timeoutMs = Math.min(600000, 120000 + Math.max(0, (fileSizeMB - 10) * 60000))
+      const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
       timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
       // Start progress simulation - uppdatera progress under uppladdning och processing
@@ -157,11 +163,13 @@ export default function BatchFileUpload({
       
       // Handle specific error types
       if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-        const timeoutMs = Math.min(600000, 120000 + Math.max(0, (fileSizeMB - 10) * 60000))
+        const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
         const timeoutMinutes = Math.round(timeoutMs / 60000)
         errorMessage = `Upload timeout: The file "${file.name}" (${fileSizeMB.toFixed(1)} MB) took too long to upload (over ${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}). The file may be too large or the server may be slow. Please try again.`
       } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        errorMessage = `Network error: Unable to connect to the server. Please check if the backend server is running.`
+        errorMessage =
+          'Network error: API unreachable. Free hosts often sleep—wait ~1 min and retry, or open https://…/docs once to wake the server. ' +
+          'Verify NEXT_PUBLIC_API_URL and FRONTEND_URL on Render.'
       } else if (error.message?.includes('signal is aborted') || error.message?.includes('aborted without reason')) {
         errorMessage = `Upload was cancelled or timed out. Please try again.`
       }
@@ -207,6 +215,24 @@ export default function BatchFileUpload({
     setUploadResults({ success: [], failed: [] })
     setCurrentUploadingFile(null)
     initializeStatuses()
+
+    // Wake cold hosts (e.g. Render free) before uploads so the first file is less likely to fail.
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      const warm = new AbortController()
+      const warmT = setTimeout(() => warm.abort(), 120000)
+      try {
+        await fetch(`${apiBase.replace(/\/$/, '')}/api/health`, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: warm.signal,
+        })
+      } catch {
+        // Continue; upload may still succeed once the service is up.
+      } finally {
+        clearTimeout(warmT)
+      }
+    }
 
     const results: { success: string[], failed: Array<{ type: string, error: string }> } = { 
       success: [], 

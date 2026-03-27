@@ -7,10 +7,7 @@ from loguru import logger
 
 from weekly_report.src.adapters import qlik, dema, dema_gm2, shopify
 from weekly_report.src.periods.calculator import get_week_date_range, get_ytd_periods_for_week, get_mtd_periods_for_week
-from weekly_report.src.cache.manager import RawDataCache
-
-# Global raw data cache - holds Excel data in memory for 2 hours
-raw_data_cache = RawDataCache(max_age_hours=2)
+from weekly_report.src.cache.manager import raw_data_cache
 
 
 def calculate_table1_metrics(

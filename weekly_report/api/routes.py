@@ -710,7 +710,7 @@ async def get_table1_metrics(
                         logger.debug(f"Could not read from Supabase cache: {cache_error}")
             except ImportError:
                 logger.debug("Supabase client not available, skipping cache check")
-
+        
         # Check in-memory cache
         cached_result = metrics_cache.get(base_week, requested_periods)
         if cached_result and not include_ytd:
@@ -2188,8 +2188,6 @@ async def clear_cache():
     """Clear all cached metrics and raw data."""
     try:
         metrics_cache.clear()
-        # Also clear raw data cache
-        from weekly_report.src.metrics.table1 import raw_data_cache
         raw_data_cache.clear()
         return {"success": True, "message": "All caches cleared successfully"}
     except Exception as e:
@@ -2268,7 +2266,7 @@ async def get_top_markets(
         if markets_data.get("markets"):
             logger.info(f"Raw data - First market weeks count: {len(markets_data['markets'][0]['weeks'])}")
             logger.info(f"Raw data - Sample weeks: {list(markets_data['markets'][0]['weeks'].keys())[:5]}")
-        
+
         response = MarketsResponse(**markets_data)
         if response.markets:
             logger.info(f"After Pydantic - First market weeks count: {len(response.markets[0].weeks)}")
@@ -3202,7 +3200,7 @@ async def get_batch_all_metrics(
                         logger.warning(f"Error reading from Supabase cache: {cache_error}, will compute")
             except ImportError:
                 logger.debug("Supabase client not available, skipping cache check")
-
+        
         # Fallback: Compute metrics
         config = load_config(week=base_week)
         logger.info(f"Computing batch metrics for {base_week} with {num_weeks} weeks")
@@ -3230,7 +3228,7 @@ async def get_batch_all_metrics(
                         logger.warning(f"Failed to save to Supabase (non-blocking): {save_error}")
             except ImportError:
                 logger.debug("Supabase client not available, skipping save")
-
+        
         # Convert to response format - handle type mismatches gracefully
         try:
             # Helper function to normalize data types
@@ -4257,9 +4255,9 @@ async def get_actuals_general(week: str = Query(...)):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
 
         from weekly_report.src.compute.budget import compute_actuals_general
-
+        
         result = compute_actuals_general(week)
-
+        
         if "error" in result:
             logger.debug(f"No actuals data for {week}: {result['error']}")
             return {
@@ -4271,7 +4269,7 @@ async def get_actuals_general(week: str = Query(...)):
                 "ytd_totals": {},
                 "error": result["error"],
             }
-
+        
         return result
     except HTTPException:
         raise
@@ -4344,9 +4342,9 @@ async def sync_supabase_endpoint(
             }
         if not validate_iso_week(week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
-
+        
         from weekly_report.src.sync.supabase_sync import sync_supabase_data
-
+        
         result = sync_supabase_data(week, num_weeks=num_weeks)
         
         if not result.get("success"):

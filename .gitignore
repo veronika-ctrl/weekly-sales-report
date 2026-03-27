@@ -23,8 +23,8 @@ data/
 charts/
 reports/
 
-# Cache
-cache/
+# Cache (root only — weekly_report/src/cache is source code, not ignored)
+/cache/
 *.cache
 
 # Local dev server PIDs
