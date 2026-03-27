@@ -498,8 +498,19 @@ def _log_supabase_status():
 
 
 # Add CORS middleware
-# Allow localhost for development and Vercel domains for production
+# Allow localhost for development and Vercel domains for production.
+# Origin matching is strict: a trailing slash on FRONTEND_URL breaks CORS vs browser Origin.
 import os
+
+
+def _append_cors_origin(origins: list, url: Optional[str]) -> None:
+    if not url:
+        return
+    u = url.strip().rstrip("/")
+    if u and u not in origins:
+        origins.append(u)
+
+
 cors_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -509,19 +520,18 @@ cors_origins = [
     "http://127.0.0.1:3002",
 ]
 
-# Add Vercel domain if provided via environment variable
 vercel_url = os.getenv("VERCEL_URL")
 if vercel_url:
-    # Vercel provides URL without protocol, add https
     if not vercel_url.startswith("http"):
-        cors_origins.append(f"https://{vercel_url}")
+        _append_cors_origin(cors_origins, f"https://{vercel_url}")
     else:
-        cors_origins.append(vercel_url)
+        _append_cors_origin(cors_origins, vercel_url)
 
-# Also allow custom frontend URL if set
-frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
-    cors_origins.append(frontend_url)
+_append_cors_origin(cors_origins, os.getenv("FRONTEND_URL"))
+
+# Optional: comma-separated extra origins (e.g. preview URLs, custom domains)
+for part in (os.getenv("CORS_ORIGINS") or "").split(","):
+    _append_cors_origin(cors_origins, part.strip())
 
 app.add_middleware(
     CORSMiddleware,
@@ -530,6 +540,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info(f"CORS allow_origins ({len(cors_origins)}): {cors_origins}")
 
 
 @app.get("/api/periods", response_model=PeriodsResponse)
