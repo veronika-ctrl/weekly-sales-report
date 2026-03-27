@@ -123,7 +123,7 @@ export default function DiscountLevelPage() {
                       <YAxis tick={{ fontSize: 11 }} width={48} />
                       <ChartTooltip
                         content={
-                          <ChartTooltipContent formatter={(v) => formatMetric(Number(v || 0), key)} />
+                          <ChartTooltipContent formatter={(v: unknown) => formatMetric(Number(v || 0), key)} />
                         }
                       />
                       <Line
