@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { Line, LineChart, XAxis, YAxis, LabelList, CartesianGrid } from '@/lib/recharts'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
+import { buildAudienceBudgetMetricsForWeek } from '@/lib/audienceBudgetSeries'
+import { getAudienceBudgetSeries, type BudgetGeneralResponse } from '@/lib/api'
+
+function budgetGeneralUsable(b: BudgetGeneralResponse | null | undefined): boolean {
+  return Boolean(b && !b.error && b.table && Object.keys(b.table).length > 0)
+}
 
 function deriveMetrics(k: {
   new_customers?: number
@@ -18,6 +22,9 @@ function deriveMetrics(k: {
   aov_returning_customer?: number
   cos?: number
   new_customer_cac?: number
+  marketing_spend?: number
+  /** Online new-customer net revenue (Qlik); aMER = this ÷ DEMA marketing spend (same as slide 1). */
+  new_customers_net_revenue?: number
   return_rate_pct?: number
   return_rate_new_pct?: number
   return_rate_returning_pct?: number
@@ -43,12 +50,22 @@ function deriveMetrics(k: {
       : 0
   const newCustomerSharePct = totalC > 0 ? (newC / totalC) * 100 : 0
   const returningCustomerSharePct = totalC > 0 ? (retC / totalC) * 100 : 0
+  // Prefer API field; fallback for older cached payloads: revenue ≈ new_customers × AOV_new
+  const rawNewNet = k.new_customers_net_revenue
+  const newNet =
+    typeof rawNewNet === 'number' && Number.isFinite(rawNewNet)
+      ? rawNewNet
+      : (Number(k.new_customers) || 0) * (Number(k.aov_new_customer) || 0)
+  const mktSpend = Number(k.marketing_spend) || 0
+  const amer = mktSpend > 0 ? Math.round((newNet / mktSpend) * 100) / 100 : 0
   return {
     total_aov: Math.round(totalAov),
     total_customers: totalC,
     total_orders: Math.round(Number(k.total_orders) || 0),
     new_customers: newC,
     returning_customers: retC,
+    aov_new_customer: Math.round(Number(k.aov_new_customer) || 0),
+    aov_returning_customer: Math.round(Number(k.aov_returning_customer) || 0),
     new_customer_share_pct: Math.round(newCustomerSharePct * 10) / 10,
     returning_customer_share_pct: Math.round(returningCustomerSharePct * 10) / 10,
     return_rate_pct: Math.round(returnRatePct * 10) / 10,
@@ -56,13 +73,19 @@ function deriveMetrics(k: {
     return_rate_returning_pct: Math.round(returnRateReturningPct * 10) / 10,
     cos_pct: Number(k.cos) ?? 0,
     cac: Math.round(Number(k.new_customer_cac) ?? 0),
+    amer,
   }
 }
 
 export default function AudienceTotalPage() {
-  const { baseWeek, loading, error, loadAllData, kpis: kpisData, periods, isDataReady } = useDataCache()
+  const { baseWeek, loading, error, loadAllData, kpis: kpisData, periods, isDataReady, budget_general } =
+    useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
+  const [serverAudienceBudgetByWeek, setServerAudienceBudgetByWeek] = useState<Record<
+    string,
+    Record<string, number> | null
+  > | null>(null)
 
   useEffect(() => {
     if (!baseWeek) return
@@ -87,41 +110,56 @@ export default function AudienceTotalPage() {
       kpis = Object.values((kpisData as any).kpis) as any[]
   }
 
+  const numBudgetWeeks = kpis.length >= 1 ? kpis.length : 8
 
-  const metrics = kpis.map((k) => {
-    const current = deriveMetrics(k)
-    const ly = k.last_year ? deriveMetrics(k.last_year as any) : null
-    return {
-      week: k.week,
-      weekLabel: `W${k.week.split('-')[1]}`,
-      ...current,
-      last_year: ly,
+  useEffect(() => {
+    if (!baseWeek) {
+      setServerAudienceBudgetByWeek(null)
+      return
     }
-  })
+    let cancelled = false
+    getAudienceBudgetSeries(baseWeek, numBudgetWeeks)
+      .then((res) => {
+        if (cancelled) return
+        const m: Record<string, Record<string, number> | null> = {}
+        for (const row of res.weeks || []) {
+          m[row.week] = row.budget
+        }
+        setServerAudienceBudgetByWeek(m)
+      })
+      .catch(() => {
+        if (!cancelled) setServerAudienceBudgetByWeek(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [baseWeek, numBudgetWeeks])
+
+  const effectiveBudgetGeneral = useMemo(() => {
+    return budgetGeneralUsable(budget_general) ? budget_general : null
+  }, [budget_general])
+
+  const metrics = useMemo(() => {
+    return kpis.map((k) => {
+      const current = deriveMetrics(k)
+      const ly = k.last_year ? deriveMetrics(k.last_year as any) : null
+      const budgetMetrics =
+        serverAudienceBudgetByWeek != null && k.week in serverAudienceBudgetByWeek
+          ? serverAudienceBudgetByWeek[k.week]
+          : buildAudienceBudgetMetricsForWeek(effectiveBudgetGeneral, k.week)
+      return {
+        week: k.week,
+        weekLabel: `W${k.week.split('-')[1]}`,
+        ...current,
+        last_year: ly,
+        budget: budgetMetrics,
+      }
+    })
+  }, [kpis, effectiveBudgetGeneral, serverAudienceBudgetByWeek])
 
   const noData = baseWeek && !loading && !error && (!periods || !isDataReady)
   const hasData = periods && isDataReady && metrics.length > 0
   const noAudienceData = baseWeek && !loading && !error && periods && isDataReady && metrics.length === 0
-
-  const chartConfig = {
-    value: { label: 'This year', color: '#4B5563' },
-    lastYear: { label: 'Last year (same week)', color: '#F97316' },
-  } satisfies ChartConfig
-
-  const cards = [
-    { key: 'total_aov', label: 'Total AOV', format: (v: number) => `${Math.round(v)}` },
-    { key: 'total_customers', label: 'Total Customers', format: (v: number) => v.toLocaleString() },
-    { key: 'total_orders', label: 'Total Orders', format: (v: number) => v.toLocaleString() },
-    { key: 'new_customers', label: 'New Customers', format: (v: number) => v.toLocaleString() },
-    { key: 'returning_customers', label: 'Returning Customers', format: (v: number) => v.toLocaleString() },
-    { key: 'new_customer_share_pct', label: 'New Customer Share', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'returning_customer_share_pct', label: 'Returning Customer Share', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'return_rate_new_pct', label: 'Return Rate (New)', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'return_rate_returning_pct', label: 'Return Rate (Returning)', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'return_rate_pct', label: 'Return Rate', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'cos_pct', label: 'COS', format: (v: number) => `${v.toFixed(1)}%` },
-    { key: 'cac', label: 'CAC', format: (v: number) => `${Math.round(v)}` },
-  ]
 
   return (
     <div className="space-y-8">
@@ -161,7 +199,16 @@ export default function AudienceTotalPage() {
       {hasData && (
         <>
           <h2 className="text-lg font-semibold text-gray-900">Audience Total</h2>
-          <p className="text-sm text-muted-foreground mb-2">Total AOV, Total customers, Total orders, New customers, Returning customers, Return rate, COS, CAC. Comparison to last year uses the same ISO week (matching weekdays).</p>
+          <p className="text-sm text-muted-foreground mb-2">
+            Charts read left-to-right, top-to-bottom: total customers, total orders, total AOV, returning customers,
+            return rate (returning), new customers, return rate (new), COS, then aMER (online new-customer net revenue ÷
+            DEMA marketing spend — same as summary slide). Below the divider: returning and new AOV (same definition as
+            Online KPIs), then customer share, blended return rate, and CAC.
+            Comparison to last year uses the same ISO week (matching weekdays). The green dashed line is{' '}
+            <strong>vs budget</strong> (actual − week-prorated plan), same sign convention as Top Markets net: positive =
+            ahead of plan, negative = shortfall. It uses the right-hand axis; gray dash at 0 is on plan. Tooltip shows
+            the variance and the prorated plan.
+          </p>
           <p className="text-xs text-muted-foreground mb-4">
             By market:{' '}
             {['sweden', 'uk', 'usa', 'germany', 'france', 'canada', 'australia', 'row'].map((m) => (
@@ -170,92 +217,7 @@ export default function AudienceTotalPage() {
               </Link>
             ))}
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {cards.map(({ key, label, format }) => {
-              const chartData = metrics.map((m) => {
-                const currentTotal = Number(m.total_customers) || 0
-                const lyTotal = Number(m.last_year?.total_customers) || 0
-                const value =
-                  key === 'new_customer_share_pct'
-                    ? currentTotal > 0
-                      ? (Number(m.new_customers) / currentTotal) * 100
-                      : 0
-                    : key === 'returning_customer_share_pct'
-                      ? currentTotal > 0
-                        ? (Number(m.returning_customers) / currentTotal) * 100
-                        : 0
-                      : (m as any)[key]
-                const lastYear =
-                  key === 'new_customer_share_pct'
-                      ? m.last_year
-                        ? lyTotal > 0
-                          ? (Number(m.last_year.new_customers) / lyTotal) * 100
-                          : 0
-                        : null
-                      : key === 'returning_customer_share_pct'
-                        ? m.last_year
-                          ? lyTotal > 0
-                            ? (Number(m.last_year.returning_customers) / lyTotal) * 100
-                            : 0
-                          : null
-                        : m.last_year
-                          ? (m.last_year as any)[key]
-                          : null
-                return {
-                  week: m.weekLabel,
-                  value: Number(value) || 0,
-                  lastYear: lastYear == null ? null : Number(lastYear),
-                }
-              })
-              return (
-                <Card key={key}>
-                  <CardHeader>
-                    <CardTitle className="text-sm font-medium">{label}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="overflow-visible">
-                    <ChartContainer config={chartConfig} className="h-[260px] w-full min-w-0 overflow-visible">
-                      <LineChart data={chartData} margin={{ top: 36, right: 12, left: 12, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                        <YAxis
-                          tick={{ fontSize: 11 }}
-                          width={40}
-                          tickFormatter={(v) => (
-                            (key === 'total_customers' || key === 'total_orders' || key === 'new_customers' || key === 'returning_customers') && v >= 1000
-                              ? `${v / 1000}k`
-                              : String(v)
-                          )}
-                        />
-                        <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => format(Number(v))} />} />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="#4B5563"
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                          isAnimationActive={isAnimationActive}
-                          name="This year"
-                        >
-                          <LabelList position="top" offset={10} fontSize={12} fontWeight={600} fill="#1f2937" formatter={(v: unknown) => format(Number(v ?? 0))} />
-                        </Line>
-                        <Line
-                          type="monotone"
-                          dataKey="lastYear"
-                          stroke="#F97316"
-                          strokeWidth={2}
-                          strokeDasharray="4 4"
-                          dot={{ r: 3 }}
-                          connectNulls
-                          isAnimationActive={isAnimationActive}
-                          name="Last year (same week)"
-                        />
-                      </LineChart>
-                    </ChartContainer>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+          <AudienceMetricsChartGrid series={metrics} isAnimationActive={isAnimationActive} />
         </>
       )}
     </div>

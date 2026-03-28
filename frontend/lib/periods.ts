@@ -55,7 +55,8 @@ function formatYMD(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-function getWeekDateRange(isoWeek: string): { start: string; end: string; display: string } {
+/** Monday–Sunday date range for an ISO week (YYYY-WW). Exported for charts that need week-end calendar month (e.g. budget). */
+export function getWeekDateRange(isoWeek: string): { start: string; end: string; display: string } {
   const { year, week } = parseIsoWeek(isoWeek)
   const monday = getMondayOfIsoWeek(year, week)
   const sunday = new Date(monday)

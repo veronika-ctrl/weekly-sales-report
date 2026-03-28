@@ -1,14 +1,6 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-
+/** Immediate server redirect so `/` always resolves (avoids empty client page → 404 in dev). */
 export default function Home() {
-  const router = useRouter()
-
-  useEffect(() => {
-    router.push('/summary')
-  }, [router])
-
-  return null
+  redirect('/summary')
 }

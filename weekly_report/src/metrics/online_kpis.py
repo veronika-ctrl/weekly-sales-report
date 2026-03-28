@@ -6,6 +6,7 @@ from typing import Dict, List, Any
 import pandas as pd
 from loguru import logger
 
+from weekly_report.src.metrics.discounts_sales import _normalize_customer_segment
 from weekly_report.src.metrics.table1 import load_all_raw_data
 from weekly_report.src.periods.calculator import get_week_date_range
 
@@ -216,6 +217,8 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
     """Calculate KPIs for a single week."""
     
     # Handle missing/empty Qlik data
+    qlik_df = qlik_df.copy()
+    qlik_df.columns = qlik_df.columns.astype(str).str.strip()
     if qlik_df.empty or 'Sales Channel' not in qlik_df.columns:
         return {
             'week': week_str,
@@ -223,6 +226,8 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
             'aov_returning_customer': 0.0,
             'cos': 0.0,
             'marketing_spend': float(dema_df['Marketing spend'].sum()) if (not dema_df.empty and 'Marketing spend' in dema_df.columns) else 0.0,
+            'net_revenue': 0.0,
+            'gross_revenue': 0.0,
             'conversion_rate': 0.0,
             'new_customers': 0,
             'returning_customers': 0,
@@ -232,26 +237,45 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
             'return_rate_pct': 0.0,
             'return_rate_new_pct': 0.0,
             'return_rate_returning_pct': 0.0,
+            'new_customers_net_revenue': 0.0,
         }
 
-    # Filter for online sales only
-    online_df = qlik_df[qlik_df['Sales Channel'] == 'Online']
+    # Filter for online sales only (case- and whitespace-tolerant; matches segment logic below)
+    _sc = qlik_df['Sales Channel'].astype(str).str.strip()
+    online_df = qlik_df.loc[_sc.str.lower().eq('online')].copy()
     
     # Calculate metrics
     gross_revenue = online_df['Gross Revenue'].sum()
     net_revenue = online_df['Net Revenue'].sum()
     
-    # New/Returning customers
-    new_customers = online_df[online_df['New/Returning Customer'] == 'New']['Customer E-mail'].nunique()
-    returning_customers = online_df[online_df['New/Returning Customer'] == 'Returning']['Customer E-mail'].nunique()
-    
-    # New customer revenue
-    new_customer_df = online_df[online_df['New/Returning Customer'] == 'New']
-    new_customer_revenue = new_customer_df['Net Revenue'].sum()
-    
-    # Returning customer revenue
-    returning_customer_df = online_df[online_df['New/Returning Customer'] == 'Returning']
-    returning_customer_revenue = returning_customer_df['Net Revenue'].sum()
+    # New/Returning: use same normalization as Audience / discount metrics (Swedish "ny", casing, etc.)
+    seg_col = 'New/Returning Customer'
+    if seg_col in online_df.columns:
+        _cust_seg = online_df[seg_col].map(_normalize_customer_segment)
+    else:
+        _cust_seg = pd.Series(pd.NA, index=online_df.index, dtype=object)
+        logger.warning(
+            f"Week {week_str}: missing '{seg_col}'; new/returning counts and new_customers_net_revenue will be 0."
+        )
+    new_mask = _cust_seg.eq('new')
+    ret_mask = _cust_seg.eq('returning')
+    email_col = 'Customer E-mail' if 'Customer E-mail' in online_df.columns else None
+    if not email_col and 'Customer Email' in online_df.columns:
+        email_col = 'Customer Email'
+    if email_col:
+        new_customers = int(online_df.loc[new_mask, email_col].nunique())
+        returning_customers = int(online_df.loc[ret_mask, email_col].nunique())
+    else:
+        new_customers = 0
+        returning_customers = 0
+        logger.warning(f"Week {week_str}: no customer email column; new/returning counts will be 0.")
+
+    new_customer_revenue = float(
+        pd.to_numeric(online_df.loc[new_mask, 'Net Revenue'], errors='coerce').fillna(0.0).sum()
+    )
+    returning_customer_revenue = float(
+        pd.to_numeric(online_df.loc[ret_mask, 'Net Revenue'], errors='coerce').fillna(0.0).sum()
+    )
     
     # Calculate AOVs
     aov_new_customer = new_customer_revenue / new_customers if new_customers > 0 else 0
@@ -314,9 +338,6 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         seg_returns_raw.notna() & (seg_returns_raw > 0),
         (pd.to_numeric(online_df['Gross Revenue'], errors='coerce').fillna(0.0) - pd.to_numeric(online_df['Net Revenue'], errors='coerce').fillna(0.0)).clip(lower=0),
     )
-    seg = online_df['New/Returning Customer'].astype(str).str.strip().str.lower()
-    new_mask = seg.eq('new')
-    ret_mask = seg.eq('returning')
     new_gross = pd.to_numeric(online_df.loc[new_mask, 'Gross Revenue'], errors='coerce').fillna(0.0).sum()
     new_returns = pd.to_numeric(seg_returns_effective.loc[new_mask], errors='coerce').fillna(0.0).sum()
     ret_gross = pd.to_numeric(online_df.loc[ret_mask, 'Gross Revenue'], errors='coerce').fillna(0.0).sum()
@@ -330,6 +351,8 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         'aov_returning_customer': float(aov_returning_customer),
         'cos': float(cos),
         'marketing_spend': float(marketing_spend),
+        'net_revenue': float(net_revenue),
+        'gross_revenue': float(gross_revenue),
         'conversion_rate': float(conversion_rate),
         'new_customers': int(new_customers),
         'returning_customers': int(returning_customers),
@@ -339,5 +362,7 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         'return_rate_pct': round(return_rate_pct, 1),
         'return_rate_new_pct': round(return_rate_new_pct, 1),
         'return_rate_returning_pct': round(return_rate_returning_pct, 1),
+        # Same numerator as Table 1 eMER / slide 1 aMER
+        'new_customers_net_revenue': float(new_customer_revenue),
     }
 

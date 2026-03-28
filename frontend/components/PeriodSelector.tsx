@@ -132,15 +132,6 @@ export default function PeriodSelector({
               </div>
             </div>
             
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">2023:</span>
-                <span className="text-sm font-medium">{periods.year_2023}</span>
-              </div>
-              <div className="text-xs text-gray-500">
-                {periods.date_ranges.year_2023?.display || 'N/A'}
-              </div>
-            </div>
           </div>
         </div>
       )}

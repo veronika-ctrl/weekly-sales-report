@@ -99,16 +99,6 @@ export default function MetricsPreview({
     return roundedThousands.toLocaleString('sv-SE')
   }
 
-  const getPeriodDisplayName = (periodKey: string): string => {
-    const mapping: Record<string, string> = {
-      'actual': 'Actual',
-      'last_week': 'Last Week',
-      'last_year': 'Last Year',
-      'year_2023': '2023'
-    }
-    return mapping[periodKey] || periodKey
-  }
-
   const getPeriodDateRange = (periodKey: string): string => {
     if (!periods?.date_ranges) {
       return 'N/A'
@@ -160,20 +150,19 @@ export default function MetricsPreview({
           <thead>
             <tr className="bg-gray-200 border-b">
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-left font-medium text-gray-900`} rowSpan={2}>(SEK '000)</th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-gray-200`} colSpan={5}>
+              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-gray-200`} colSpan={3}>
                 Latest Week: {actualDateRange}
               </th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-yellow-100`} colSpan={2}>
                 Last year (same week) — YoY
               </th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-blue-100`} colSpan={5}>
+              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-blue-100`} colSpan={3}>
                 Year-to-date
               </th>
             </tr>
             <tr className="bg-gray-200 border-b">
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-gray-400 ${isPdfMode ? 'tabular-nums' : ''}`}>Actual</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 ${isPdfMode ? 'tabular-nums' : ''}`}>Last Week</th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 ${isPdfMode ? 'tabular-nums' : ''}`}>2023</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 ${isPdfMode ? 'tabular-nums' : ''}`}>vs Last Week</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-yellow-50 ${isPdfMode ? 'tabular-nums' : ''}`} title={`Same week last year: ${lastYearDateRange}`}>
                 Last Year
@@ -181,12 +170,9 @@ export default function MetricsPreview({
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-yellow-50 ${isPdfMode ? 'tabular-nums' : ''}`} title="Year-over-year: vs same week last year">
                 Y/Y %
               </th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 ${isPdfMode ? 'tabular-nums' : ''}`}>vs 2023</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-blue-200 ${isPdfMode ? 'tabular-nums' : ''}`}>YTD Actual</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>YTD Last Year</th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>YTD 2023</th>
               <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>YTD vs Last Year</th>
-              <th className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>YTD vs 2023</th>
             </tr>
           </thead>
           <tbody>
@@ -200,9 +186,6 @@ export default function MetricsPreview({
                   </td>
                   <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''}`}>
                     {formatValue(metricsData?.last_week?.[metricKey] || 0, metricKey)}
-                  </td>
-                  <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''}`}>
-                    {formatValue(metricsData?.year_2023?.[metricKey] || 0, metricKey)}
                   </td>
                   <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''}`}>
                     {formatGrowthPercentage(calculateGrowthPercentage(
@@ -219,12 +202,6 @@ export default function MetricsPreview({
                       metricsData?.last_year?.[metricKey] || 0
                     ))}
                   </td>
-                  <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''}`}>
-                    {formatGrowthPercentage(calculateGrowthPercentage(
-                      metricsData?.actual?.[metricKey] || 0,
-                      metricsData?.year_2023?.[metricKey] || 0
-                    ))}
-                  </td>
                   <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 bg-blue-100 font-semibold ${isPdfMode ? 'tabular-nums' : ''}`}>
                     {formatValue(metricsData?.ytd_actual?.[metricKey] || 0, metricKey)}
                   </td>
@@ -232,18 +209,9 @@ export default function MetricsPreview({
                     {formatValue(metricsData?.ytd_last_year?.[metricKey] || 0, metricKey)}
                   </td>
                   <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>
-                    {formatValue(metricsData?.ytd_2023?.[metricKey] || 0, metricKey)}
-                  </td>
-                  <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>
                     {formatGrowthPercentage(calculateGrowthPercentage(
                       metricsData?.ytd_actual?.[metricKey] || 0, 
                       metricsData?.ytd_last_year?.[metricKey] || 0
-                    ))}
-                  </td>
-                  <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 bg-blue-50 ${isPdfMode ? 'tabular-nums' : ''}`}>
-                    {formatGrowthPercentage(calculateGrowthPercentage(
-                      metricsData?.ytd_actual?.[metricKey] || 0, 
-                      metricsData?.ytd_2023?.[metricKey] || 0
                     ))}
                   </td>
                 </tr>

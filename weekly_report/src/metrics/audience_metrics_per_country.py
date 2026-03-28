@@ -1,4 +1,4 @@
-"""Audience metrics per country: Total AOV, customers, return rates (overall/new/returning), COS, CAC."""
+"""Audience metrics per country: Total AOV, customers, return rates (overall/new/returning), COS, CAC, aMER."""
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -288,7 +288,7 @@ def calculate_audience_metrics_per_country_for_week(
     """
     For one week, compute per country (and Total): total_aov, total_customers, total_orders,
     new_customers, returning_customers, return_rate_pct, return_rate_new_pct,
-    return_rate_returning_pct, cos_pct, cac.
+    return_rate_returning_pct, cos_pct, cac, amer (online new-customer net / DEMA spend, same as slide 1 eMER).
     Uses online sales only.
     """
     if qlik_df.empty:
@@ -370,12 +370,35 @@ def calculate_audience_metrics_per_country_for_week(
         .rename(columns={"_CountryCanonical": "Country"})
     )
 
-    merged = rev_orders.merge(new_df, on="Country", how="left").merge(ret_df, on="Country", how="left")
+    new_net_df = (
+        online[online["_Seg"].eq("new").fillna(False)]
+        .groupby("_CountryCanonical", dropna=False)["_Net"]
+        .sum()
+        .reset_index()
+        .rename(columns={"_CountryCanonical": "Country", "_Net": "new_customers_net_revenue"})
+    )
+    ret_net_df = (
+        online[online["_Seg"].eq("returning").fillna(False)]
+        .groupby("_CountryCanonical", dropna=False)["_Net"]
+        .sum()
+        .reset_index()
+        .rename(columns={"_CountryCanonical": "Country", "_Net": "returning_customers_net_revenue"})
+    )
+
+    merged = (
+        rev_orders.merge(new_df, on="Country", how="left")
+        .merge(ret_df, on="Country", how="left")
+        .merge(new_net_df, on="Country", how="left")
+        .merge(ret_net_df, on="Country", how="left")
+    )
+    merged["new_customers_net_revenue"] = merged["new_customers_net_revenue"].fillna(0.0)
+    merged["returning_customers_net_revenue"] = merged["returning_customers_net_revenue"].fillna(0.0)
     merged["new_customers"] = merged["new_customers"].fillna(0).astype(int)
     merged["returning_customers"] = merged["returning_customers"].fillna(0).astype(int)
     merged["total_customers"] = merged["new_customers"] + merged["returning_customers"]
 
     # Marketing spend per country from DEMA (canonicalize labels to match Qlik / Audience keys)
+    total_dema_mkt_all = 0.0
     if not dema_df.empty:
         dema_cc = dema_df.copy()
         dema_cc.columns = dema_cc.columns.astype(str).str.strip()
@@ -383,6 +406,8 @@ def calculate_audience_metrics_per_country_for_week(
             dema_cc,
             ["Marketing spend", "Marketing Spend", "Spend", "Cost", "Kostnad", "Ad spend"],
         )
+        if spend_col and spend_col in dema_cc.columns:
+            total_dema_mkt_all = float(pd.to_numeric(dema_cc[spend_col], errors="coerce").fillna(0).sum())
         if spend_col and "Country" in dema_cc.columns:
             spend = dema_cc.groupby("Country")[spend_col].sum().reset_index()
             spend.columns = ["_dema_country", "marketing_spend"]
@@ -405,6 +430,9 @@ def calculate_audience_metrics_per_country_for_week(
         if pd.isna(country) or country == "-":
             continue
         gross_revenue = float(row["gross_revenue"])
+        net_revenue = float(row["net_revenue"])
+        new_cust_net = float(row.get("new_customers_net_revenue", 0.0))
+        ret_cust_net = float(row.get("returning_customers_net_revenue", 0.0))
         returns_amount = float(row["returns_amount"])
         orders = int(row["orders"])
         new_c = int(row["new_customers"])
@@ -423,6 +451,11 @@ def calculate_audience_metrics_per_country_for_week(
         return_rate_returning_pct = (ret_returns / ret_gross * 100) if ret_gross > 0 else 0.0
         cos_pct = (spend / gross_revenue * 100) if gross_revenue > 0 else 0.0
         cac = (new_spend / new_c) if new_c > 0 else 0.0
+        # aMER = online new-customer net revenue / DEMA marketing spend (same as Table 1 eMER / slide 1)
+        amer = (new_cust_net / spend) if spend > 0 else 0.0
+        # Segment AOV: net revenue ÷ unique customers (same as Online KPIs)
+        aov_new_customer = (new_cust_net / new_c) if new_c > 0 else 0.0
+        aov_returning_customer = (ret_cust_net / ret_c) if ret_c > 0 else 0.0
 
         result["countries"][country] = {
             "total_aov": round(total_aov, 2),
@@ -430,11 +463,14 @@ def calculate_audience_metrics_per_country_for_week(
             "total_orders": orders,
             "new_customers": new_c,
             "returning_customers": ret_c,
+            "aov_new_customer": round(aov_new_customer, 2),
+            "aov_returning_customer": round(aov_returning_customer, 2),
             "return_rate_pct": round(return_rate_pct, 2),
             "return_rate_new_pct": round(return_rate_new_pct, 2),
             "return_rate_returning_pct": round(return_rate_returning_pct, 2),
             "cos_pct": round(cos_pct, 2),
             "cac": round(cac, 2),
+            "amer": round(amer, 2),
         }
 
     # ROW aggregate (Rest of World): all countries outside main Audience market pages.
@@ -455,17 +491,22 @@ def calculate_audience_metrics_per_country_for_week(
         row_total_customers = row_new + row_ret
         row_spend = float(row_df["marketing_spend"].sum() or 0.0)
         row_new_spend = float(row_df["new_customer_spend"].sum() or 0.0)
+        row_new_cust_net = float(row_df["new_customers_net_revenue"].sum() or 0.0)
+        row_ret_cust_net = float(row_df["returning_customers_net_revenue"].sum() or 0.0)
         result["countries"]["ROW"] = {
             "total_aov": round((row_revenue / row_orders) if row_orders > 0 else 0.0, 2),
             "total_customers": row_total_customers,
             "total_orders": row_orders,
             "new_customers": row_new,
             "returning_customers": row_ret,
+            "aov_new_customer": round((row_new_cust_net / row_new) if row_new > 0 else 0.0, 2),
+            "aov_returning_customer": round((row_ret_cust_net / row_ret) if row_ret > 0 else 0.0, 2),
             "return_rate_pct": round((row_returns / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
             "return_rate_new_pct": round((row_new_returns / row_new_gross * 100) if row_new_gross > 0 else 0.0, 2),
             "return_rate_returning_pct": round((row_ret_returns / row_ret_gross * 100) if row_ret_gross > 0 else 0.0, 2),
             "cos_pct": round((row_spend / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
             "cac": round((row_new_spend / row_new) if row_new > 0 else 0.0, 2),
+            "amer": round((row_new_cust_net / row_spend) if row_spend > 0 else 0.0, 2),
         }
 
     # Total row
@@ -481,17 +522,27 @@ def calculate_audience_metrics_per_country_for_week(
     tot_cust = tot_new + tot_ret
     tot_spend = merged["marketing_spend"].sum()
     tot_new_spend = merged["new_customer_spend"].sum()
+    # Total aMER: match Table 1 / slide 1 — all online new-customer net ÷ full DEMA spend for the week
+    slide1_new_net_total = float(online.loc[online["_Seg"].eq("new").fillna(False), "_Net"].sum() or 0.0)
+    amer_total_denom = total_dema_mkt_all if total_dema_mkt_all > 0 else float(tot_spend)
+    amer_total = (slide1_new_net_total / amer_total_denom) if amer_total_denom > 0 else 0.0
+    tot_new_net = float(merged["new_customers_net_revenue"].sum() or 0.0)
+    tot_ret_net = float(merged["returning_customers_net_revenue"].sum() or 0.0)
+
     result["countries"]["Total"] = {
         "total_aov": round((tot_revenue / tot_orders) if tot_orders > 0 else 0.0, 2),
         "total_customers": int(tot_cust),
         "total_orders": int(tot_orders),
         "new_customers": int(tot_new),
         "returning_customers": int(tot_ret),
+        "aov_new_customer": round((tot_new_net / tot_new) if tot_new > 0 else 0.0, 2),
+        "aov_returning_customer": round((tot_ret_net / tot_ret) if tot_ret > 0 else 0.0, 2),
         "return_rate_pct": round((tot_returns / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
         "return_rate_new_pct": round((tot_new_returns / tot_new_gross * 100) if tot_new_gross > 0 else 0.0, 2),
         "return_rate_returning_pct": round((tot_ret_returns / tot_ret_gross * 100) if tot_ret_gross > 0 else 0.0, 2),
         "cos_pct": round((tot_spend / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
         "cac": round((tot_new_spend / tot_new) if tot_new > 0 else 0.0, 2),
+        "amer": round(amer_total, 2),
     }
 
     return result

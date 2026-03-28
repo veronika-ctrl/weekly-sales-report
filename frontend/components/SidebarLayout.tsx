@@ -9,7 +9,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isWeeklyReportsOpen, setIsWeeklyReportsOpen] = useState(true)
-  const [isGeneralOpen, setIsGeneralOpen] = useState(true)
+  const [isSalesReportsOpen, setIsSalesReportsOpen] = useState(true)
+  const [isAdditionalB2cOpen, setIsAdditionalB2cOpen] = useState(true)
   const [isMarketingOpen, setIsMarketingOpen] = useState(true)
 
   const isActive = (path: string) => pathname === path
@@ -17,7 +18,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const getPageTitle = () => {
     const titles: Record<string, { title: string; subtitle: string }> = {
       '/summary': { title: 'Summary', subtitle: 'Overview of weekly metrics' },
-      '/summary-mtd': { title: 'Summary Month-to-Date', subtitle: 'MTD actuals, budget, YTD and YoY' },
+      '/summary-mtd': { title: 'Online Summary', subtitle: 'MTD actuals, budget, YTD and YoY' },
       '/top-markets': { title: 'Top Markets', subtitle: 'Sales performance by country' },
       '/online-kpis': { title: 'Online KPIs', subtitle: 'Key performance indicators for online sales' },
       '/contribution': { title: 'Contribution', subtitle: 'New vs returning customer contribution' },
@@ -26,7 +27,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/women-category-sales': { title: 'Women Category Sales', subtitle: 'Sales by women product categories' },
       '/category-sales': { title: 'Category Sales', subtitle: 'Sales by category with YoY growth' },
       '/products-new': { title: 'Products New', subtitle: 'Top products for new and returning customers' },
-      '/products-gender': { title: 'Products Gender', subtitle: 'Top products by gender' },
+      '/products-gender': { title: 'Top selling products', subtitle: 'Top products by gender' },
       '/sessions-per-country': { title: 'Sessions per Country', subtitle: '(‘000)' },
       '/conversion-per-country': { title: 'Conversion per Country', subtitle: 'Conversion rates by country' },
       '/new-customers-per-country': { title: 'New Customers per Country', subtitle: 'New customer acquisition by country' },
@@ -132,16 +133,15 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                 
                 {(isCollapsed || isWeeklyReportsOpen) && (
                   <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
-                    {/* General Subgroup */}
+                    {/* Sales Reports subgroup */}
                     <div>
                 <button
-                  onClick={() => setIsGeneralOpen(!isGeneralOpen)}
+                  onClick={() => setIsSalesReportsOpen(!isSalesReportsOpen)}
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                    isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') || isActive('/online-kpis') || 
-                    isActive('/contribution') || isActive('/gender-sales') || isActive('/men-category-sales') || 
-                    isActive('/women-category-sales') || isActive('/category-sales') || isActive('/products-new') || 
-                    isActive('/products-gender') || isActive('/products/summary') || isActive('/products/product') ||
-                    isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer')
+                    isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') ||
+                    isActive('/gender-sales') || isActive('/men-category-sales') ||
+                    isActive('/women-category-sales') || isActive('/products-gender') ||
+                    isActive('/audience-total') || pathname?.startsWith('/audience/')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -149,13 +149,13 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   <IconChartBar className="h-4 w-4 flex-shrink-0" />
                   {!isCollapsed && (
                     <>
-                      <span className="flex-1 text-left">General</span>
-                      {isGeneralOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
+                      <span className="flex-1 text-left">Sales Reports</span>
+                      {isSalesReportsOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
                     </>
                   )}
                 </button>
-                
-                {(isCollapsed || isGeneralOpen) && (
+
+                {(isCollapsed || isSalesReportsOpen) && (
                   <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
                     <Link
                       href="/summary"
@@ -179,8 +179,57 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                       }`}
                     >
                       <IconChartBar className="h-4 w-4" />
-                      {!isCollapsed && <span>Summary MTD</span>}
+                      {!isCollapsed && <span>Online Summary</span>}
                     </Link>
+                    <Link
+                      href="/gender-sales"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/gender-sales')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Gender Sales</span>}
+                    </Link>
+                    <Link
+                      href="/men-category-sales"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/men-category-sales')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Men&apos;s Category Sales</span>}
+                    </Link>
+                    <Link
+                      href="/women-category-sales"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/women-category-sales')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Women Category Sales</span>}
+                    </Link>
+                    <Link
+                      href="/products-gender"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/products-gender')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Top selling products</span>}
+                    </Link>
+
                     <Link
                       href="/top-markets"
                       prefetch={true}
@@ -193,6 +242,95 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                       <IconFileChart className="h-4 w-4" />
                       {!isCollapsed && <span>Top Markets</span>}
                     </Link>
+
+                    <div>
+                      {!isCollapsed && (
+                        <div
+                          className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
+                            isActive('/audience-total') || pathname?.startsWith('/audience/')
+                              ? 'bg-gray-200 text-gray-900'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          <IconChartBar className="h-4 w-4 flex-shrink-0" />
+                          <span className="flex-1 text-left">Audience</span>
+                        </div>
+                      )}
+                      <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
+                        <Link
+                          href="/audience-total"
+                          prefetch={true}
+                          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                            isActive('/audience-total')
+                              ? 'bg-gray-200 text-gray-900'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>Total</span>}
+                        </Link>
+                        <Link href="/audience/sweden" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/sweden' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>Sweden</span>}
+                        </Link>
+                        <Link href="/audience/uk" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/uk' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>UK</span>}
+                        </Link>
+                        <Link href="/audience/usa" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/usa' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>USA</span>}
+                        </Link>
+                        <Link href="/audience/germany" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/germany' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>Germany</span>}
+                        </Link>
+                        <Link href="/audience/france" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/france' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>France</span>}
+                        </Link>
+                        <Link href="/audience/canada" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/canada' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>Canada</span>}
+                        </Link>
+                        <Link href="/audience/australia" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/australia' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>Australia</span>}
+                        </Link>
+                        <Link href="/audience/row" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/row' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
+                          <IconChartBar className="h-4 w-4" />
+                          {!isCollapsed && <span>ROW</span>}
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                    </div>
+
+                    {/* Additional B2C reports */}
+                    <div>
+                <button
+                  onClick={() => setIsAdditionalB2cOpen(!isAdditionalB2cOpen)}
+                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    isActive('/online-kpis') ||
+                    isActive('/contribution') ||
+                    isActive('/category-sales') ||
+                    isActive('/products-new')
+                      ? 'bg-gray-200 text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <IconTrendingUp className="h-4 w-4 flex-shrink-0" />
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">Additional B2C reports</span>
+                      {isAdditionalB2cOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
+                    </>
+                  )}
+                </button>
+
+                {(isCollapsed || isAdditionalB2cOpen) && (
+                  <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
                     <Link
                       href="/online-kpis"
                       prefetch={true}
@@ -218,42 +356,6 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                       {!isCollapsed && <span>Contribution</span>}
                     </Link>
                     <Link
-                      href="/gender-sales"
-                      prefetch={true}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive('/gender-sales')
-                          ? 'bg-gray-200 text-gray-900'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                      {!isCollapsed && <span>Gender Sales</span>}
-                    </Link>
-                    <Link
-                      href="/men-category-sales"
-                      prefetch={true}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive('/men-category-sales')
-                          ? 'bg-gray-200 text-gray-900'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                      {!isCollapsed && <span>Men Category Sales</span>}
-                    </Link>
-                    <Link
-                      href="/women-category-sales"
-                      prefetch={true}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive('/women-category-sales')
-                          ? 'bg-gray-200 text-gray-900'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                      {!isCollapsed && <span>Women Category Sales</span>}
-                    </Link>
-                    <Link
                       href="/category-sales"
                       prefetch={true}
                       className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -276,18 +378,6 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconChartBar className="h-4 w-4" />
                       {!isCollapsed && <span>Products New</span>}
-                    </Link>
-                    <Link
-                      href="/products-gender"
-                      prefetch={true}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive('/products-gender')
-                          ? 'bg-gray-200 text-gray-900'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <IconChartBar className="h-4 w-4" />
-                      {!isCollapsed && <span>Products Gender</span>}
                     </Link>
                   </div>
                 )}
@@ -566,7 +656,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/countries/usa') || isActive('/countries/germany') ||
                     isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') ||
-                    isActive('/countries/uae') || isActive('/countries/row') || isActive('/audience-total') || pathname?.startsWith('/audience/')
+                    isActive('/countries/uae') || isActive('/countries/row')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600'
                   }`}
@@ -693,66 +783,6 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     }`}
                   >
                     <IconFileChart className="h-4 w-4" />
-                    {!isCollapsed && <span>ROW</span>}
-                  </Link>
-                </div>
-              </div>
-
-              {/* Audience group */}
-              <div>
-                <div
-                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
-                    isActive('/audience-total') || pathname?.startsWith('/audience/')
-                      ? 'bg-gray-200 text-gray-900'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  <IconChartBar className="h-4 w-4 flex-shrink-0" />
-                  {!isCollapsed && <span className="flex-1 text-left">Audience</span>}
-                </div>
-                <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
-                  <Link
-                    href="/audience-total"
-                    prefetch={true}
-                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                      isActive('/audience-total')
-                        ? 'bg-gray-200 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>Total</span>}
-                  </Link>
-                  <Link href="/audience/sweden" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/sweden' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>Sweden</span>}
-                  </Link>
-                  <Link href="/audience/uk" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/uk' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>UK</span>}
-                  </Link>
-                  <Link href="/audience/usa" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/usa' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>USA</span>}
-                  </Link>
-                  <Link href="/audience/germany" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/germany' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>Germany</span>}
-                  </Link>
-                  <Link href="/audience/france" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/france' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>France</span>}
-                  </Link>
-                  <Link href="/audience/canada" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/canada' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>Canada</span>}
-                  </Link>
-                  <Link href="/audience/australia" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/australia' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
-                    {!isCollapsed && <span>Australia</span>}
-                  </Link>
-                  <Link href="/audience/row" prefetch={true} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${pathname === '/audience/row' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <IconChartBar className="h-4 w-4" />
                     {!isCollapsed && <span>ROW</span>}
                   </Link>
                 </div>

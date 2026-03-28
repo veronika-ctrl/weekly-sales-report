@@ -28,7 +28,7 @@ export default function GenerateButton({
     setGeneratedFile(null)
     
     try {
-      const periodsList = ['actual', 'last_week', 'last_year', 'year_2023']
+      const periodsList = ['actual', 'last_week', 'last_year']
       const result = await generatePDF(baseWeek, periodsList)
       setGeneratedFile(result)
     } catch (err) {

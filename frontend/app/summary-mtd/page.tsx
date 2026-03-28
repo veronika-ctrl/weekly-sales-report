@@ -119,7 +119,7 @@ export default function SummaryMtdPage() {
           <div className="flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Loading Summary MTD</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Loading Online Summary</h2>
               <p className="text-sm text-gray-600">Loading data...</p>
             </div>
           </div>

@@ -6,7 +6,13 @@ from pathlib import Path
 from loguru import logger
 
 from weekly_report.src.adapters import qlik, dema, dema_gm2, shopify
-from weekly_report.src.periods.calculator import get_week_date_range, get_ytd_periods_for_week, get_mtd_periods_for_week
+from weekly_report.src.metrics.discounts_sales import _normalize_customer_segment
+from weekly_report.src.periods.calculator import (
+    get_week_date_range,
+    get_ytd_periods_for_week,
+    get_mtd_periods_for_week,
+    get_periods_for_week,
+)
 from weekly_report.src.cache.manager import raw_data_cache
 
 
@@ -159,24 +165,21 @@ def calculate_table1_metrics(
     total_net_revenue = online_net_revenue + retail_net_revenue + wholesale_net_revenue
     metrics['total_net_revenue'] = float(total_net_revenue)
     
-    # 10. Returning Customers = COUNT(DISTINCT Customer E-mail WHERE New/Returning Customer = 'Returning')
-    returning_customers = qlik_filtered[
-        qlik_filtered['New/Returning Customer'] == 'Returning'
-    ]['Customer E-mail'].nunique()
+    # 10–11. Customer segments: normalize labels (Swedish "ny", casing) like Online KPIs / Audience
+    _cust_seg = (
+        qlik_filtered['New/Returning Customer'].map(_normalize_customer_segment)
+        if 'New/Returning Customer' in qlik_filtered.columns
+        else pd.Series(pd.NA, index=qlik_filtered.index, dtype=object)
+    )
+    returning_customers = qlik_filtered.loc[_cust_seg.eq('returning'), 'Customer E-mail'].nunique()
     metrics['returning_customers'] = int(returning_customers)
-    
-    # 11. New customers = COUNT(DISTINCT Customer E-mail WHERE New/Returning Customer = 'New')
-    new_customers = qlik_filtered[
-        qlik_filtered['New/Returning Customer'] == 'New'
-    ]['Customer E-mail'].nunique()
+    new_customers = qlik_filtered.loc[_cust_seg.eq('new'), 'Customer E-mail'].nunique()
     metrics['new_customers'] = int(new_customers)
 
-    # New customers net sales = SUM(Net Revenue WHERE Sales Channel = 'Online' AND New/Returning Customer = 'New')
+    # New customers net sales = SUM(Net Revenue WHERE Sales Channel = 'Online' AND segment = new)
     if all(c in qlik_filtered.columns for c in ('Sales Channel', 'New/Returning Customer', 'Net Revenue')):
-        new_customers_net_sales = qlik_filtered[
-            (qlik_filtered['Sales Channel'] == 'Online') &
-            (qlik_filtered['New/Returning Customer'] == 'New')
-        ]['Net Revenue'].sum()
+        _online = qlik_filtered['Sales Channel'].astype(str).str.strip().str.lower().eq('online')
+        new_customers_net_sales = qlik_filtered.loc[_online & _cust_seg.eq('new'), 'Net Revenue'].sum()
     else:
         new_customers_net_sales = 0.0
     new_customers_net_sales = float(new_customers_net_sales)
@@ -513,24 +516,19 @@ def calculate_table1_metrics_for_date_range(
     total_net_revenue = online_net_revenue + retail_net_revenue + wholesale_net_revenue
     metrics['total_net_revenue'] = float(total_net_revenue)
     
-    # 10. Returning Customers = COUNT(DISTINCT Customer E-mail WHERE New/Returning Customer = 'Returning')
-    returning_customers = qlik_df[
-        qlik_df['New/Returning Customer'] == 'Returning'
-    ]['Customer E-mail'].nunique()
+    _cust_seg_dr = (
+        qlik_df['New/Returning Customer'].map(_normalize_customer_segment)
+        if 'New/Returning Customer' in qlik_df.columns
+        else pd.Series(pd.NA, index=qlik_df.index, dtype=object)
+    )
+    returning_customers = qlik_df.loc[_cust_seg_dr.eq('returning'), 'Customer E-mail'].nunique()
     metrics['returning_customers'] = int(returning_customers)
-    
-    # 11. New customers = COUNT(DISTINCT Customer E-mail WHERE New/Returning Customer = 'New')
-    new_customers = qlik_df[
-        qlik_df['New/Returning Customer'] == 'New'
-    ]['Customer E-mail'].nunique()
+    new_customers = qlik_df.loc[_cust_seg_dr.eq('new'), 'Customer E-mail'].nunique()
     metrics['new_customers'] = int(new_customers)
 
-    # New customers net sales = SUM(Net Revenue WHERE Sales Channel = 'Online' AND New/Returning Customer = 'New')
     if all(c in qlik_df.columns for c in ('Sales Channel', 'New/Returning Customer', 'Net Revenue')):
-        new_customers_net_sales = qlik_df[
-            (qlik_df['Sales Channel'] == 'Online') &
-            (qlik_df['New/Returning Customer'] == 'New')
-        ]['Net Revenue'].sum()
+        _online_dr = qlik_df['Sales Channel'].astype(str).str.strip().str.lower().eq('online')
+        new_customers_net_sales = qlik_df.loc[_online_dr & _cust_seg_dr.eq('new'), 'Net Revenue'].sum()
     else:
         new_customers_net_sales = 0.0
     new_customers_net_sales = float(new_customers_net_sales)
@@ -680,6 +678,23 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
         logger.warning(f"Failed to process actual week {base_week}: {e}")
         results["actual"] = _get_zero_metrics()
         date_ranges["actual"] = {"start": "", "end": "", "display": base_week}
+
+    # Same ISO week, prior year (for Summary MTD "Week" block)
+    try:
+        ly_week = get_periods_for_week(base_week)["last_year"]
+        filtered_wly = filter_data_for_period(all_raw_data, ly_week)
+        wly_metrics = calculate_table1_metrics(
+            filtered_wly["qlik"],
+            filtered_wly["dema_spend"],
+            filtered_wly["dema_gm2"],
+            ly_week,
+        )
+        results["week_last_year"] = wly_metrics
+        date_ranges["week_last_year"] = get_week_date_range(ly_week)
+    except Exception as e:
+        logger.warning(f"Failed to process week_last_year for {base_week}: {e}")
+        results["week_last_year"] = _get_zero_metrics()
+        date_ranges["week_last_year"] = {"start": "", "end": "", "display": ""}
 
     # MTD periods
     mtd_periods = get_mtd_periods_for_week(base_week)

@@ -44,6 +44,29 @@ export interface MarketsResponse {
   }
 }
 
+export interface MarketNetPeriodBlock {
+  actual: number
+  last_year: number
+  budget: number | null
+  yoy_pct: number | null
+  vs_budget: number | null
+}
+
+export interface TopMarketsNetMtdResponse {
+  markets: Array<{
+    country: string
+    week: MarketNetPeriodBlock
+    month: MarketNetPeriodBlock
+    ytd: MarketNetPeriodBlock
+  }>
+  period_info: Record<string, string>
+  date_ranges: Record<string, Record<string, string>>
+  /** file_per_market when budget CSV has Market; else mix_allocation */
+  budget_source?: string | null
+  /** How Week / Month / YTD group and per-market budgets were derived */
+  budget_explanation?: string[] | null
+}
+
 export interface OnlineKPIsResponse {
   kpis: Array<{
     week: string
@@ -51,6 +74,11 @@ export interface OnlineKPIsResponse {
     aov_returning_customer: number
     cos: number
     marketing_spend: number
+    net_revenue?: number
+    /** Online gross revenue (Qlik); optional extra KPI field. */
+    gross_revenue?: number
+    /** Sum of Net Revenue for online + New customers; aMER on Audience Total = this ÷ marketing_spend. */
+    new_customers_net_revenue?: number
     conversion_rate: number
     new_customers: number
     returning_customers: number
@@ -65,6 +93,9 @@ export interface OnlineKPIsResponse {
       aov_returning_customer: number
       cos: number
       marketing_spend: number
+      net_revenue?: number
+      gross_revenue?: number
+      new_customers_net_revenue?: number
       conversion_rate: number
       new_customers: number
       returning_customers: number
@@ -246,6 +277,23 @@ export async function getTopMarkets(
   const response = await fetch(`${API_BASE_URL}/api/markets/top?${params}`)
   if (!response.ok) {
     throw new Error(`Failed to fetch markets: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function getTopMarketsNetMtd(
+  baseWeek: string,
+  numWeeks: number = 8
+): Promise<TopMarketsNetMtdResponse> {
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    num_weeks: String(numWeeks),
+  })
+  const response = await fetch(`${API_BASE_URL}/api/markets/top-net-mtd?${params}`)
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}))
+    const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
+    throw new Error(detail)
   }
   return response.json()
 }
@@ -741,14 +789,31 @@ export interface BatchMetricsResponse {
   total_contribution_per_country: TotalContributionPerCountryResponse
 }
 
+/** Batch compute can be slow; without a timeout the UI sits at ~5% forever if the API is down. */
+const BATCH_METRICS_TIMEOUT_MS = 180_000
+
 export async function getBatchMetrics(baseWeek: string, numWeeks: number = 8): Promise<BatchMetricsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/batch/all-metrics?base_week=${baseWeek}&num_weeks=${numWeeks}`)
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}))
-    const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
-    throw new Error(detail)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), BATCH_METRICS_TIMEOUT_MS)
+  const url = `${API_BASE_URL}/api/batch/all-metrics?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}))
+      const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
+      throw new Error(detail)
+    }
+    return response.json()
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(
+        `Batch metrics timed out after ${BATCH_METRICS_TIMEOUT_MS / 1000}s. Is the API running at ${API_BASE_URL}?`
+      )
+    }
+    throw e
+  } finally {
+    clearTimeout(timeoutId)
   }
-  return response.json()
 }
 
 export async function getBudgetGeneral(week: string): Promise<BudgetGeneralResponse> {
@@ -802,22 +867,30 @@ export interface AudienceMetricsCountryData {
   total_orders: number
   new_customers: number
   returning_customers: number
+  /** Net revenue ÷ unique customers in segment (same as Online KPIs). */
+  aov_new_customer?: number
+  aov_returning_customer?: number
   return_rate_pct: number
   return_rate_new_pct?: number
   return_rate_returning_pct?: number
   cos_pct: number
   cac: number
+  /** Online new-customer net revenue ÷ DEMA marketing spend (same formula as summary slide 1). */
+  amer?: number
   last_year?: {
     total_aov: number
     total_customers: number
     total_orders: number
     new_customers: number
     returning_customers: number
+    aov_new_customer?: number
+    aov_returning_customer?: number
     return_rate_pct: number
     return_rate_new_pct?: number
     return_rate_returning_pct?: number
     cos_pct: number
     cac: number
+    amer?: number
   } | null
 }
 
@@ -838,6 +911,27 @@ export async function getAudienceMetricsPerCountry(
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
     throw new Error(err?.detail || `Failed to fetch audience metrics: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+/** Server-resolved audience chart budget (wide + long-format budget CSV). */
+export interface AudienceBudgetSeriesResponse {
+  base_week: string
+  num_weeks: number
+  weeks: Array<{ week: string; budget: Record<string, number> | null }>
+  budget_general_error?: string | null
+}
+
+export async function getAudienceBudgetSeries(
+  baseWeek: string,
+  numWeeks: number = 8
+): Promise<AudienceBudgetSeriesResponse> {
+  const params = new URLSearchParams({ base_week: baseWeek, num_weeks: String(numWeeks) })
+  const response = await fetch(`${API_BASE_URL}/api/audience-budget-series?${params}`)
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err?.detail || `Failed to fetch audience budget series: ${response.statusText}`)
   }
   return response.json()
 }

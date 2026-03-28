@@ -414,6 +414,16 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         } catch (batchError) {
           console.warn('Batch endpoint failed, falling back to individual calls:', batchError)
           batchMode = false
+          setLoadingProgress(prev => ({
+            step: 'metrics',
+            stepNumber: 1,
+            totalSteps: 27,
+            message:
+              'Batch API unavailable or timed out — loading metrics one request at a time. ' +
+              'If this hangs, start the backend: uvicorn on port 8000 (see NEXT_PUBLIC_API_URL).',
+            percentage: 6,
+            supabaseStatus: prev?.supabaseStatus,
+          }))
         }
       }
 
@@ -602,7 +612,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         message: 'Loading summary metrics...', 
         percentage: 12 
       })
-      const metricsData = await getTable1Metrics(week, ['actual', 'last_week', 'last_year', 'year_2023'], true)
+      const metricsData = await getTable1Metrics(week, ['actual', 'last_week', 'last_year'], true)
       setMetrics(metricsData)
 
       // Step 3: Load markets

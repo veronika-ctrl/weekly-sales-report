@@ -85,7 +85,10 @@ def build_table1_pdf(
     table_data = create_table_data(metrics_data, periods, period_display)
     
     # Create table with exact styling
-    table = Table(table_data, colWidths=[120*mm, 30*mm, 30*mm, 30*mm, 30*mm])
+    table = Table(
+        table_data,
+        colWidths=[120 * mm, 28 * mm, 28 * mm, 28 * mm, 28 * mm, 28 * mm, 28 * mm],
+    )
     
     # Apply professional styling
     table.setStyle(TableStyle([
@@ -182,29 +185,24 @@ def create_table_data(
         'emer'
     ]
     
-    # Create header row
-    header = ['Metric', 'Actual', 'Last Week', 'Last Year', '2023', 'vs Last Week', 'vs Last Year', 'vs 2023']
+    # Create header row (no 2023 / vs 2023 — aligned with Summary UI)
+    header = ['Metric', 'Actual', 'Last Week', 'Last Year', 'vs Last Week', 'vs Last Year']
     table_data = [header]
-    
+
     # Add data rows
     for label, key in zip(metric_labels, metric_keys):
         row = [label]
-        
-        # Add values for each period
+
         actual_value = metrics_data.get('actual', {}).get(key, 0)
         last_week_value = metrics_data.get('last_week', {}).get(key, 0)
         last_year_value = metrics_data.get('last_year', {}).get(key, 0)
-        year_2023_value = metrics_data.get('year_2023', {}).get(key, 0)
-        
+
         row.append(format_metric_value(actual_value, key))
         row.append(format_metric_value(last_week_value, key))
         row.append(format_metric_value(last_year_value, key))
-        row.append(format_metric_value(year_2023_value, key))
-        
-        # Add growth percentages
+
         row.append(format_growth_percentage(calculate_growth_percentage(actual_value, last_week_value)))
         row.append(format_growth_percentage(calculate_growth_percentage(actual_value, last_year_value)))
-        row.append(format_growth_percentage(calculate_growth_percentage(actual_value, year_2023_value)))
         
         table_data.append(row)
     
@@ -281,28 +279,12 @@ def create_sample_table1_pdf(output_path: Path) -> Path:
             'marketing_spend': 320000,
             'online_cost_of_sale_3': 85000
         },
-        'year_2023': {
-            'online_gross_revenue': 850000,
-            'returns': 15000,
-            'return_rate_pct': 1.8,
-            'online_net_revenue': 835000,
-            'retail_concept_store': 40000,
-            'retail_popups_outlets': 0,
-            'retail_net_revenue': 40000,
-            'wholesale_net_revenue': 0,
-            'total_net_revenue': 875000,
-            'returning_customers': 350,
-            'new_customers': 140,
-            'marketing_spend': 280000,
-            'online_cost_of_sale_3': 75000
-        }
     }
     
     sample_periods = {
         'actual': '2025-42',
         'last_week': '2025-41',
         'last_year': '2024-42',
-        'year_2023': '2023-42'
     }
     
     return build_table1_pdf(sample_metrics, sample_periods, output_path)
