@@ -11,6 +11,72 @@ interface TopMarketsNetRevenueTableProps {
 
 const COLS = 5
 
+type PeriodKey = 'week' | 'month' | 'ytd'
+
+/** Match Summary MTD: Actual warm, Last year vs Y/Y distinct, Budget + vs budget same green. */
+const MARKET_PERIOD: Record<
+  PeriodKey,
+  { actual: string; lastYear: string; budget: string; yoy: string; vsBudget: string }
+> = {
+  week: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/70 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.12)]',
+    lastYear: 'bg-slate-100/90 text-gray-700',
+    yoy: 'bg-violet-50/75 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium border-r border-slate-300/70',
+  },
+  month: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/70 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.12)]',
+    lastYear: 'bg-stone-100/90 text-gray-700',
+    yoy: 'bg-teal-50/65 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium border-r border-slate-300/70',
+  },
+  ytd: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/70 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.12)]',
+    lastYear: 'bg-sky-100/85 text-gray-700',
+    yoy: 'bg-indigo-50/70 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium',
+  },
+}
+
+const HEAD_GROUP: Record<PeriodKey, string> = {
+  week: 'bg-slate-200/95 border-slate-300',
+  month: 'bg-stone-200/95 border-stone-300',
+  ytd: 'bg-sky-200/90 border-sky-300',
+}
+
+const HEAD_SUB: Record<
+  PeriodKey,
+  { actual: string; lastYear: string; budget: string; yoy: string; vsBudget: string }
+> = {
+  week: {
+    actual: 'bg-slate-100 border-l border-slate-300',
+    lastYear: 'bg-slate-100',
+    budget: 'bg-emerald-100/90',
+    yoy: 'bg-violet-100/70',
+    vsBudget: 'bg-emerald-100/90 border-r border-slate-400/70',
+  },
+  month: {
+    actual: 'bg-stone-100 border-l border-stone-300',
+    lastYear: 'bg-stone-100',
+    budget: 'bg-emerald-100/90',
+    yoy: 'bg-teal-100/60',
+    vsBudget: 'bg-emerald-100/90 border-r border-slate-400/70',
+  },
+  ytd: {
+    actual: 'bg-sky-100 border-l border-sky-300',
+    lastYear: 'bg-sky-100',
+    budget: 'bg-emerald-100/90',
+    yoy: 'bg-indigo-100/70',
+    vsBudget: 'bg-emerald-100/90',
+  },
+}
+
 export default function TopMarketsNetRevenueTable({
   baseWeek,
   isPdfMode = false,
@@ -64,30 +130,26 @@ export default function TopMarketsNetRevenueTable({
     return `${formatted}%`
   }
 
-  const formatVsBudget = (actual: number, budget: number | null | undefined): string => {
+  /** Percent variance vs budget, styled like Y/Y (12%, (12%)). */
+  const formatVsBudgetPct = (actual: number, budget: number | null | undefined): string => {
     if (budget == null || Number.isNaN(Number(budget))) return '—'
-    const d = actual - budget
-    if (d === 0) return '0'
-    const roundedThousands = Math.round(Math.abs(d / 1000)).toLocaleString('sv-SE')
-    if (d < 0) return `(${roundedThousands})`
-    return `+${roundedThousands}`
+    const b = Math.abs(Number(budget))
+    if (b === 0) return '—'
+    const pct = ((actual - Number(budget)) / b) * 100
+    if (!Number.isFinite(pct)) return '—'
+    const rounded = Math.round(Math.abs(pct))
+    if (rounded === 0) return '0%'
+    if (pct < 0) return `(${rounded}%)`
+    return `${rounded}%`
   }
 
   const th = (extra: string, label: ReactNode, tooltip?: string) => (
     <th
       title={tooltip}
-      className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} text-right font-medium text-gray-900 whitespace-nowrap ${isPdfMode ? 'tabular-nums' : ''} ${extra}`}
+      className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1.5 px-1.5'} text-right font-semibold text-gray-900 whitespace-nowrap ${isPdfMode ? 'tabular-nums' : ''} ${extra}`}
     >
       {label}
     </th>
-  )
-
-  const cell = (value: string, bg: string, semibold = false) => (
-    <td
-      className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''} ${bg} ${semibold ? 'font-semibold' : ''}`}
-    >
-      {value}
-    </td>
   )
 
   if (!hasBackend) {
@@ -142,104 +204,139 @@ export default function TopMarketsNetRevenueTable({
               of actual net (budget file had no usable Market breakdown).{' '}
             </>
           )}
-          <strong>Month</strong> actuals are MTD (1st → week end); <strong>Month budget</strong> is the same
-          share of that month&apos;s plan. <strong>YTD budget</strong> is fiscal (Apr start) through the same
-          end date as YTD actuals. <strong>vs budget</strong> = actual − budget (SEK &apos;000); + = ahead.
+          <strong>Month</strong> <strong>actuals</strong> are MTD (1st → week end in the week-end calendar month).{' '}
+          <strong>Budgets</strong> spread each month&apos;s online net plan evenly per calendar day, then sum over the
+          same dates as actuals: <strong>Week</strong> = 7-day ISO window; <strong>Month</strong> = MTD;{' '}
+          <strong>YTD</strong> = fiscal year-to-date (Apr 1 → week end).{' '}
+          <strong>vs budget %</strong> = (actual − budget) / budget, formatted the same as Y/Y%.
         </p>
       )}
       <div
-        className={`rounded-lg overflow-hidden overflow-x-auto border border-slate-200/90 bg-slate-100 shadow-sm ${isPdfMode ? 'rounded-sm' : ''}`}
+        className={`rounded-lg overflow-hidden overflow-x-auto border border-gray-200/90 bg-white shadow-sm ${isPdfMode ? 'rounded-sm' : ''}`}
       >
         <table
-          className={`w-full min-w-[1180px] bg-white ${isPdfMode ? 'text-[7pt]' : 'text-xs'} ${isPdfMode ? 'break-inside-avoid' : ''}`}
+          className={`w-full min-w-[1180px] border-collapse ${isPdfMode ? 'text-[7pt]' : 'text-xs'} ${isPdfMode ? 'break-inside-avoid' : ''}`}
         >
           <thead>
-            <tr className="bg-gray-200 border-b">
+            <tr className="border-b border-gray-300">
               <th
                 rowSpan={2}
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-left font-medium text-gray-900 border-r border-gray-300 align-bottom`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1.5 px-2'} text-left font-semibold text-gray-900 border-r border-gray-300 bg-gray-100 align-bottom`}
               >
                 Country
               </th>
               <th
                 colSpan={COLS}
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium bg-sky-100 border-r border-gray-400`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1.5 px-2'} text-center font-semibold text-gray-900 border-r border-gray-400/80 ${HEAD_GROUP.week}`}
                 title={weekTitle}
               >
                 Week
               </th>
               <th
                 colSpan={COLS}
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium bg-teal-100 border-r border-gray-400`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1.5 px-2'} text-center font-semibold text-gray-900 border-r border-gray-400/80 ${HEAD_GROUP.month}`}
                 title={mtdTitle}
               >
                 Month
               </th>
               <th
                 colSpan={COLS}
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium bg-blue-100`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1.5 px-2'} text-center font-semibold text-gray-900 ${HEAD_GROUP.ytd}`}
                 title={ytdTitle}
               >
                 YTD
               </th>
             </tr>
-            <tr className="bg-gray-200 border-b">
-              {th('bg-sky-100 border-l border-sky-200', 'Actual', weekTitle)}
-              {th('bg-sky-100', 'Last year', weekLyTitle)}
+            <tr className="border-b border-gray-300">
+              {th(HEAD_SUB.week.actual, 'Actual', weekTitle)}
+              {th(HEAD_SUB.week.lastYear, 'Last year', weekLyTitle)}
               {th(
-                'bg-sky-100 bg-green-50/80',
+                HEAD_SUB.week.budget,
                 'Budget',
-                "That month's budget × (ISO week days in that month ÷ days in month)",
+                'Monthly plan prorated for each calendar day in this ISO week (7 days; sum of month slices if the week spans two months). Not comparable to Month budget, which is MTD fewer days in the week-end month.',
               )}
-              {th('bg-sky-100', 'Y/Y %', 'Actual vs last year (same week)')}
-              {th('bg-sky-100 bg-green-100/80 border-r border-gray-400', 'vs budget', 'Actual − budget (SEK ’000)')}
-              {th('bg-teal-100 border-l border-teal-200', 'Actual', mtdTitle)}
-              {th('bg-teal-100', 'Last year', mtdLyTitle)}
+              {th(HEAD_SUB.week.yoy, 'Y/Y %', 'Actual vs last year (same week)')}
               {th(
-                'bg-teal-100 bg-green-50/80',
-                'Budget',
-                'MTD budget: full month plan × (week-end day ÷ days in month), same span as Month actual',
+                HEAD_SUB.week.vsBudget,
+                'vs budget %',
+                'Percentage difference vs budget: (actual − budget) / budget',
               )}
-              {th('bg-teal-100', 'Y/Y %', 'MTD vs MTD LY')}
-              {th('bg-teal-100 bg-green-100/80 border-r border-gray-400', 'vs budget', 'Actual − budget (SEK ’000)')}
-              {th('bg-blue-100 border-l border-blue-200', 'Actual', ytdTitle)}
-              {th('bg-blue-100', 'Last year', ytdLyTitle)}
+              {th(HEAD_SUB.month.actual, 'Actual', mtdTitle)}
+              {th(HEAD_SUB.month.lastYear, 'Last year', mtdLyTitle)}
               {th(
-                'bg-blue-100 bg-green-50/80',
+                HEAD_SUB.month.budget,
                 'Budget',
-                'Fiscal YTD budget (Apr–Mar) through week end, prorated in the current month',
+                'Daily plan summed for MTD (same dates as month actuals)',
               )}
-              {th('bg-blue-100', 'Y/Y %', 'YTD vs YTD LY')}
-              {th('bg-blue-100 bg-green-100/80', 'vs budget', 'Actual − budget (SEK ’000)')}
+              {th(HEAD_SUB.month.yoy, 'Y/Y %', 'MTD vs MTD LY')}
+              {th(
+                HEAD_SUB.month.vsBudget,
+                'vs budget %',
+                'Percentage difference vs budget: (actual − budget) / budget',
+              )}
+              {th(HEAD_SUB.ytd.actual, 'Actual', ytdTitle)}
+              {th(HEAD_SUB.ytd.lastYear, 'Last year', ytdLyTitle)}
+              {th(
+                HEAD_SUB.ytd.budget,
+                'Budget',
+                'Daily plan summed for fiscal YTD (same dates as YTD actuals)',
+              )}
+              {th(HEAD_SUB.ytd.yoy, 'Y/Y %', 'YTD vs YTD LY')}
+              {th(HEAD_SUB.ytd.vsBudget, 'vs budget %', 'Percentage difference vs budget: (actual − budget) / budget')}
             </tr>
           </thead>
           <tbody>
             {data.markets.map((row) => {
               const isRow = row.country === 'ROW'
               const isTotal = row.country === 'Total'
-              const bg = isRow ? 'bg-gray-100' : isTotal ? 'bg-gray-200 font-semibold' : ''
-              const pack = (
-                w: (typeof row)['week'],
-                blockClass: string
-              ) => (
-                <>
-                  {cell(formatNetK(w.actual), `${blockClass} font-semibold`)}
-                  {cell(formatNetK(w.last_year), blockClass)}
-                  {cell(w.budget != null ? formatNetK(w.budget) : '—', `${blockClass} bg-green-50/80`)}
-                  {cell(formatYoY(w.yoy_pct), blockClass)}
-                  {cell(formatVsBudget(w.actual, w.budget), `${blockClass} bg-green-100/80 font-medium`)}
-                </>
-              )
+              const pad = isPdfMode ? 'py-0.5 px-1 tabular-nums' : 'py-1 px-1.5 text-right tabular-nums text-[11px] leading-tight sm:text-xs'
+              const totalPad = `${pad} bg-gray-200/95 text-gray-900 border-b border-gray-200/90`
+
+              const pack = (period: PeriodKey, w: (typeof row)['week']) => {
+                const s = MARKET_PERIOD[period]
+                if (isTotal) {
+                  return (
+                    <>
+                      <td className={`${totalPad} font-bold`}>{formatNetK(w.actual)}</td>
+                      <td className={totalPad}>{formatNetK(w.last_year)}</td>
+                      <td className={totalPad}>
+                        {w.budget != null && !Number.isNaN(Number(w.budget))
+                          ? formatNetK(Math.abs(Number(w.budget)))
+                          : '—'}
+                      </td>
+                      <td className={totalPad}>{formatYoY(w.yoy_pct)}</td>
+                      <td className={`${totalPad} font-semibold`}>{formatVsBudgetPct(w.actual, w.budget)}</td>
+                    </>
+                  )
+                }
+                return (
+                  <>
+                    <td className={`${pad} ${s.actual}`}>{formatNetK(w.actual)}</td>
+                    <td className={`${pad} ${s.lastYear}`}>{formatNetK(w.last_year)}</td>
+                    <td className={`${pad} ${s.budget}`}>
+                      {w.budget != null && !Number.isNaN(Number(w.budget))
+                        ? formatNetK(Math.abs(Number(w.budget)))
+                        : '—'}
+                    </td>
+                    <td className={`${pad} ${s.yoy}`}>{formatYoY(w.yoy_pct)}</td>
+                    <td className={`${pad} ${s.vsBudget}`}>{formatVsBudgetPct(w.actual, w.budget)}</td>
+                  </>
+                )
+              }
+
               return (
-                <tr key={row.country} className={`border-b border-gray-200 last:border-b-0 ${bg}`}>
+                <tr
+                  key={row.country}
+                  className={`border-b border-gray-100 last:border-b-0 ${isRow ? 'bg-zinc-50/40' : ''}`}
+                >
                   <td
-                    className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} font-medium text-gray-900 border-r border-gray-200 ${isTotal ? 'font-bold' : ''}`}
+                    className={`${isPdfMode ? 'py-0.5 px-1' : 'py-1 px-2'} font-medium text-gray-900 border-r border-gray-200 ${isTotal ? 'bg-gray-200/95 font-bold' : 'bg-gray-50/90'} ${isPdfMode ? '' : 'sticky left-0 z-[1] shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]'}`}
                   >
                     {row.country}
                   </td>
-                  {pack(row.week, 'bg-sky-50/60')}
-                  {pack(row.month, 'bg-teal-50/60')}
-                  {pack(row.ytd, 'bg-blue-50/60')}
+                  {pack('week', row.week)}
+                  {pack('month', row.month)}
+                  {pack('ytd', row.ytd)}
                 </tr>
               )
             })}

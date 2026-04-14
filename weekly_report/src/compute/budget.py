@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 
@@ -35,10 +35,39 @@ def _parse_number(value: Any) -> float:
         return float('nan')
 
 
+def _recalculate_company_ratio_metrics_after_market_sum(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    After groupby('Month').sum() across markets, ratio columns like aMER must not be sums of market ratios.
+    Company-level aMER = New Net Revenue / Online Marketing Spend (same definition as actuals).
+    """
+    if df is None or df.empty or "Month" not in df.columns:
+        return df
+    cmap = {str(c).strip().lower(): c for c in df.columns}
+    nn_col = cmap.get("new net revenue")
+    mkt_col = cmap.get("online marketing spend")
+    if not nn_col or not mkt_col:
+        return df
+    out = df.copy()
+    nn = pd.to_numeric(out[nn_col], errors="coerce").fillna(0.0).abs()
+    mkt = pd.to_numeric(out[mkt_col], errors="coerce").fillna(0.0).abs()
+    amer = nn / mkt.replace(0.0, float("nan"))
+    amer = amer.fillna(0.0)
+    for key in ("amer", "emer", "oj amer"):
+        col = cmap.get(key)
+        if col and col in out.columns:
+            out[col] = amer
+    return out
+
+
 def _fetch_budget_dataframe(week: str):
     """Load budget CSV as a single combined DataFrame (same resolution as budget-general)."""
     config = load_config(week=week)
     from weekly_report.src.adapters.budget import load_data
+
+    # Budget file follows fiscal year Apr-Mar (week in Jan-Mar belongs to previous start year).
+    y, w = map(int, week.split("-"))
+    sunday = datetime.fromisocalendar(y, w, 1) + timedelta(days=6)
+    fiscal_budget_year = sunday.year if sunday.month >= 4 else (sunday.year - 1)
 
     df = None
     try:
@@ -46,18 +75,27 @@ def _fetch_budget_dataframe(week: str):
     except FileNotFoundError:
         pass
     if df is None or df.empty:
-        year = int(week.split("-")[0])
+        calendar_year = int(week.split("-")[0])
+        candidate_years = [fiscal_budget_year]
+        if calendar_year not in candidate_years:
+            candidate_years.append(calendar_year)
         raw_dir = config.data_root / "raw"
         if raw_dir.exists():
             for p in sorted(raw_dir.iterdir(), reverse=True):
-                if p.is_dir() and p.name.startswith(str(year) + "-"):
-                    try:
-                        df = load_data(p, base_week=p.name)
-                        if df is not None and not df.empty:
-                            logger.info(f"Using budget from week folder {p.name} for {week}")
-                            break
-                    except FileNotFoundError:
-                        continue
+                if not p.is_dir():
+                    continue
+                if not any(p.name.startswith(f"{yy}-") for yy in candidate_years):
+                    continue
+                try:
+                    df = load_data(p, base_week=p.name)
+                    if df is not None and not df.empty:
+                        logger.info(
+                            f"Using budget from week folder {p.name} for {week} "
+                            f"(candidate years={candidate_years})"
+                        )
+                        break
+                except FileNotFoundError:
+                    continue
     if df is None or df.empty:
         try:
             df = load_data(config.data_root / "raw", base_week=week)
@@ -83,6 +121,29 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
         df.columns = df.columns.str.replace("\ufeff", "").str.strip()
         # Drop source columns for processing
         df_work = df.drop(columns=[c for c in df.columns if c in {"_source_file", "_source_type", "_source_location"}], errors="ignore")
+
+        # Fiscal budget year (Apr-Mar) for this selected week.
+        wy, ww = map(int, week.split("-"))
+        week_end = datetime.fromisocalendar(wy, ww, 1) + timedelta(days=6)
+        fiscal_budget_year = week_end.year if week_end.month >= 4 else (week_end.year - 1)
+
+        lower_cols = {str(c).strip().lower(): c for c in df_work.columns}
+
+        # Prefer pure BUDGET rows when scenario/type exists.
+        type_col = None
+        for cand in ("type", "scenario", "version", "source"):
+            if cand in lower_cols:
+                type_col = lower_cols[cand]
+                break
+        if type_col is not None:
+            t = df_work[type_col].astype(str).str.strip().str.upper()
+            if t.eq("BUDGET").any():
+                before = len(df_work)
+                df_work = df_work.loc[t.eq("BUDGET")].copy()
+                logger.info(
+                    f"Budget general: filtered to Type=BUDGET via '{type_col}' "
+                    f"({before} -> {len(df_work)} rows)"
+                )
 
         def _parse_month_col(c: str):
             s = str(c).strip().replace("\ufeff", "")
@@ -131,14 +192,15 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
                 if by_month:
                     table[label] = by_month
             month_parsed = {m[1]: m[0] for m in month_cols}
-            now = datetime.now()
+            fy_start = datetime(fiscal_budget_year, 4, 1)
+            fy_end_full = datetime(fiscal_budget_year + 1, 3, 31)
             totals = {k: sum(v.values()) for k, v in table.items()}
             ytd_totals = {}
             for metric, by_month in table.items():
                 ytd_val = 0.0
                 for m, v in by_month.items():
                     mp = month_parsed.get(m)
-                    if mp is not None and (mp.year < now.year or (mp.year == now.year and mp.month <= now.month)):
+                    if mp is not None and fy_start <= mp <= fy_end_full:
                         ytd_val += v
                 ytd_totals[metric] = ytd_val
             return {
@@ -150,6 +212,129 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
                 "ytd_totals": ytd_totals,
                 "customer_by_metric": {},
                 "display_name_by_metric": {},
+            }
+
+        # Detect long layout: rows like Market/Metric/Year/Month/Type/Value
+        cmap = {str(c).strip().lower(): c for c in df_work.columns}
+        col_market = None
+        for cand in ("market", "country", "land", "marknad"):
+            if cand in cmap:
+                col_market = cmap[cand]
+                break
+        col_metric = None
+        for cand in ("metric", "measure", "kpi"):
+            if cand in cmap:
+                col_metric = cmap[cand]
+                break
+        col_month = None
+        for cand in ("month", "mon", "period month", "month name"):
+            if cand in cmap:
+                col_month = cmap[cand]
+                break
+        col_year = None
+        for cand in ("year", "fiscal year", "fiscalyear", "yr"):
+            if cand in cmap:
+                col_year = cmap[cand]
+                break
+        col_value = None
+        for cand in ("value", "amount", "budget", "values", "data", "sek", "tcy", "fy budget"):
+            if cand in cmap:
+                col_value = cmap[cand]
+                break
+
+        if col_metric and col_month and col_value:
+            long_df = df_work.copy()
+            if col_market and col_market in long_df.columns:
+                total_aliases = {"total", "all", "all markets", "grand total", "totals", "total cdlp", "group total"}
+                mk = long_df[col_market].astype(str).str.strip().str.lower()
+                long_df = long_df.loc[~mk.isin(total_aliases)].copy()
+
+            # Build canonical month labels ("March 2026"), keep only parseable months.
+            if col_year and col_year in long_df.columns:
+                long_df["__month_key"] = long_df.apply(
+                    lambda r: _month_year_to_canonical(r.get(col_month), r.get(col_year)),
+                    axis=1,
+                )
+            else:
+                long_df["__month_key"] = long_df[col_month].map(_normalize_month_label_for_lookup)
+            long_df = long_df[long_df["__month_key"].notna()].copy()
+            long_df["__month_dt"] = pd.to_datetime(long_df["__month_key"], errors="coerce")
+            long_df = long_df[long_df["__month_dt"].notna()].copy()
+            if long_df.empty:
+                return {"error": "Budget data has no parseable Month/Year rows"}
+
+            # Keep exactly the fiscal-year window Apr(fiscal_start_year) ... Mar(next year).
+            fy_start = datetime(fiscal_budget_year, 4, 1)
+            fy_end_full = datetime(fiscal_budget_year + 1, 3, 31)
+            before = len(long_df)
+            long_df = long_df[(long_df["__month_dt"] >= fy_start) & (long_df["__month_dt"] <= fy_end_full)].copy()
+            logger.info(
+                f"Budget general: fiscal window {fy_start.strftime('%Y-%m')}..{fy_end_full.strftime('%Y-%m')} "
+                f"({before} -> {len(long_df)} rows)"
+            )
+            if long_df.empty:
+                return {"error": f"No budget rows in fiscal window {fiscal_budget_year}/{fiscal_budget_year + 1}"}
+
+            long_df["__value"] = pd.to_numeric(long_df[col_value].map(_parse_number), errors="coerce").fillna(0.0)
+            long_df["__metric"] = long_df[col_metric].astype(str).str.strip()
+            long_df = long_df[long_df["__metric"] != ""].copy()
+
+            # Pivot: metric x month
+            piv = (
+                long_df.groupby(["__metric", "__month_key", "__month_dt"], as_index=False)["__value"]
+                .sum()
+            )
+            month_order_df = (
+                piv[["__month_key", "__month_dt"]]
+                .drop_duplicates()
+                .sort_values(["__month_dt", "__month_key"])
+            )
+            months_order = month_order_df["__month_key"].tolist()
+            month_parsed = {
+                r["__month_key"]: pd.to_datetime(r["__month_dt"]).to_pydatetime()
+                for _, r in month_order_df.iterrows()
+            }
+
+            table: Dict[str, Dict[str, float]] = {}
+            totals: Dict[str, float] = {}
+            ytd_totals: Dict[str, float] = {}
+            customer_by_metric: Dict[str, str] = {}
+            display_name_by_metric: Dict[str, str] = {}
+
+            fy_start = datetime(fiscal_budget_year, 4, 1)
+            fy_end_full = datetime(fiscal_budget_year + 1, 3, 31)
+
+            for metric, g in piv.groupby("__metric"):
+                by_month: Dict[str, float] = {}
+                for _, r in g.iterrows():
+                    by_month[str(r["__month_key"])] = float(r["__value"])
+                table[str(metric)] = by_month
+                totals[str(metric)] = float(sum(by_month.values()))
+                ytd = 0.0
+                for mk, v in by_month.items():
+                    mp = month_parsed.get(mk)
+                    if mp is not None and fy_start <= mp <= fy_end_full:
+                        ytd += v
+                ytd_totals[str(metric)] = ytd
+
+                ml = str(metric).lower()
+                if ml.startswith("new "):
+                    customer_by_metric[str(metric)] = "New"
+                elif ml.startswith("returning "):
+                    customer_by_metric[str(metric)] = "Returning"
+                else:
+                    customer_by_metric[str(metric)] = ""
+                display_name_by_metric[str(metric)] = str(metric)
+
+            return {
+                "week": week,
+                "months": months_order,
+                "metrics": list(table.keys()),
+                "table": table,
+                "totals": totals,
+                "ytd_totals": ytd_totals,
+                "customer_by_metric": customer_by_metric,
+                "display_name_by_metric": display_name_by_metric,
             }
 
         if "Month" in df_work.columns:
@@ -184,6 +369,8 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
         df = df_work
 
         df_grouped = pd.concat([df[["Month"]], numeric_df], axis=1).groupby("Month", as_index=False).sum(numeric_only=True)
+        # aMER / eMER are ratios (new net ÷ marketing spend). Summing per-market rows is wrong (e.g. 3× ~3.3 → ~9.9).
+        df_grouped = _recalculate_company_ratio_metrics_after_market_sum(df_grouped)
         try:
             df_grouped["__month_dt"] = pd.to_datetime(df_grouped["Month"], format="%B %Y", errors="coerce")
         except Exception:
@@ -191,7 +378,8 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
         df_grouped = df_grouped.sort_values(["__month_dt", "Month"], ascending=[True, True]).drop(columns=["__month_dt"])
         months_order = df_grouped["Month"].tolist()
 
-        now = datetime.now()
+        fy_start = datetime(fiscal_budget_year, 4, 1)
+        fy_end_full = datetime(fiscal_budget_year + 1, 3, 31)
         def parse_month_str(m: str):
             try:
                 return datetime.strptime(m, "%B %Y")
@@ -209,7 +397,7 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
             'New Customers', 'Share of New Customers', 'New Gross Revenue', 'New Returns', 'New Net Revenue',
             'New Cost of Goods Sold', 'New Orders', 'New Order Frequency', 'New AOV', 'New Revenue per Customer',
             'Total Customers', 'Total Orders', 'Total AOV', 'Revenue per Customer', 'Order Frequency', 'Total Gross Revenue',
-            'Online Marketing Spend', 'COS %', 'aMER',
+            'Online Marketing Spend', 'COS %', 'aMER', 'eMER', 'emer',
         ]
         all_numeric_cols = [c for c in df_grouped.columns if c != "Month"]
         # Case-insensitive match: map whitelist name to actual CSV column name so "Online marketing spend" etc. work
@@ -265,7 +453,7 @@ def compute_budget_general(week: str) -> Dict[str, Any]:
             ytd_val = 0.0
             for m, v in by_month.items():
                 mp = month_parsed.get(m)
-                if mp is not None and (mp.year < now.year or (mp.year == now.year and mp.month <= now.month)):
+                if mp is not None and fy_start <= mp <= fy_end_full:
                     ytd_val += v
             ytd_totals[metric] = ytd_val
 
@@ -456,13 +644,65 @@ def _infer_budget_value_column(df: pd.DataFrame, exclude: List[Any]) -> Optional
     return best
 
 
+def _alnum_metric_label(label: str) -> str:
+    return "".join(c for c in str(label).strip().lower() if c.isalnum())
+
+
+def _is_aggregate_online_net_metric_label(label: str) -> bool:
+    """
+    Total / online net line (same idea as Table 1 budget parser), not a Returning/New segment row.
+    """
+    s = _alnum_metric_label(label)
+    if not s or "gross" in s:
+        return False
+    if s in ("netrevenue", "onlinenetrevenue", "totalnetrevenue", "totalonlinenetrevenue", "onlinenetsales"):
+        return True
+    if s.endswith("netrevenue") and "returning" not in s and "new" not in s:
+        return True
+    return False
+
+
+def _is_segment_net_revenue_metric_label(label: str) -> bool:
+    s = _alnum_metric_label(label)
+    if "gross" in s:
+        return False
+    if "returning" in s and "netrevenue" in s:
+        return True
+    if s == "newnetrevenue" or (s.startswith("new") and "netrevenue" in s):
+        return True
+    return False
+
+
+def _pick_net_revenue_value_for_budget_rows(pairs: List[Tuple[str, float]]) -> float:
+    """
+    From (metric label, value) pairs for the same market/month/scenario, avoid double-counting:
+    prefer a single aggregate Net/Online/Total net line; otherwise sum segment nets (Returning + New).
+    """
+    if not pairs:
+        return 0.0
+    nonempty = [(lab, v) for lab, v in pairs if str(lab).strip()]
+    if not nonempty:
+        return float(sum(v for _, v in pairs))
+    if len(nonempty) == 1:
+        return float(nonempty[0][1])
+    aggs = [(lab, v) for lab, v in nonempty if _is_aggregate_online_net_metric_label(lab)]
+    if aggs:
+        return float(aggs[0][1])
+    seg = 0.0
+    for lab, v in nonempty:
+        if _is_segment_net_revenue_metric_label(lab):
+            seg += float(v)
+    return seg
+
+
 def _row_net_budget_from_numeric(row: pd.Series) -> float:
-    """One row of metric columns: prefer Net Revenue; else Returning + New net."""
+    """One row of metric columns: prefer total/online/net revenue; else Returning + New net."""
     cmap = {str(c).strip().lower(): c for c in row.index}
-    if "net revenue" in cmap:
-        v = row[cmap["net revenue"]]
-        if pd.notna(v) and v == v:
-            return float(v)
+    for pref in ("net revenue", "online net revenue", "total net revenue"):
+        if pref in cmap:
+            v = row[cmap[pref]]
+            if pd.notna(v) and v == v:
+                return float(v)
     total = 0.0
     for key in ("returning net revenue", "new net revenue"):
         if key in cmap:
@@ -470,6 +710,20 @@ def _row_net_budget_from_numeric(row: pd.Series) -> float:
             if pd.notna(v) and v == v:
                 total += float(v)
     return total
+
+
+def _combine_net_for_market_month_pivot_group(sub: pd.DataFrame) -> float:
+    """
+    Same market+month can have a total Net row and segment rows; use one total line when present.
+    """
+    for _, row in sub.iterrows():
+        cmap = {str(c).strip().lower(): c for c in row.index}
+        for pref in ("net revenue", "online net revenue", "total net revenue"):
+            if pref in cmap:
+                v = row[cmap[pref]]
+                if pd.notna(v) and v == v:
+                    return float(v)
+    return float(sub["__net"].sum())
 
 
 def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
@@ -513,7 +767,7 @@ def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
             sub[col_market] = sub[col_market].astype(str).str.strip()
             sub = sub[~sub[col_market].str.lower().isin(total_aliases)]
 
-            cell_parts: Dict[Tuple[str, str], List[Tuple[int, float]]] = defaultdict(list)
+            cell_parts: Dict[Tuple[str, str], List[Tuple[int, str, float]]] = defaultdict(list)
             for _, r in sub.iterrows():
                 if not _metric_label_is_net_revenue_budget(r.get(col_metric, "")):
                     continue
@@ -548,11 +802,13 @@ def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
                 v = _parse_number(r.get(col_value))
                 if pd.isna(v) or v in (float("inf"), float("-inf")):
                     continue
-                cell_parts[(mkt, mon_n)].append((rk, float(v)))
+                mlab = str(r.get(col_metric, "")).strip()
+                cell_parts[(mkt, mon_n)].append((rk, mlab, float(v)))
 
             for (mkt, mon_n), parts in cell_parts.items():
                 best = min(p[0] for p in parts)
-                total_v = sum(p[1] for p in parts if p[0] == best)
+                label_vals = [(lab, val) for rk, lab, val in parts if rk == best]
+                total_v = _pick_net_revenue_value_for_budget_rows(label_vals)
                 by_market.setdefault(mkt, {})
                 by_market[mkt][mon_n] = total_v
 
@@ -588,11 +844,18 @@ def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
                 return {"by_market": {}, "error": "wide_months_no_metric_column"}
 
             def _wide_ingest(strict_metric: bool) -> Dict[str, Dict[str, float]]:
-                acc: Dict[str, Dict[str, float]] = {}
+                """Collect (metric label, value) per market/month, then pick aggregate net or sum segments."""
+                raw: Dict[str, Dict[str, List[Tuple[str, float]]]] = defaultdict(lambda: defaultdict(list))
                 for _, row in df_work.iterrows():
                     mkt = str(row.get("Market", "")).strip()
                     if not mkt or mkt.lower() in total_aliases:
                         continue
+                    metric_label = ""
+                    for lc in label_candidates:
+                        t = str(row.get(lc, "")).strip()
+                        if t:
+                            metric_label = t
+                            break
                     if strict_metric:
                         ok = any(
                             _metric_label_is_net_revenue_budget(str(row.get(lc, "")).strip())
@@ -600,13 +863,19 @@ def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
                         )
                         if not ok:
                             continue
+                    else:
+                        metric_label = metric_label or ""
                     for _dt, mo_name in month_cols:
                         v = _parse_number(row.get(mo_name))
                         if pd.isna(v) or v in (float("inf"), float("-inf")):
                             continue
                         mo_key = _normalize_month_label_for_lookup(mo_name)
-                        acc.setdefault(mkt, {})
-                        acc[mkt][mo_key] = acc[mkt].get(mo_key, 0.0) + float(v)
+                        raw[mkt][mo_key].append((metric_label, float(v)))
+                acc: Dict[str, Dict[str, float]] = {}
+                for mkt, by_m in raw.items():
+                    acc[mkt] = {}
+                    for mo_key, pairs in by_m.items():
+                        acc[mkt][mo_key] = _pick_net_revenue_value_for_budget_rows(pairs)
                 return acc
 
             by_market = _wide_ingest(True)
@@ -658,7 +927,16 @@ def compute_budget_net_by_market_month(week: str) -> Dict[str, Any]:
         num = value_df.reset_index(drop=True)
         nets = num.apply(_row_net_budget_from_numeric, axis=1)
         work = pd.concat([mm, nets.rename("__net")], axis=1)
-        agg = work.groupby(["Market", "Month"], as_index=False)["__net"].sum()
+        agg_rows = []
+        for (mkt, mon), g in work.groupby(["Market", "Month"], sort=False):
+            agg_rows.append(
+                {
+                    "Market": mkt,
+                    "Month": mon,
+                    "__net": _combine_net_for_market_month_pivot_group(g),
+                }
+            )
+        agg = pd.DataFrame(agg_rows)
         for _, r in agg.iterrows():
             mkt = str(r["Market"]).strip()
             mon = _normalize_month_label_for_lookup(r["Month"])

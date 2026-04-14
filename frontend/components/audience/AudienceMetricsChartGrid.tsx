@@ -7,7 +7,6 @@ import {
   LabelList,
   Line,
   LineChart,
-  ReferenceLine,
   XAxis,
   YAxis,
 } from '@/lib/recharts'
@@ -43,77 +42,29 @@ function formatAmerRatio(v: number): string {
 const chartConfig = {
   value: { label: 'This year', color: '#4B5563' },
   lastYear: { label: 'Last year (same week)', color: '#F97316' },
-  budgetVariance: { label: 'vs budget (actual − plan)', color: '#15803d' },
 } satisfies ChartConfig
-
-/** Delta formatting: same idea as Top Markets net table — + ahead of plan, − shortfall. */
-function formatBudgetVariance(cardKey: string, delta: number): string {
-  const sign = delta > 0 ? '+' : ''
-  if (cardKey === 'amer') {
-    return `${sign}${formatAmerRatio(delta)}`
-  }
-  if (
-    cardKey.includes('pct') ||
-    cardKey.includes('share') ||
-    cardKey === 'cos_pct'
-  ) {
-    const x = Math.round(delta * 10) / 10
-    return `${sign}${x.toFixed(1)} pp`
-  }
-  const r = Math.round(delta)
-  return `${sign}${r.toLocaleString('sv-SE')}`
-}
-
-function varianceAxisTick(cardKey: string, v: number): string {
-  if (cardKey === 'amer') return formatAmerRatio(v)
-  if (cardKey.includes('pct') || cardKey.includes('share') || cardKey === 'cos_pct') {
-    const x = Math.round(v * 10) / 10
-    return `${x}`
-  }
-  if (
-    cardKey === 'total_customers' ||
-    cardKey === 'total_orders' ||
-    cardKey === 'new_customers' ||
-    cardKey === 'returning_customers' ||
-    cardKey === 'cac' ||
-    cardKey === 'aov_new_customer' ||
-    cardKey === 'aov_returning_customer' ||
-    cardKey === 'total_aov'
-  ) {
-    if (Math.abs(v) >= 1000) return `${v / 1000}k`
-  }
-  return String(Math.round(v))
-}
 
 function AudienceLineTooltip({
   active,
   payload,
   label,
   format,
-  cardKey,
-  showBudget,
 }: {
   active?: boolean
   payload?: Array<{
     payload?: {
       value?: number
       lastYear?: number | null
-      budgetTarget?: number | null
-      budgetVariance?: number | null
     }
   }>
   label?: string | number
   format: (v: number) => string
-  cardKey: string
-  showBudget: boolean
 }) {
   if (!active || !payload?.length) return null
   const row = payload[0]?.payload as
     | {
         value?: number
         lastYear?: number | null
-        budgetTarget?: number | null
-        budgetVariance?: number | null
       }
     | undefined
   if (!row) return null
@@ -130,26 +81,6 @@ function AudienceLineTooltip({
         <span className="text-muted-foreground">Last year</span>
         <span className="font-medium tabular-nums">{fmt(row.lastYear ?? null)}</span>
       </div>
-      {showBudget && row.budgetVariance != null && Number.isFinite(Number(row.budgetVariance)) ? (
-        <>
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">vs budget</span>
-            <span
-              className={`font-medium tabular-nums ${
-                row.budgetVariance > 0 ? 'text-green-700' : row.budgetVariance < 0 ? 'text-red-700' : 'text-gray-700'
-              }`}
-            >
-              {formatBudgetVariance(cardKey, Number(row.budgetVariance))}
-            </span>
-          </div>
-          {row.budgetTarget != null && Number.isFinite(Number(row.budgetTarget)) ? (
-            <div className="flex justify-between gap-4 border-t border-border/40 pt-1 text-[10px] text-muted-foreground">
-              <span>Plan (week prorated)</span>
-              <span className="tabular-nums">{fmt(row.budgetTarget)}</span>
-            </div>
-          ) : null}
-        </>
-      ) : null}
     </div>
   )
 }
@@ -212,7 +143,6 @@ export const AUDIENCE_SECONDARY_CARDS: AudienceCardDef[] = [
 function chartPointsForKey(m: AudienceSeriesRow, key: string) {
   const currentTotal = Number(m.total_customers) || 0
   const lyTotal = Number(m.last_year?.total_customers) || 0
-  const budgetTotal = Number(m.budget?.total_customers) || 0
   const value =
     key === 'new_customer_share_pct'
       ? currentTotal > 0
@@ -241,41 +171,12 @@ function chartPointsForKey(m: AudienceSeriesRow, key: string) {
           ? Number((m.last_year as unknown as Record<string, unknown>)[key])
           : null
 
-  const budgetTarget =
-    key === 'new_customer_share_pct'
-      ? m.budget
-        ? budgetTotal > 0
-          ? (Number(m.budget.new_customers) / budgetTotal) * 100
-          : null
-        : null
-      : key === 'returning_customer_share_pct'
-        ? m.budget
-          ? budgetTotal > 0
-            ? (Number(m.budget.returning_customers) / budgetTotal) * 100
-            : null
-          : null
-        : m.budget
-          ? Number((m.budget as unknown as Record<string, unknown>)[key])
-          : null
-
   const numValue = Number(value) || 0
-  let bt =
-    budgetTarget == null || Number.isNaN(Number(budgetTarget)) ? null : Number(budgetTarget)
-  if (
-    (key === 'aov_new_customer' || key === 'aov_returning_customer') &&
-    bt !== null &&
-    Math.abs(bt) < 1e-6
-  ) {
-    bt = null
-  }
-  const budgetVariance = bt != null ? numValue - bt : null
 
   return {
     week: m.weekLabel,
     value: numValue,
     lastYear: lastYear == null ? null : Number(lastYear),
-    budgetTarget: bt,
-    budgetVariance: budgetVariance == null || Number.isNaN(budgetVariance) ? null : budgetVariance,
   }
 }
 
@@ -290,7 +191,6 @@ function AudienceChartCard({
 }) {
   const { key, label, format, title: titleAttr } = card
   const chartData = series.map((m) => chartPointsForKey(m, key))
-  const showBudget = chartData.some((d) => d.budgetVariance != null)
 
   return (
     <Card key={key}>
@@ -303,7 +203,7 @@ function AudienceChartCard({
         <ChartContainer config={chartConfig} className="h-[260px] w-full min-w-0 overflow-visible">
           <LineChart
             data={chartData}
-            margin={{ top: 44, right: showBudget ? 44 : 12, left: 12, bottom: 22 }}
+            margin={{ top: 44, right: 12, left: 12, bottom: 22 }}
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
@@ -334,21 +234,10 @@ function AudienceChartCard({
                   : String(v)
               }
             />
-            {showBudget ? (
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                tick={{ fontSize: 10 }}
-                width={40}
-                tickFormatter={(v) => varianceAxisTick(key, v)}
-              />
-            ) : null}
             <ChartTooltip
               content={
                 <AudienceLineTooltip
                   format={(v) => format(v)}
-                  cardKey={key}
-                  showBudget={showBudget}
                 />
               }
             />
@@ -382,23 +271,6 @@ function AudienceChartCard({
               isAnimationActive={isAnimationActive}
               name="Last year (same week)"
             />
-            {showBudget ? (
-              <>
-                <ReferenceLine yAxisId="right" y={0} stroke="#9ca3af" strokeDasharray="3 3" />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="budgetVariance"
-                  stroke="#15803d"
-                  strokeWidth={2}
-                  strokeDasharray="6 3"
-                  dot={{ r: 3, stroke: '#15803d', fill: '#fff' }}
-                  connectNulls
-                  isAnimationActive={isAnimationActive}
-                  name="vs budget (actual − plan)"
-                />
-              </>
-            ) : null}
           </LineChart>
         </ChartContainer>
       </CardContent>

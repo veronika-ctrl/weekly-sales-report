@@ -75,6 +75,7 @@ export default function WomenCategorySales() {
 
   return (
     <div className="space-y-8">
+      <p className="text-sm text-muted-foreground">Values shown as sales amount in SEK &apos;000.</p>
       <div className="grid grid-cols-3 gap-6">
         {sortedCategories.map((category, index) => {
           const chartData = categoryData.map(g => {

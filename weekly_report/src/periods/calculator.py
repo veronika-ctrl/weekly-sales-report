@@ -134,6 +134,27 @@ def get_week_date_range(iso_week: str) -> Dict[str, str]:
     }
 
 
+def week_overlap_fraction_in_month(iso_week: str) -> float:
+    """
+    Fraction of the calendar month (of the week's Sunday) that this ISO week covers.
+
+    Same rule as Top Markets week budget: count days Mon–Sun that fall in that month, divide by
+    days in month. Used to prorate monthly budget to a weekly plan for charts.
+    """
+    week_range = get_week_date_range(iso_week)
+    ws = datetime.strptime(week_range["start"], "%Y-%m-%d").date()
+    we = datetime.strptime(week_range["end"], "%Y-%m-%d").date()
+    y, m = we.year, we.month
+    _, dim = calendar.monthrange(y, m)
+    overlap = 0
+    d = ws
+    while d <= we:
+        if d.year == y and d.month == m:
+            overlap += 1
+        d += timedelta(days=1)
+    return (overlap / dim) if dim > 0 else 0.0
+
+
 def validate_iso_week(iso_week: str) -> bool:
     """Validate if an ISO week string is valid."""
     
@@ -201,30 +222,33 @@ def get_ytd_periods_for_week(iso_week: str) -> Dict[str, Dict[str, str]]:
         # Week is on or after April 1st, so YTD spans from current year's April 1st
         fy_start_current = f"{year}-04-01"
     
-    # Calculate YTD for last year (same week in previous year)
-    last_year_iso_week = f"{year-1}-{week:02d}"
-    week_end_last_year = get_week_date_range(last_year_iso_week)['end']
-    week_end_last_year_dt = datetime.strptime(week_end_last_year, '%Y-%m-%d')
-    
-    fy_start_last_year_dt = datetime(year-1, 4, 1)
+    # Calculate YTD for last year using the same day-of-month cutoff as current YTD end.
+    # This keeps Month and YTD "last year" windows aligned near fiscal year start.
+    try:
+        week_end_last_year_dt = week_end_dt.replace(year=year - 1)
+    except ValueError:
+        _, ld = calendar.monthrange(year - 1, week_end_dt.month)
+        week_end_last_year_dt = week_end_dt.replace(year=year - 1, day=min(week_end_dt.day, ld))
+    week_end_last_year = week_end_last_year_dt.strftime("%Y-%m-%d")
+
+    fy_start_last_year_dt = datetime(year - 1, 4, 1)
     if week_end_last_year_dt < fy_start_last_year_dt:
-        # Week is before April 1st, so YTD spans from previous year's April 1st
         fy_start_last_year = f"{year-2}-04-01"
     else:
-        # Week is on or after April 1st, so YTD spans from last year's April 1st
         fy_start_last_year = f"{year-1}-04-01"
-    
-    # Calculate YTD for 2023 (same week in 2023)
-    iso_week_2023 = f"2023-{week:02d}"
-    week_end_2023 = get_week_date_range(iso_week_2023)['end']
-    week_end_2023_dt = datetime.strptime(week_end_2023, '%Y-%m-%d')
-    
+
+    # Calculate YTD for 2023 with the same day-of-month cutoff approach.
+    try:
+        week_end_2023_dt = week_end_dt.replace(year=2023)
+    except ValueError:
+        _, ld_2023 = calendar.monthrange(2023, week_end_dt.month)
+        week_end_2023_dt = week_end_dt.replace(year=2023, day=min(week_end_dt.day, ld_2023))
+    week_end_2023 = week_end_2023_dt.strftime("%Y-%m-%d")
+
     fy_start_2023_dt = datetime(2023, 4, 1)
     if week_end_2023_dt < fy_start_2023_dt:
-        # Week is before April 1st, so YTD spans from previous year's April 1st
         fy_start_2023 = "2022-04-01"
     else:
-        # Week is on or after April 1st, so YTD spans from 2023's April 1st
         fy_start_2023 = "2023-04-01"
     
     periods = {

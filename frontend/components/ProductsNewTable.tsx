@@ -66,64 +66,77 @@ export default function ProductsNewTable({ baseWeek, customerType }: ProductsNew
 
   const { products, top_total, grand_total } = weekData
 
+  const isNew = customerType === 'new'
+  const titleBand = isNew
+    ? 'bg-emerald-50/90 text-emerald-950 border-b border-emerald-200/70'
+    : 'bg-amber-50/90 text-amber-950 border-b border-amber-200/70'
+
+  const cell = 'py-1 px-1.5 align-top text-[11px] leading-snug sm:text-xs sm:leading-tight'
+  const thCell = `${cell} font-semibold text-gray-800`
+  const numCell = `${cell} tabular-nums text-right`
+
   return (
-    <div className="bg-gray-50 rounded-lg overflow-hidden overflow-x-auto">
-      <table className="w-full text-xs">
+    <div
+      className={`rounded-lg border overflow-hidden overflow-x-auto shadow-sm ${
+        isNew ? 'border-emerald-100 bg-white' : 'border-amber-100 bg-white'
+      }`}
+    >
+      <table className="w-full min-w-[640px] border-collapse">
         <thead>
-          <tr className="bg-gray-200 border-b">
-            <th colSpan={8} className="text-center py-2 px-2 font-medium text-gray-900">
-              {customerType === 'new' ? 'New Customers' : 'Returning Customers'}
+          <tr className={titleBand}>
+            <th colSpan={8} className="py-1.5 px-2 text-center text-xs font-semibold tracking-tight">
+              <span className="uppercase tracking-wide">
+                {isNew ? 'New Customers' : 'Returning Customers'}
+              </span>
+              <span className="ml-2 font-normal text-muted-foreground normal-case">(SEK &apos;000)</span>
             </th>
           </tr>
-          <tr className="bg-gray-200 border-b">
-            <th colSpan={8} className="text-center py-1 px-2 text-xs text-gray-600">
-              (SEK '000)
-            </th>
-          </tr>
-          <tr className="bg-gray-200 border-b">
-            <th className="text-left py-2 px-2 font-medium text-gray-900">Rank</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-900">Gender</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-900">Category</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-900">Product</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-900">Color</th>
-            <th className="text-right py-2 px-2 font-medium text-gray-900">Gross Revenue</th>
-            <th className="text-right py-2 px-2 font-medium text-gray-900">Sales Qty</th>
-            <th className="text-right py-2 px-2 font-medium text-gray-900">SoB%</th>
+          <tr className="bg-muted/50 border-b border-gray-200/90">
+            <th className={`${thCell} text-left`}>Rank</th>
+            <th className={`${thCell} text-left`}>Gender</th>
+            <th className={`${thCell} text-left`}>Category</th>
+            <th className={`${thCell} text-left min-w-[7rem] max-w-[11rem]`}>Product</th>
+            <th className={`${thCell} text-left`}>Color</th>
+            <th className={`${thCell} text-right`}>Gross Revenue</th>
+            <th className={`${thCell} text-right`}>Sales Qty</th>
+            <th className={`${thCell} text-right`}>SoB%</th>
           </tr>
         </thead>
         <tbody>
-          {/* Top 30 Products */}
-          {products.map((product: any) => {
+          {products.map((product: any, i: number) => {
             const sob = (product.gross_revenue / grand_total.gross_revenue) * 100
-            
+            const zebra = i % 2 === 0 ? 'bg-white' : 'bg-muted/25'
+
             return (
-              <tr key={product.rank} className="border-b border-gray-200">
-                <td className="py-2 px-2 font-medium text-gray-900">{product.rank}</td>
-                <td className="py-2 px-2 text-gray-700">{product.gender}</td>
-                <td className="py-2 px-2 text-gray-700">{product.category}</td>
-                <td className="py-2 px-2 text-gray-700">{product.product}</td>
-                <td className="py-2 px-2 text-gray-700">{product.color}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{formatValue(product.gross_revenue)}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{product.sales_qty}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{formatSoB(sob)}</td>
+              <tr key={`${product.rank}-${i}`} className={`border-b border-gray-100 ${zebra}`}>
+                <td className={`${cell} font-medium text-gray-900 tabular-nums`}>{product.rank}</td>
+                <td className={`${cell} text-gray-700`}>{product.gender}</td>
+                <td className={`${cell} text-gray-700`}>{product.category}</td>
+                <td className={`${cell} text-gray-800 max-w-[11rem] leading-tight`}>{product.product}</td>
+                <td className={`${cell} text-gray-600`}>{product.color}</td>
+                <td className={`${numCell} text-gray-800`}>{formatValue(product.gross_revenue)}</td>
+                <td className={`${numCell} text-gray-800`}>{product.sales_qty}</td>
+                <td className={`${numCell} text-gray-800`}>{formatSoB(sob)}</td>
               </tr>
             )
           })}
-          
-          {/* Top 30 Total */}
-          <tr className="bg-gray-200 border-b font-semibold">
-            <td colSpan={5} className="py-2 px-2 font-bold text-gray-900">Top 30 Total</td>
-            <td className="py-2 px-2 text-right text-gray-700">{formatValue(top_total.gross_revenue)}</td>
-            <td className="py-2 px-2 text-right text-gray-700">{top_total.sales_qty}</td>
-            <td className="py-2 px-2 text-right text-gray-700">{formatSoB(top_total.sob)}</td>
+
+          <tr className="border-t border-gray-200 bg-muted/60 font-semibold">
+            <td colSpan={5} className={`${cell} text-left text-gray-900`}>
+              Top 30 Total
+            </td>
+            <td className={`${numCell} text-gray-900`}>{formatValue(top_total.gross_revenue)}</td>
+            <td className={`${numCell} text-gray-900`}>{top_total.sales_qty}</td>
+            <td className={`${numCell} text-gray-900`}>{formatSoB(top_total.sob)}</td>
           </tr>
-          
-          {/* Grand Total */}
-          <tr className="bg-gray-300 border-b font-bold">
-            <td colSpan={5} className="py-2 px-2 font-bold text-gray-900">Total</td>
-            <td className="py-2 px-2 text-right text-gray-900">{formatValue(grand_total.gross_revenue)}</td>
-            <td className="py-2 px-2 text-right text-gray-900">{grand_total.sales_qty}</td>
-            <td className="py-2 px-2 text-right text-gray-900">{formatSoB(grand_total.sob)}</td>
+
+          <tr className="border-t border-gray-300/80 bg-muted font-bold">
+            <td colSpan={5} className={`${cell} text-left text-gray-900`}>
+              Total
+            </td>
+            <td className={`${numCell} text-gray-950`}>{formatValue(grand_total.gross_revenue)}</td>
+            <td className={`${numCell} text-gray-950`}>{grand_total.sales_qty}</td>
+            <td className={`${numCell} text-gray-950`}>{formatSoB(grand_total.sob)}</td>
           </tr>
         </tbody>
       </table>

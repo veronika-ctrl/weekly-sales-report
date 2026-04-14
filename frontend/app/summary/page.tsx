@@ -70,7 +70,7 @@ export default function Summary() {
             onMetricsChange={setMetrics}
           />
         </div>
-      ) : !noDataForWeek && (
+      ) : !noDataForWeek && !error && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />

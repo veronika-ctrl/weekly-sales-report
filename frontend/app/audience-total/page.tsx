@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
-import { buildAudienceBudgetMetricsForWeek } from '@/lib/audienceBudgetSeries'
+import { getMonthlyAmerPlanFromBudget, resolveAudienceBudgetForWeek } from '@/lib/audienceBudgetSeries'
 import { getAudienceBudgetSeries, type BudgetGeneralResponse } from '@/lib/api'
 
 function budgetGeneralUsable(b: BudgetGeneralResponse | null | undefined): boolean {
@@ -139,14 +139,22 @@ export default function AudienceTotalPage() {
     return budgetGeneralUsable(budget_general) ? budget_general : null
   }, [budget_general])
 
+  const monthlyAmerPlan = useMemo(
+    () =>
+      baseWeek
+        ? getMonthlyAmerPlanFromBudget(baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral)
+        : null,
+    [baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral]
+  )
+
   const metrics = useMemo(() => {
     return kpis.map((k) => {
       const current = deriveMetrics(k)
       const ly = k.last_year ? deriveMetrics(k.last_year as any) : null
-      const budgetMetrics =
-        serverAudienceBudgetByWeek != null && k.week in serverAudienceBudgetByWeek
-          ? serverAudienceBudgetByWeek[k.week]
-          : buildAudienceBudgetMetricsForWeek(effectiveBudgetGeneral, k.week)
+      let budgetMetrics = resolveAudienceBudgetForWeek(k.week, effectiveBudgetGeneral, serverAudienceBudgetByWeek)
+      if (monthlyAmerPlan != null && budgetMetrics) {
+        budgetMetrics = { ...budgetMetrics, amer: monthlyAmerPlan }
+      }
       return {
         week: k.week,
         weekLabel: `W${k.week.split('-')[1]}`,
@@ -155,7 +163,7 @@ export default function AudienceTotalPage() {
         budget: budgetMetrics,
       }
     })
-  }, [kpis, effectiveBudgetGeneral, serverAudienceBudgetByWeek])
+  }, [kpis, effectiveBudgetGeneral, serverAudienceBudgetByWeek, monthlyAmerPlan])
 
   const noData = baseWeek && !loading && !error && (!periods || !isDataReady)
   const hasData = periods && isDataReady && metrics.length > 0
@@ -204,10 +212,8 @@ export default function AudienceTotalPage() {
             return rate (returning), new customers, return rate (new), COS, then aMER (online new-customer net revenue ÷
             DEMA marketing spend — same as summary slide). Below the divider: returning and new AOV (same definition as
             Online KPIs), then customer share, blended return rate, and CAC.
-            Comparison to last year uses the same ISO week (matching weekdays). The green dashed line is{' '}
-            <strong>vs budget</strong> (actual − week-prorated plan), same sign convention as Top Markets net: positive =
-            ahead of plan, negative = shortfall. It uses the right-hand axis; gray dash at 0 is on plan. Tooltip shows
-            the variance and the prorated plan.
+            Comparison to last year uses the same ISO week (matching weekdays). Hover a point for this year and last
+            year values.
           </p>
           <p className="text-xs text-muted-foreground mb-4">
             By market:{' '}

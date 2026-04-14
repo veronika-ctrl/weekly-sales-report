@@ -4,8 +4,10 @@ Map budget (wide budget-general or long-format CSV) to audience chart metrics pe
 
 from __future__ import annotations
 
+import calendar
 import re
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -13,7 +15,7 @@ from loguru import logger
 
 from weekly_report.src.compute.budget import _fetch_budget_dataframe, compute_budget_general
 from weekly_report.src.metrics.online_kpis import _build_weeks
-from weekly_report.src.periods.calculator import get_week_date_range
+from weekly_report.src.periods.calculator import get_week_date_range, week_overlap_fraction_in_month
 
 _SYNTH_KEY = "__audience_budget_month__"
 
@@ -46,8 +48,24 @@ def _parse_budget_month_to_ym(month_key: str) -> Optional[Tuple[int, int]]:
     return None
 
 
+_SV_MONTH_NAMES = (
+    "januari",
+    "februari",
+    "mars",
+    "april",
+    "maj",
+    "juni",
+    "juli",
+    "augusti",
+    "september",
+    "oktober",
+    "november",
+    "december",
+)
+
+
 def _resolve_month_key(months: List[str], end_y: int, end_m: int) -> Optional[str]:
-    """Match week-end calendar month to a budget pivot column name."""
+    """Match calendar month to a budget pivot column name (English, Swedish, YYYY-MM)."""
     end_month_name = datetime(end_y, end_m, 1).strftime("%B")
     for raw in months:
         parsed = _parse_budget_month_to_ym(raw)
@@ -56,11 +74,42 @@ def _resolve_month_key(months: List[str], end_y: int, end_m: int) -> Optional[st
         # Month-only columns (e.g. "March") — same calendar month name
         if str(raw).strip().lower() == end_month_name.lower():
             return raw
+    if 1 <= end_m <= 12:
+        sv = _SV_MONTH_NAMES[end_m - 1]
+        for raw in months:
+            s = str(raw).strip().lower()
+            if s == sv or s.startswith(sv + " ") or s.startswith(sv + "."):
+                y_match = re.search(r"\b(20\d{2})\b", str(raw))
+                if y_match and int(y_match.group(1)) != end_y:
+                    continue
+                return raw
     want_prefix = f"{end_y}-{end_m:02d}"
     for raw in months:
         if want_prefix in raw or raw.startswith(want_prefix):
             return raw
     return None
+
+
+_CUSTOMER_ORDER_WANTS = frozenset({"newcustomers", "returningcustomers", "totalcustomers", "totalorders"})
+
+
+def _label_matches_budget_alias(want: str, ln: str) -> bool:
+    """
+    Avoid false positives from substring rules:
+    - 'Returning Customers' must not match 'Share of Returning Customers' (share is a %, not a count).
+    - 'New Net Revenue' must not match 'New Net Revenue per Customer' (ratio, not SEK).
+    """
+    if ln == want:
+        return True
+    if want in _CUSTOMER_ORDER_WANTS and "share" in ln:
+        return False
+    if want in ln or ln in want:
+        if want in ln and ln.startswith(want) and len(ln) > len(want):
+            tail = ln[len(want) :]
+            if tail.startswith("per") or tail.startswith("share"):
+                return False
+        return True
+    return False
 
 
 def _get_cell(table: Dict[str, Dict[str, Any]], month_key: str, *aliases: str) -> float:
@@ -70,9 +119,27 @@ def _get_cell(table: Dict[str, Dict[str, Any]], month_key: str, *aliases: str) -
         want = _norm_label(al)
         if not want:
             continue
+        # Pass 1: exact label match only (prevents Share-of / per-customer rows winning).
         for label, row in table.items():
             ln = _norm_label(label)
-            if not (ln == want or want in ln or ln in want):
+            if ln != want:
+                continue
+            if not isinstance(row, dict):
+                continue
+            v = row.get(month_key)
+            if v is None:
+                continue
+            try:
+                x = float(v)
+                if x == float("inf") or x == float("-inf"):
+                    continue
+                return x
+            except (TypeError, ValueError):
+                continue
+        # Pass 2: legacy fuzzy (with guards).
+        for label, row in table.items():
+            ln = _norm_label(label)
+            if not _label_matches_budget_alias(want, ln):
                 continue
             if not isinstance(row, dict):
                 continue
@@ -140,8 +207,17 @@ def _audience_metrics_from_table(table: Dict[str, Dict[str, Any]], month_key: st
             share_ret = ret_c / total_c * 100.0
 
     cos_pct = _normalize_cos_pct(g("COS %"))
-    mkt = g("Online Marketing Spend")
-    amer = g("aMER") or g("AMER")
+    # Budget files can contain signed values; normalize to absolute for comparison metrics.
+    mkt = abs(g("Online Marketing Spend"))
+    new_net = abs(g("New Net Revenue"))
+    # aMER is a ratio — never trust an explicit row when we can derive from volumes (summed market
+    # ratios or duplicate rows often inflate aMER; company plan = new net ÷ marketing spend).
+    if mkt > 1e-9:
+        amer = new_net / mkt
+    else:
+        amer = g("aMER") or g("AMER") or g("eMER") or g("emer") or g("OJ aMER")
+        if not amer or abs(float(amer)) < 1e-9:
+            amer = 0.0
     cac = (mkt / new_c) if new_c > 0 else 0.0
 
     aov_new = g("New AOV")
@@ -197,6 +273,56 @@ def _audience_metrics_from_table(table: Dict[str, Dict[str, Any]], month_key: st
         "cac": round(cac),
         "amer": round(amer, 2),
     }
+
+
+def _iso_week_thursday_ymd(iso_week: str) -> Tuple[int, int]:
+    """Calendar (year, month) of ISO week Thursday — primary month for monthly budget rates."""
+    wr = get_week_date_range(iso_week)
+    ws = datetime.strptime(wr["start"], "%Y-%m-%d").date()
+    thu = ws + timedelta(days=3)
+    return thu.year, thu.month
+
+
+def _week_month_fractions_for_iso_week(months: List[str], iso_week: str) -> List[Tuple[str, float]]:
+    """
+    For each calendar month touched by Mon–Sun, fraction = days_in_week_in_month / days_in_month.
+    Used to prorate monthly volume budgets across month boundaries (avoids dips when week-end month is empty).
+    """
+    if not months:
+        return []
+    wr = get_week_date_range(iso_week)
+    ws = datetime.strptime(wr["start"], "%Y-%m-%d").date()
+    we = datetime.strptime(wr["end"], "%Y-%m-%d").date()
+    counts: Dict[Tuple[int, int], int] = defaultdict(int)
+    d = ws
+    while d <= we:
+        counts[(d.year, d.month)] += 1
+        d += timedelta(days=1)
+    out: List[Tuple[str, float]] = []
+    for (y, m), overlap in counts.items():
+        _, dim = calendar.monthrange(y, m)
+        mk = _resolve_month_key(months, y, m)
+        if mk and dim > 0:
+            out.append((mk, overlap / float(dim)))
+    return out
+
+
+def _apply_week_volume_proration(metrics: Dict[str, Any], frac: float) -> Dict[str, Any]:
+    """
+    Monthly budget rows are full-month; weekly actuals need the same week's share of that month
+    (same as Top Markets week budget). Only volume counts are prorated; rates (AOV, return %, COS,
+    aMER, shares) stay as monthly targets.
+    """
+    if frac <= 0 or frac > 1.0 + 1e-6:
+        return metrics
+    out = dict(metrics)
+    for k in ("total_customers", "total_orders", "new_customers", "returning_customers"):
+        if k in out and out[k] is not None:
+            try:
+                out[k] = int(round(float(out[k]) * frac))
+            except (TypeError, ValueError):
+                pass
+    return out
 
 
 def _try_long_format_audience_budget(
@@ -271,11 +397,23 @@ def _try_long_format_audience_budget(
         sub = sub.copy()
 
     mkt_col = lower.get("market")
-    if mkt_col and mkt_col in sub.columns:
+    met_col_name = met_col
+    if mkt_col and mkt_col in sub.columns and met_col_name:
         mv = sub[mkt_col].astype(str).str.strip().str.lower()
         tcdlp = sub.loc[mv == "total cdlp"]
+        # Long CSV often has aMER / eMER on rows with no Market (not under Total CDLP).
+        blank_mkt = mv.isna() | (mv == "") | (mv == "nan")
+        met_lower = sub[met_col_name].astype(str).str.strip().str.lower()
+        _GLOBAL_BUDGET_METRICS = frozenset({"amer", "emer", "oj amer", "cos %"})
+        extra = sub.loc[blank_mkt & met_lower.isin(_GLOBAL_BUDGET_METRICS)].copy()
         if not tcdlp.empty:
-            sub = tcdlp.copy()
+            sub = pd.concat([tcdlp, extra], ignore_index=True)
+            sub = sub.drop_duplicates(subset=[met_col_name], keep="first")
+        elif not extra.empty:
+            # No Total CDLP row for this month; merge global KPI rows into remaining slice.
+            sub = pd.concat([sub, extra], ignore_index=True).drop_duplicates(
+                subset=[met_col_name], keep="last"
+            )
 
     sub[met_col] = sub[met_col].astype(str).str.strip()
     sub[v_col] = pd.to_numeric(sub[v_col], errors="coerce").fillna(0.0)
@@ -298,6 +436,8 @@ def build_audience_budget_metrics_for_week(
 ) -> Optional[Dict[str, Any]]:
     """
     One week's audience-shaped budget: wide budget-general first, else long-format CSV.
+    Monthly rates use the ISO week's Thursday month; volume counts are prorated across every
+    calendar month the Mon–Sun week touches (same idea as frontend weekMonthFractionsForIsoWeek).
     """
     try:
         end_s = get_week_date_range(iso_week)["end"]
@@ -307,6 +447,9 @@ def build_audience_budget_metrics_for_week(
         return None
 
     out: Optional[Dict[str, Any]] = None
+    used_wide_table: Optional[Dict[str, Any]] = None
+    wide_months: List[str] = []
+
     if budget_result and not budget_result.get("error"):
         table = budget_result.get("table") or {}
         if table:
@@ -315,9 +458,25 @@ def build_audience_budget_metrics_for_week(
                 first_row = next(iter(table.values()), None)
                 if isinstance(first_row, dict):
                     months = list(first_row.keys())
-            month_key = _resolve_month_key(months, end_dt.year, end_dt.month) if months else None
+            try:
+                thu_y, thu_m = _iso_week_thursday_ymd(iso_week)
+            except Exception:
+                thu_y, thu_m = end_dt.year, end_dt.month
+            month_key = _resolve_month_key(months, thu_y, thu_m) if months else None
+            if not month_key:
+                month_key = _resolve_month_key(months, end_dt.year, end_dt.month) if months else None
             if month_key:
                 out = _audience_metrics_from_table(table, month_key)
+                if out is not None:
+                    used_wide_table = table
+                    first_row = next(iter(table.values()), None)
+                    row_keys = list(first_row.keys()) if isinstance(first_row, dict) else []
+                    seen = set()
+                    wide_months = []
+                    for x in months + row_keys:
+                        if x not in seen:
+                            seen.add(x)
+                            wide_months.append(x)
             elif months:
                 logger.debug(
                     f"audience budget: wide table but no month key for {iso_week} end={end_s}; "
@@ -326,6 +485,28 @@ def build_audience_budget_metrics_for_week(
 
     if out is None:
         out = _try_long_format_audience_budget(base_week, iso_week, df=long_budget_df)
+    if out is None:
+        return None
+
+    if used_wide_table is not None and wide_months:
+        portions = _week_month_fractions_for_iso_week(wide_months, iso_week)
+        if portions:
+            for k, aliases in (
+                ("total_customers", ("Total Customers",)),
+                ("total_orders", ("Total Orders",)),
+                ("new_customers", ("New Customers",)),
+                ("returning_customers", ("Returning Customers",)),
+            ):
+                total = 0.0
+                for mk, frac in portions:
+                    total += _get_cell(used_wide_table, mk, *aliases) * frac
+                out[k] = int(round(total))
+        else:
+            frac = week_overlap_fraction_in_month(iso_week)
+            out = _apply_week_volume_proration(out, frac)
+    else:
+        frac = week_overlap_fraction_in_month(iso_week)
+        out = _apply_week_volume_proration(out, frac)
     return out
 
 
@@ -336,8 +517,19 @@ def compute_audience_budget_series(base_week: str, num_weeks: int) -> Dict[str, 
     budget_result = compute_budget_general(base_week)
     long_df = _fetch_budget_dataframe(base_week)
     out_weeks: List[Dict[str, Any]] = []
+    # aMER is a monthly plan ratio — same target for every week on the chart (report month = base_week).
+    amer_ref: Optional[float] = None
+    ref = build_audience_budget_metrics_for_week(budget_result, base_week, base_week, long_budget_df=long_df)
+    if ref and isinstance(ref, dict) and ref.get("amer") is not None:
+        try:
+            amer_ref = float(ref["amer"])
+        except (TypeError, ValueError):
+            amer_ref = None
     for w in weeks:
         b = build_audience_budget_metrics_for_week(budget_result, w, base_week, long_budget_df=long_df)
+        if b and amer_ref is not None:
+            b = dict(b)
+            b["amer"] = amer_ref
         out_weeks.append({"week": w, "budget": b})
     return {
         "base_week": base_week,

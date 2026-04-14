@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 import pandas as pd
 import pandas as pd
@@ -892,6 +892,36 @@ def _load_mtd_budget_direct(base_week: str, data_root: Path) -> Dict[str, Any]:
     return _budget_table1_from_budget_dataframe(df, ty, tm)
 
 
+def _budget_label_is_new_net_revenue(label: str) -> bool:
+    """True for the new-customer online net row (not total / returning net)."""
+    L = str(label).strip().lower()
+    if not L or "returning" in L:
+        return False
+    return L == "new net revenue" or (L.startswith("new ") and "net revenue" in L)
+
+
+def _derive_emer_from_budget_components(
+    emer_explicit: float,
+    new_net_new_customers: float,
+    marketing_spend: float,
+) -> float:
+    """Match Table 1: eMER = new customers online net / marketing spend when aMER is absent or zero."""
+    try:
+        e = float(emer_explicit or 0)
+    except (TypeError, ValueError):
+        e = 0.0
+    if abs(e) >= 1e-9:
+        return e
+    try:
+        mkt = float(marketing_spend or 0)
+        nn = float(new_net_new_customers or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if abs(mkt) > 1e-9 and abs(nn) > 1e-9:
+        return abs(nn) / abs(mkt)
+    return e
+
+
 def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, target_month: int) -> Dict[str, Any]:
     """Parse loaded budget CSV dataframe for one calendar month (same layouts as former _load_mtd_budget_direct)."""
     try:
@@ -1042,6 +1072,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 elif metric_norm in ("returnrate",):
                     # Convert decimal-form percentages (0.025) to percent points (2.5)
                     out["return_rate_pct"] = v * 100 if abs(v) <= 1 else v
+                elif metric_norm == "newnetrevenue":
+                    out["new_net_revenue_new_seg"] = v
                 elif metric_norm in ("netrevenue", "onlinenetrevenue"):
                     out["online_net_revenue"] = out["total_net_revenue"] = v
                 elif metric_norm == "returningcustomers":
@@ -1063,6 +1095,11 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     else 0
                 ))
                 logger.info(f"Budget: parsed long-format CSV for {target_month}/{target_year}, keys={list(out.keys())}")
+                _emer = _derive_emer_from_budget_components(
+                    float(out.get("emer", 0) or 0),
+                    float(out.get("new_net_revenue_new_seg", 0) or 0),
+                    float(out.get("marketing_spend", 0) or 0),
+                )
                 return {
                     "online_gross_revenue": out.get("online_gross_revenue", 0),
                     "returns": out.get("returns", 0),
@@ -1077,7 +1114,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     "new_customers": out.get("new_customers", 0),
                     "marketing_spend": out.get("marketing_spend", 0),
                     "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
-                    "emer": round(out.get("emer", 0), 1),
+                    "emer": round(_emer, 1),
+                    "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
                 }
 
     # Layout A: columns include month-like -> first column is metric, others are months
@@ -1116,6 +1154,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 out["returns"] = v
             elif metric_row_matches(label, "Return rate (%)", "Return rate"):
                 out["return_rate_pct"] = v
+            elif _budget_label_is_new_net_revenue(label):
+                out["new_net_revenue_new_seg"] = v
             elif metric_row_matches(label, "Net Revenue"):
                 out["online_net_revenue"] = out["total_net_revenue"] = v
             elif metric_row_matches(label, "Returning Customers"):
@@ -1134,6 +1174,11 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 if out.get("online_gross_revenue")
                 else 0
             ))
+            _emer = _derive_emer_from_budget_components(
+                float(out.get("emer", 0) or 0),
+                float(out.get("new_net_revenue_new_seg", 0) or 0),
+                float(out.get("marketing_spend", 0) or 0),
+            )
             return {
                 "online_gross_revenue": out.get("online_gross_revenue", 0),
                 "returns": out.get("returns", 0),
@@ -1148,7 +1193,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 "new_customers": out.get("new_customers", 0),
                 "marketing_spend": out.get("marketing_spend", 0),
                 "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
-                "emer": round(out.get("emer", 0), 1),
+                "emer": round(_emer, 1),
+                "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
             }
     # Layout B: "Month" column -> rows are months, columns are metrics
     if "Month" in df.columns:
@@ -1201,7 +1247,9 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     out["returns"] = v
                 elif "return rate" in label or "return rate (%)" in label:
                     out["return_rate_pct"] = v
-                elif "net revenue" in label and "total" in label or label == "net revenue":
+                elif "new net revenue" in label:
+                    out["new_net_revenue_new_seg"] = v
+                elif ("net revenue" in label and "total" in label) or label == "net revenue":
                     out["online_net_revenue"] = out["total_net_revenue"] = v
                 elif "returning customers" in label:
                     out["returning_customers"] = int(round(v))
@@ -1214,6 +1262,11 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 elif label == "amer":
                     out["emer"] = v
             if out:
+                _emer = _derive_emer_from_budget_components(
+                    float(out.get("emer", 0) or 0),
+                    float(out.get("new_net_revenue_new_seg", 0) or 0),
+                    float(out.get("marketing_spend", 0) or 0),
+                )
                 return {
                     "online_gross_revenue": out.get("online_gross_revenue", 0),
                     "returns": out.get("returns", 0),
@@ -1228,7 +1281,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     "new_customers": out.get("new_customers", 0),
                     "marketing_spend": out.get("marketing_spend", 0),
                     "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
-                    "emer": round(out.get("emer", 0), 1),
+                    "emer": round(_emer, 1),
+                    "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
                 }
     # Layout C: two columns (Metric name, Value) - use the single value column
     if len(df.columns) >= 2:
@@ -1246,6 +1300,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 out["returns"] = v
             elif metric_row_matches(label, "Return rate (%)", "Return rate"):
                 out["return_rate_pct"] = v
+            elif _budget_label_is_new_net_revenue(label):
+                out["new_net_revenue_new_seg"] = v
             elif metric_row_matches(label, "Net Revenue"):
                 out["online_net_revenue"] = out["total_net_revenue"] = v
             elif metric_row_matches(label, "Returning Customers"):
@@ -1264,6 +1320,11 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 if out.get("online_gross_revenue")
                 else 0
             ))
+            _emer = _derive_emer_from_budget_components(
+                float(out.get("emer", 0) or 0),
+                float(out.get("new_net_revenue_new_seg", 0) or 0),
+                float(out.get("marketing_spend", 0) or 0),
+            )
             return {
                 "online_gross_revenue": out.get("online_gross_revenue", 0),
                 "returns": out.get("returns", 0),
@@ -1278,7 +1339,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 "new_customers": out.get("new_customers", 0),
                 "marketing_spend": out.get("marketing_spend", 0),
                 "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
-                "emer": round(out.get("emer", 0), 1),
+                "emer": round(_emer, 1),
+                "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
             }
     return {}
 
@@ -1294,7 +1356,7 @@ def _ytd_direct_budget_has_volume(d: Dict[str, Any]) -> bool:
 
 
 def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[str, Any]:
-    """Fiscal YTD budget from the same budget CSV as MTD: sum monthly budgets from FY start through base week (prorated)."""
+    """Full fiscal-year budget (Apr-Mar) from the same budget CSV as MTD."""
     import calendar as _cal
 
     path = _resolve_budget_csv_path(base_week, data_root)
@@ -1306,24 +1368,23 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
     try:
         ytd_rng = get_ytd_periods_for_week(base_week)["ytd_actual"]
         fy_start = datetime.strptime(ytd_rng["start"], "%Y-%m-%d").date()
-        week_end = datetime.strptime(ytd_rng["end"], "%Y-%m-%d").date()
+        fy_end = datetime(fy_start.year + 1, 3, 31).date()
     except Exception as e:
         logger.debug(f"YTD budget CSV: bad YTD range for {base_week}: {e}")
         return {}
 
     y, m = fy_start.year, fy_start.month
-    ey, em = week_end.year, week_end.month
+    ey, em = fy_end.year, fy_end.month
     acc_gross = acc_ret = acc_net = acc_mkt = 0.0
     acc_rc = acc_nc = 0.0
+    acc_nn_emer = 0.0
     cos_w = cos_ww = emer_w = emer_ww = 0.0
 
     def before(ay: int, am: int, by: int, bm: int) -> bool:
         return (ay, am) < (by, bm)
 
     while before(y, m, ey, em) or (y == ey and m == em):
-        dim = _cal.monthrange(y, m)[1]
-        is_partial = y == week_end.year and m == week_end.month
-        frac = (week_end.day / dim) if is_partial else 1.0
+        frac = 1.0
 
         b = _budget_table1_from_budget_dataframe(df, y, m)
         g = float(b.get("online_gross_revenue", 0) or 0)
@@ -1331,6 +1392,7 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
         acc_ret += float(b.get("returns", 0) or 0) * frac
         acc_net += float(b.get("online_net_revenue", 0) or 0) * frac
         acc_mkt += float(b.get("marketing_spend", 0) or 0) * frac
+        acc_nn_emer += float(b.get("new_net_revenue_new_seg", 0) or 0) * frac
         acc_rc += float(b.get("returning_customers", 0) or 0) * frac
         acc_nc += float(b.get("new_customers", 0) or 0) * frac
 
@@ -1349,7 +1411,10 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
 
     rr = (acc_ret / acc_gross * 100) if acc_gross else 0.0
     cos_f = (cos_w / cos_ww) if cos_ww else 0.0
-    em_f = (emer_w / emer_ww) if emer_ww else 0.0
+    if acc_mkt > 1e-9 and abs(acc_nn_emer) > 1e-9:
+        em_f = acc_nn_emer / acc_mkt
+    else:
+        em_f = (emer_w / emer_ww) if emer_ww else 0.0
 
     return {
         "online_gross_revenue": acc_gross,
@@ -1369,10 +1434,15 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
     }
 
 
-def _prorate_mtd_budget_to_week(base_week: str, mtd_budget: Dict[str, Any]) -> Dict[str, float]:
+def _prorate_mtd_budget_to_week(
+    base_week: str,
+    mtd_budget: Dict[str, Any],
+    prior_month_budget: Optional[Dict[str, Any]] = None,
+) -> Dict[str, float]:
     """
-    Approximate budget attributed to the selected ISO week: full-month budget ×
-    (calendar days of that week falling in the budget month ÷ days in month).
+    Approximate week budget as sum of month contributions for each day in the ISO week:
+    - contribution from week-end month: month_budget * (days_in_week_in_that_month / days_in_month)
+    - contribution from prior month (if week spans months and provided): same rule for prior month.
     """
     from datetime import timedelta
     import calendar
@@ -1387,19 +1457,32 @@ def _prorate_mtd_budget_to_week(base_week: str, mtd_budget: Dict[str, Any]) -> D
         return {}
     y, m = we.year, we.month
     _, dim = calendar.monthrange(y, m)
-    overlap = 0
+    overlap_current = 0
+    overlap_prior = 0
+    prior_y = prior_m = None
+    prior_dim = None
     d = ws
     while d <= we:
         if d.year == y and d.month == m:
-            overlap += 1
+            overlap_current += 1
+        elif prior_month_budget is not None:
+            if prior_y is None or prior_m is None:
+                prior_y, prior_m = d.year, d.month
+                _, prior_dim = calendar.monthrange(prior_y, prior_m)
+            if d.year == prior_y and d.month == prior_m:
+                overlap_prior += 1
         d += timedelta(days=1)
     if dim <= 0:
         return {}
-    frac = overlap / dim
+    frac_current = overlap_current / dim
+    frac_prior = (overlap_prior / prior_dim) if (prior_month_budget is not None and prior_dim and prior_dim > 0) else 0.0
     out: Dict[str, float] = {}
-    for k, v in mtd_budget.items():
+    all_keys = set(mtd_budget.keys()) | (set(prior_month_budget.keys()) if prior_month_budget else set())
+    for k in all_keys:
+        cur_v = mtd_budget.get(k, 0)
+        prev_v = prior_month_budget.get(k, 0) if prior_month_budget else 0
         try:
-            out[k] = float(v) * frac
+            out[k] = float(cur_v) * frac_current + float(prev_v) * frac_prior
         except (TypeError, ValueError):
             out[k] = 0.0
     return out
@@ -1498,7 +1581,9 @@ def _budget_table1_for_calendar_month(table: Dict[str, Any], target_year: int, t
     new_customers = int(round(get_budget_val("New Customers")))
     marketing_spend = get_budget_val("Online Marketing Spend")
     cos_pct = get_budget_val("COS %", "COS")
-    amer = get_budget_val("aMER")
+    amer = get_budget_val("aMER", "AMER", "eMER", "emer")
+    new_net_new_customers = get_budget_val("New Net Revenue")
+    amer = _derive_emer_from_budget_components(amer, new_net_new_customers, marketing_spend)
     return {
         "online_gross_revenue": total_gross,
         "returns": returns,
@@ -1514,7 +1599,16 @@ def _budget_table1_for_calendar_month(table: Dict[str, Any], target_year: int, t
         "marketing_spend": float(marketing_spend),
         "online_cost_of_sale_3": round(float(cos_pct), 1),
         "emer": round(float(amer), 1),
+        # Internal: YTD budget eMER = Σ this / Σ marketing (not in Table 1 schema for API)
+        "new_net_revenue_new_seg": float(new_net_new_customers or 0),
     }
+
+
+def _table1_budget_dict_for_api(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop internal keys before exposing mtd_budget / week_budget to clients."""
+    if not d:
+        return d
+    return {k: v for k, v in d.items() if k != "new_net_revenue_new_seg"}
 
 
 def _build_mtd_budget_from_budget_general(base_week: str, budget_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1530,11 +1624,20 @@ def _build_mtd_budget_from_budget_general(base_week: str, budget_result: Dict[st
     return _budget_table1_for_calendar_month(table, end_dt.year, end_dt.month)
 
 
+def _build_budget_for_specific_calendar_month_from_budget_general(
+    year: int,
+    month: int,
+    budget_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build budget dict for a specific calendar month from budget-general table."""
+    if "error" in budget_result or "table" not in budget_result:
+        return {}
+    return _budget_table1_for_calendar_month(budget_result["table"], year, month)
+
+
 def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Fiscal YTD budget: sum monthly budgets from FY start (Apr 1 rule, same as ytd_actual) through the
-    month of the base week. Full months count 100%; the month of week_end is prorated by day/days-in-month
-    (aligned with how MTD compares to month budget).
+    Full fiscal-year budget: sum monthly budgets from FY start (Apr 1) through Mar of next year.
     """
     import calendar as _cal
 
@@ -1544,25 +1647,24 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
     try:
         ytd_rng = get_ytd_periods_for_week(base_week)["ytd_actual"]
         fy_start = datetime.strptime(ytd_rng["start"], "%Y-%m-%d").date()
-        week_end = datetime.strptime(ytd_rng["end"], "%Y-%m-%d").date()
+        fy_end = datetime(fy_start.year + 1, 3, 31).date()
     except Exception as e:
         logger.debug(f"YTD budget: could not parse YTD range for {base_week}: {e}")
         return {}
 
     y, m = fy_start.year, fy_start.month
-    ey, em = week_end.year, week_end.month
+    ey, em = fy_end.year, fy_end.month
 
     acc_gross = acc_ret = acc_net = acc_mkt = 0.0
     acc_rc = acc_nc = 0.0
+    acc_nn_emer = 0.0
     cos_w = cos_ww = emer_w = emer_ww = 0.0
 
     def before(ay: int, am: int, by: int, bm: int) -> bool:
         return (ay, am) < (by, bm)
 
     while before(y, m, ey, em) or (y == ey and m == em):
-        dim = _cal.monthrange(y, m)[1]
-        is_partial = y == week_end.year and m == week_end.month
-        frac = (week_end.day / dim) if is_partial else 1.0
+        frac = 1.0
 
         b = _budget_table1_for_calendar_month(table, y, m)
         g = float(b.get("online_gross_revenue", 0) or 0)
@@ -1570,6 +1672,7 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
         acc_ret += float(b.get("returns", 0) or 0) * frac
         acc_net += float(b.get("online_net_revenue", 0) or 0) * frac
         acc_mkt += float(b.get("marketing_spend", 0) or 0) * frac
+        acc_nn_emer += float(b.get("new_net_revenue_new_seg", 0) or 0) * frac
         acc_rc += float(b.get("returning_customers", 0) or 0) * frac
         acc_nc += float(b.get("new_customers", 0) or 0) * frac
 
@@ -1588,7 +1691,10 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
 
     rr = (acc_ret / acc_gross * 100) if acc_gross else 0.0
     cos_f = (cos_w / cos_ww) if cos_ww else 0.0
-    em_f = (emer_w / emer_ww) if emer_ww else 0.0
+    if acc_mkt > 1e-9 and abs(acc_nn_emer) > 1e-9:
+        em_f = acc_nn_emer / acc_mkt
+    else:
+        em_f = (emer_w / emer_ww) if emer_ww else 0.0
 
     return {
         "online_gross_revenue": acc_gross,
@@ -1684,14 +1790,17 @@ async def get_budget_mtd_debug(base_week: str = Query(..., description="Base ISO
 async def get_table1_mtd_metrics(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
 ):
-    """Get Table 1 metrics for month-to-date report. Budget: mtd_budget / week_budget from CSV or compute; ytd_budget prefers fiscal sum from the same budget CSV, else compute_budget_general table."""
+    """Get Table 1 metrics for month-to-date report. Budget: daily-uniform from monthly plan (or Date+Metric+Value daily rows), summed for ISO week / MTD / fiscal YTD windows matching actuals."""
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
         config = load_config(week=base_week)
         result = calculate_table1_mtd_and_ytd(base_week, Path(config.data_root))
         periods = result["periods"]
-        mtd_budget = _load_mtd_budget_direct(base_week, Path(config.data_root))
+        from weekly_report.src.metrics.table1_budget_daily import table1_budget_for_periods, table1_budget_has_volume
+
+        csv_path = _resolve_budget_csv_path(base_week, Path(config.data_root))
+        df = _read_budget_dataframe(csv_path) if csv_path else None
         budget_result: Optional[Dict[str, Any]] = None
         try:
             from weekly_report.src.compute.budget import compute_budget_general
@@ -1700,20 +1809,25 @@ async def get_table1_mtd_metrics(
         except Exception as budget_err:
             logger.debug(f"compute_budget_general for table1-mtd {base_week}: {budget_err}")
 
-        if (not mtd_budget or all(v == 0 for k, v in mtd_budget.items() if isinstance(v, (int, float)))) and budget_result and "error" not in budget_result:
-            mtd_budget = _build_mtd_budget_from_budget_general(base_week, budget_result)
+        def _from_general(y: int, m: int) -> Dict[str, Any]:
+            if budget_result and "table" in budget_result and "error" not in budget_result:
+                return _budget_table1_for_calendar_month(budget_result["table"], y, m) or {}
+            return {}
 
-        if mtd_budget:
-            periods["mtd_budget"] = mtd_budget
-            periods["week_budget"] = _prorate_mtd_budget_to_week(base_week, mtd_budget)
+        gen_fn = _from_general if budget_result and "table" in budget_result and "error" not in budget_result else None
 
-        ytd_csv = _build_ytd_budget_from_direct_csv(base_week, Path(config.data_root))
-        if _ytd_direct_budget_has_volume(ytd_csv):
-            periods["ytd_budget"] = ytd_csv
-        elif budget_result and "table" in budget_result and "error" not in budget_result:
-            ytd_b = _build_ytd_budget_from_budget_general(base_week, budget_result)
-            if ytd_b:
-                periods["ytd_budget"] = ytd_b
+        week_b, mtd_b, ytd_b = table1_budget_for_periods(
+            base_week,
+            _budget_table1_from_budget_dataframe,
+            df,
+            gen_fn,
+        )
+        if table1_budget_has_volume(week_b):
+            periods["week_budget"] = _table1_budget_dict_for_api(week_b)
+        if table1_budget_has_volume(mtd_b):
+            periods["mtd_budget"] = _table1_budget_dict_for_api(mtd_b)
+        if table1_budget_has_volume(ytd_b):
+            periods["ytd_budget"] = _table1_budget_dict_for_api(ytd_b)
 
         return MetricsMtdResponse(periods=periods, date_ranges=result["date_ranges"])
     except FileNotFoundError as e:
@@ -2636,7 +2750,10 @@ async def get_top_markets_net_mtd(
         config = load_config(week=base_week)
         root = Path(config.data_root)
 
-        mtd_budget = _load_mtd_budget_direct(base_week, root)
+        from weekly_report.src.metrics.table1_budget_daily import table1_budget_for_periods, table1_budget_has_volume
+
+        csv_path = _resolve_budget_csv_path(base_week, root)
+        df = _read_budget_dataframe(csv_path) if csv_path else None
         budget_result: Optional[Dict[str, Any]] = None
         try:
             from weekly_report.src.compute.budget import compute_budget_general
@@ -2645,24 +2762,27 @@ async def get_top_markets_net_mtd(
         except Exception as budget_err:
             logger.debug(f"compute_budget_general for top-net-mtd {base_week}: {budget_err}")
 
-        if (not mtd_budget or all(v == 0 for k, v in mtd_budget.items() if isinstance(v, (int, float)))) and budget_result and "error" not in budget_result:
-            mtd_budget = _build_mtd_budget_from_budget_general(base_week, budget_result)
+        def _from_general(y: int, m: int) -> Dict[str, Any]:
+            if budget_result and "table" in budget_result and "error" not in budget_result:
+                return _budget_table1_for_calendar_month(budget_result["table"], y, m) or {}
+            return {}
 
-        week_budget_dict: Dict[str, float] = {}
-        if mtd_budget:
-            week_budget_dict = _prorate_mtd_budget_to_week(base_week, mtd_budget)
+        gen_fn = _from_general if budget_result and "table" in budget_result and "error" not in budget_result else None
 
-        ytd_bud: Dict[str, Any] = {}
-        ytd_csv = _build_ytd_budget_from_direct_csv(base_week, root)
-        if _ytd_direct_budget_has_volume(ytd_csv):
-            ytd_bud = ytd_csv
-        elif budget_result and "table" in budget_result and "error" not in budget_result:
-            ytd_bud = _build_ytd_budget_from_budget_general(base_week, budget_result) or {}
+        week_b, mtd_b, ytd_b = table1_budget_for_periods(
+            base_week,
+            _budget_table1_from_budget_dataframe,
+            df,
+            gen_fn,
+        )
+        week_budget_dict = _table1_budget_dict_for_api(week_b) if table1_budget_has_volume(week_b) else {}
+        mtd_for_api = _table1_budget_dict_for_api(mtd_b) if table1_budget_has_volume(mtd_b) else None
+        ytd_bud = _table1_budget_dict_for_api(ytd_b) if table1_budget_has_volume(ytd_b) else {}
 
         budget_online_net = {
             "week": _online_net_budget_total(week_budget_dict),
-            "mtd": _online_net_budget_total(mtd_budget),
-            "ytd": _online_net_budget_total(ytd_bud),
+            "mtd": _online_net_budget_total(mtd_for_api),
+            "ytd": _online_net_budget_total(ytd_bud if ytd_bud else None),
         }
 
         from weekly_report.src.compute.budget import compute_budget_net_by_market_month
@@ -3836,8 +3956,11 @@ async def upload_file(
                 from weekly_report.src.adapters.supabase_client import get_supabase_client
                 supabase = get_supabase_client()
                 if supabase:
-                    # Extract year from week (ISO format: YYYY-WW)
-                    year = int(week.split("-")[0])
+                    # Store budget by fiscal start year (Apr-Mar), not calendar year.
+                    # Example: 2026-13 (Mar 2026) -> year=2025 (FY 2025/26).
+                    wy, ww = map(int, week.split("-"))
+                    sunday = datetime.fromisocalendar(wy, ww, 1) + timedelta(days=6)
+                    year = sunday.year if sunday.month >= 4 else (sunday.year - 1)
                     
                     # Read file content as text
                     # Try UTF-8 first, fallback to latin-1 if needed
@@ -4181,10 +4304,53 @@ async def get_budget_data(week: str = Query(...)):
         
         if budget_df.empty:
             return {"error": "Budget file is empty"}
+
+        # Budget tab should reflect fiscal year Apr-Mar for selected week.
+        wy, ww = map(int, week.split("-"))
+        week_end = datetime.fromisocalendar(wy, ww, 1) + timedelta(days=6)
+        fiscal_budget_year = week_end.year if week_end.month >= 4 else (week_end.year - 1)
+
+        df = budget_df.copy()
+        lower_cols = {str(c).strip().lower(): c for c in df.columns}
+        year_col = None
+        for cand in ("year", "fiscal year", "fiscalyear", "yr"):
+            if cand in lower_cols:
+                year_col = lower_cols[cand]
+                break
+        month_col = None
+        for cand in ("month", "mon", "period month", "month name"):
+            if cand in lower_cols:
+                month_col = lower_cols[cand]
+                break
+        if year_col is not None and month_col is not None:
+            # Fiscal window is Apr(fiscal start year) ... Mar(next year), e.g. 2025/26.
+            fy_start = datetime(fiscal_budget_year, 4, 1)
+            fy_end_full = datetime(fiscal_budget_year + 1, 3, 31)
+            month_dt = pd.to_datetime(
+                df[month_col].astype(str).str.strip() + " " + pd.to_numeric(df[year_col], errors="coerce").astype("Int64").astype(str),
+                errors="coerce",
+            )
+            m = month_dt.notna() & (month_dt >= fy_start) & (month_dt <= fy_end_full)
+            if m.any():
+                df = df.loc[m].copy()
+        elif year_col is not None:
+            y = pd.to_numeric(df[year_col], errors="coerce")
+            if y.notna().any():
+                df = df.loc[y.eq(float(fiscal_budget_year))].copy()
+
+        type_col = None
+        for cand in ("type", "scenario", "version", "source"):
+            if cand in lower_cols:
+                type_col = lower_cols[cand]
+                break
+        if type_col is not None:
+            t = df[type_col].astype(str).str.strip().str.upper()
+            if t.eq("BUDGET").any():
+                df = df.loc[t.eq("BUDGET")].copy()
         
         # Convert sample data to dict, handling NaN and infinite values
         sample_dicts = []
-        for _, row in budget_df.head(5).iterrows():
+        for _, row in df.head(5).iterrows():
             row_dict = {}
             for col, val in row.items():
                 # Check for NaN
@@ -4200,8 +4366,9 @@ async def get_budget_data(week: str = Query(...)):
         # Return basic structure
         return {
             "week": week,
-            "columns": budget_df.columns.tolist(),
-            "row_count": len(budget_df),
+            "budget_year": fiscal_budget_year,
+            "columns": df.columns.tolist(),
+            "row_count": len(df),
             "sample_data": sample_dicts
         }
         

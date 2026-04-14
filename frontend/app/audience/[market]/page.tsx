@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import {
   allocateAudienceBudgetToMarket,
-  buildAudienceBudgetMetricsForWeek,
+  getMonthlyAmerPlanFromBudget,
+  resolveAudienceBudgetForWeek,
   type AudienceBudgetMetrics,
 } from '@/lib/audienceBudgetSeries'
 import {
@@ -153,23 +154,39 @@ export default function AudienceMarketPage() {
     }
   }, [baseWeek, marketName, slug])
 
+  const monthlyAmerPlan = useMemo(
+    () =>
+      baseWeek
+        ? getMonthlyAmerPlanFromBudget(baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral)
+        : null,
+    [baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral]
+  )
+
   const audienceSeriesWithBudget = useMemo(() => {
     if (!audienceData?.length) return null
+    const weekToRow = new Map(weeksRaw.map((x) => [x.week, x] as const))
     return audienceData.map((row) => {
-      const w = weeksRaw.find((x) => x.week === row.week)
+      const w = weekToRow.get(row.week)
       const total = w?.countries?.Total
       const country = resolvedCountryKey ? w?.countries?.[resolvedCountryKey] : undefined
-      const g =
-        serverAudienceBudgetByWeek != null && row.week in serverAudienceBudgetByWeek
-          ? serverAudienceBudgetByWeek[row.week]
-          : buildAudienceBudgetMetricsForWeek(effectiveBudgetGeneral, row.week)
-      const budget =
+      const g = resolveAudienceBudgetForWeek(row.week, effectiveBudgetGeneral, serverAudienceBudgetByWeek)
+      let budget =
         g && total && country
           ? allocateAudienceBudgetToMarket(g as AudienceBudgetMetrics, country, total)
           : null
+      if (budget && monthlyAmerPlan != null) {
+        budget = { ...budget, amer: monthlyAmerPlan }
+      }
       return { ...row, budget }
     })
-  }, [audienceData, weeksRaw, effectiveBudgetGeneral, resolvedCountryKey, serverAudienceBudgetByWeek])
+  }, [
+    audienceData,
+    weeksRaw,
+    effectiveBudgetGeneral,
+    resolvedCountryKey,
+    serverAudienceBudgetByWeek,
+    monthlyAmerPlan,
+  ])
 
   const noData = baseWeek && !loading && !error && (!periods || !isDataReady)
   const hasData = periods && isDataReady && audienceSeriesWithBudget && audienceSeriesWithBudget.length > 0
@@ -210,8 +227,8 @@ export default function AudienceMarketPage() {
           <p className="text-sm text-muted-foreground mb-2">
             Same layout as Audience Total: main KPIs first, then below the divider returning and new AOV, customer
             share, blended return rate, and CAC.
-            Comparison to last year uses the same ISO week (matching weekdays). The green line is vs budget (actual −
-            plan) for this market, with the right axis — positive ahead, negative shortfall, like Top Markets net.
+            Comparison to last year uses the same ISO week (matching weekdays). Hover a point for this year and last year
+            values.
           </p>
           <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={isAnimationActive} />
           <Link href="/audience-total" className="text-sm text-muted-foreground hover:text-foreground">← Back to Audience Total</Link>

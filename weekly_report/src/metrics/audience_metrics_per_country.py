@@ -280,6 +280,32 @@ def _get_last_year_week(week_str: str) -> str:
     return f"{year - 1}-{week_num:02d}"
 
 
+def _segment_return_rate_pct(
+    ret_seg: float,
+    gross_seg: float,
+    gross_country: float,
+    overall_rr_pct: float,
+) -> float:
+    """
+    Return rate for new/returning segment = returns_seg / gross_seg.
+
+    When gross_seg is tiny vs the country's total online gross for the week, this ratio is
+    numerically unstable (few line items → spikes to 50–70% or 0% next week). Fall back to
+    the country's overall online return rate for that week so charts stay interpretable.
+    """
+    if gross_seg <= 0:
+        return 0.0
+    raw = (ret_seg / gross_seg) * 100.0
+    raw = min(100.0, max(0.0, raw))
+    if gross_country <= 0:
+        return raw
+    # At least ~2% of country's online gross, or a small absolute floor (same currency as Qlik).
+    threshold = max(2000.0, 0.02 * float(gross_country))
+    if gross_seg < threshold:
+        return float(overall_rr_pct)
+    return raw
+
+
 def calculate_audience_metrics_per_country_for_week(
     qlik_df: pd.DataFrame,
     dema_df: pd.DataFrame,
@@ -447,9 +473,15 @@ def calculate_audience_metrics_per_country_for_week(
         new_returns = float(row.get("seg_returns_new", 0.0))
         ret_gross = float(row.get("seg_gross_returning", 0.0))
         ret_returns = float(row.get("seg_returns_returning", 0.0))
-        return_rate_new_pct = (new_returns / new_gross * 100) if new_gross > 0 else 0.0
-        return_rate_returning_pct = (ret_returns / ret_gross * 100) if ret_gross > 0 else 0.0
-        cos_pct = (spend / gross_revenue * 100) if gross_revenue > 0 else 0.0
+        return_rate_new_pct = _segment_return_rate_pct(
+            new_returns, new_gross, gross_revenue, return_rate_pct
+        )
+        return_rate_returning_pct = _segment_return_rate_pct(
+            ret_returns, ret_gross, gross_revenue, return_rate_pct
+        )
+        cos_pct = (
+            min(100.0, (spend / gross_revenue * 100.0)) if gross_revenue > 0 else 0.0
+        )
         cac = (new_spend / new_c) if new_c > 0 else 0.0
         # aMER = online new-customer net revenue / DEMA marketing spend (same as Table 1 eMER / slide 1)
         amer = (new_cust_net / spend) if spend > 0 else 0.0
@@ -502,9 +534,28 @@ def calculate_audience_metrics_per_country_for_week(
             "aov_new_customer": round((row_new_cust_net / row_new) if row_new > 0 else 0.0, 2),
             "aov_returning_customer": round((row_ret_cust_net / row_ret) if row_ret > 0 else 0.0, 2),
             "return_rate_pct": round((row_returns / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
-            "return_rate_new_pct": round((row_new_returns / row_new_gross * 100) if row_new_gross > 0 else 0.0, 2),
-            "return_rate_returning_pct": round((row_ret_returns / row_ret_gross * 100) if row_ret_gross > 0 else 0.0, 2),
-            "cos_pct": round((row_spend / row_revenue * 100) if row_revenue > 0 else 0.0, 2),
+            "return_rate_new_pct": round(
+                _segment_return_rate_pct(
+                    row_new_returns,
+                    row_new_gross,
+                    row_revenue,
+                    (row_returns / row_revenue * 100) if row_revenue > 0 else 0.0,
+                ),
+                2,
+            ),
+            "return_rate_returning_pct": round(
+                _segment_return_rate_pct(
+                    row_ret_returns,
+                    row_ret_gross,
+                    row_revenue,
+                    (row_returns / row_revenue * 100) if row_revenue > 0 else 0.0,
+                ),
+                2,
+            ),
+            "cos_pct": round(
+                min(100.0, (row_spend / row_revenue * 100.0)) if row_revenue > 0 else 0.0,
+                2,
+            ),
             "cac": round((row_new_spend / row_new) if row_new > 0 else 0.0, 2),
             "amer": round((row_new_cust_net / row_spend) if row_spend > 0 else 0.0, 2),
         }
@@ -538,9 +589,28 @@ def calculate_audience_metrics_per_country_for_week(
         "aov_new_customer": round((tot_new_net / tot_new) if tot_new > 0 else 0.0, 2),
         "aov_returning_customer": round((tot_ret_net / tot_ret) if tot_ret > 0 else 0.0, 2),
         "return_rate_pct": round((tot_returns / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
-        "return_rate_new_pct": round((tot_new_returns / tot_new_gross * 100) if tot_new_gross > 0 else 0.0, 2),
-        "return_rate_returning_pct": round((tot_ret_returns / tot_ret_gross * 100) if tot_ret_gross > 0 else 0.0, 2),
-        "cos_pct": round((tot_spend / tot_revenue * 100) if tot_revenue > 0 else 0.0, 2),
+        "return_rate_new_pct": round(
+            _segment_return_rate_pct(
+                tot_new_returns,
+                tot_new_gross,
+                tot_revenue,
+                (tot_returns / tot_revenue * 100) if tot_revenue > 0 else 0.0,
+            ),
+            2,
+        ),
+        "return_rate_returning_pct": round(
+            _segment_return_rate_pct(
+                tot_ret_returns,
+                tot_ret_gross,
+                tot_revenue,
+                (tot_returns / tot_revenue * 100) if tot_revenue > 0 else 0.0,
+            ),
+            2,
+        ),
+        "cos_pct": round(
+            min(100.0, (tot_spend / tot_revenue * 100.0)) if tot_revenue > 0 else 0.0,
+            2,
+        ),
         "cac": round((tot_new_spend / tot_new) if tot_new > 0 else 0.0, 2),
         "amer": round(amer_total, 2),
     }

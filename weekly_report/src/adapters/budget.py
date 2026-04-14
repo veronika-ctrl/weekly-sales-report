@@ -1,6 +1,7 @@
 """CSV adapter for loading budget data."""
 import csv
 import io
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 import pandas as pd
@@ -81,40 +82,66 @@ def load_data(raw_data_path: Path, base_week: Optional[str] = None) -> pd.DataFr
     Returns:
         DataFrame with budget data
     """
+    def _budget_year_from_iso_week(iso_week: str) -> int:
+        """
+        Budget files are fiscal-year based (Apr-Mar), stored by fiscal start year.
+        Example: 2026-13 (end in Mar 2026) -> budget year 2025 (i.e. FY 2025/26).
+        """
+        y, w = map(int, iso_week.split("-"))
+        monday = datetime.fromisocalendar(y, w, 1)
+        sunday = monday + timedelta(days=6)
+        return sunday.year if sunday.month >= 4 else (sunday.year - 1)
+
     # Try Supabase first (if week is provided)
     if base_week:
         try:
             from weekly_report.src.adapters.supabase_client import get_supabase_client
             supabase = get_supabase_client()
             if supabase:
-                # Extract year from week (ISO format: YYYY-WW)
-                year = int(base_week.split("-")[0])
-                
-                # Query Supabase for budget file for this year
-                result = supabase.table("budget_files").select("*").eq("year", year).limit(1).execute()
-                
-                if result.data and len(result.data) > 0:
-                    budget_file = result.data[0]
+                fiscal_year = _budget_year_from_iso_week(base_week)
+                calendar_year = int(base_week.split("-")[0])
+                candidate_years = [fiscal_year]
+                if calendar_year not in candidate_years:
+                    candidate_years.append(calendar_year)
+
+                budget_file = None
+                for year in candidate_years:
+                    result = (
+                        supabase.table("budget_files")
+                        .select("*")
+                        .eq("year", year)
+                        .limit(1)
+                        .execute()
+                    )
+                    if result.data and len(result.data) > 0:
+                        budget_file = result.data[0]
+                        logger.info(
+                            f"📦 Loading budget file from Supabase (lookup year {year}, "
+                            f"uploaded week {budget_file.get('week', 'unknown')})"
+                        )
+                        break
+
+                if budget_file is not None:
                     content = budget_file["content"]
                     filename = budget_file.get("filename", "budget.csv")
-                    
-                    logger.info(f"📦 Loading budget file from Supabase (year {year}, uploaded week {budget_file.get('week', 'unknown')})")
-                    
+
                     # Read CSV from string content
                     df = pd.read_csv(
                         io.StringIO(content),
                         na_values=['', 'NULL', 'null', 'N/A', 'n/a']
                     )
-                    
+
                     # Add source metadata
                     df['_source_file'] = filename
                     df['_source_type'] = "budget"
                     df['_source_location'] = "supabase"
-                    
+
                     logger.info(f"✅ Loaded budget from Supabase: {df.shape}")
                     return df
-                else:
-                    logger.info(f"No budget file found in Supabase for year {year}, falling back to local files")
+                logger.info(
+                    f"No budget file found in Supabase for lookup years {candidate_years}, "
+                    "falling back to local files"
+                )
         except Exception as e:
             logger.warning(f"Failed to load budget from Supabase (falling back to local): {e}")
     

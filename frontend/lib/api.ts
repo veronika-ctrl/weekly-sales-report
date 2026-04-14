@@ -7,6 +7,31 @@ export const hasBackend = Boolean(
 
 import { getPeriodsFromBaseWeek } from './periods'
 
+type CacheEntry = { expiresAt: number; value: unknown }
+const responseCache = new Map<string, CacheEntry>()
+const inFlightCache = new Map<string, Promise<unknown>>()
+const FAST_TTL_MS = 45_000
+
+async function withShortCache<T>(key: string, loader: () => Promise<T>, ttlMs: number = FAST_TTL_MS): Promise<T> {
+  const now = Date.now()
+  const hit = responseCache.get(key)
+  if (hit && hit.expiresAt > now) return hit.value as T
+
+  const inFlight = inFlightCache.get(key)
+  if (inFlight) return inFlight as Promise<T>
+
+  const p = loader()
+    .then((value) => {
+      responseCache.set(key, { expiresAt: Date.now() + ttlMs, value })
+      return value
+    })
+    .finally(() => {
+      inFlightCache.delete(key)
+    })
+  inFlightCache.set(key, p as Promise<unknown>)
+  return p
+}
+
 export interface PeriodsResponse {
   actual: string
   last_week: string
@@ -255,13 +280,36 @@ export async function getTable1Metrics(baseWeek: string, periods: string[], incl
 }
 
 export async function getTable1Mtd(baseWeek: string): Promise<MetricsMtdResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/metrics/table1-mtd?base_week=${encodeURIComponent(baseWeek)}`)
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}))
-    const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
-    throw new Error(detail)
-  }
-  return response.json()
+  const key = `table1-mtd:${baseWeek}`
+  return withShortCache(key, async () => {
+    const endpoint = `/api/metrics/table1-mtd?base_week=${encodeURIComponent(baseWeek)}`
+    const primaryUrl = `${API_BASE_URL}${endpoint}`
+
+    const load = async (url: string): Promise<MetricsMtdResponse> => {
+      const response = await fetch(url)
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}))
+        const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
+        throw new Error(detail)
+      }
+      return response.json()
+    }
+
+    try {
+      return await load(primaryUrl)
+    } catch (err) {
+      // Local dev guard: some environments resolve localhost and 127.0.0.1 differently.
+      try {
+        const u = new URL(API_BASE_URL)
+        const altHost = u.hostname === '127.0.0.1' ? 'localhost' : u.hostname === 'localhost' ? '127.0.0.1' : null
+        if (!altHost) throw err
+        const fallbackBase = `${u.protocol}//${altHost}${u.port ? `:${u.port}` : ''}`
+        return await load(`${fallbackBase}${endpoint}`)
+      } catch {
+        throw err
+      }
+    }
+  })
 }
 
 export async function getTopMarkets(
@@ -651,11 +699,14 @@ export async function getTopProducts(baseWeek: string, numWeeks: number = 1, top
 }
 
 export async function getTopProductsByGender(baseWeek: string, numWeeks: number = 1, topN: number = 30, genderFilter: 'men' | 'women' = 'men'): Promise<TopProductsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/top-products-gender?base_week=${baseWeek}&num_weeks=${numWeeks}&top_n=${topN}&gender_filter=${genderFilter}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Top Products by Gender data: ${response.statusText}`)
-  }
-  return response.json()
+  const key = `top-products-gender:${baseWeek}:${numWeeks}:${topN}:${genderFilter}`
+  return withShortCache(key, async () => {
+    const response = await fetch(`${API_BASE_URL}/api/top-products-gender?base_week=${baseWeek}&num_weeks=${numWeeks}&top_n=${topN}&gender_filter=${genderFilter}`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Top Products by Gender data: ${response.statusText}`)
+    }
+    return response.json()
+  })
 }
 
 export async function getSessionsPerCountry(baseWeek: string, numWeeks: number = 8): Promise<SessionsPerCountryResponse> {
@@ -906,13 +957,16 @@ export async function getAudienceMetricsPerCountry(
   week: string,
   numWeeks: number = 8
 ): Promise<AudienceMetricsPerCountryResponse> {
-  const params = new URLSearchParams({ base_week: week, num_weeks: String(numWeeks) })
-  const response = await fetch(`${API_BASE_URL}/api/audience-metrics-per-country?${params}`)
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err?.detail || `Failed to fetch audience metrics: ${response.statusText}`)
-  }
-  return response.json()
+  const key = `audience-metrics-per-country:${week}:${numWeeks}`
+  return withShortCache(key, async () => {
+    const params = new URLSearchParams({ base_week: week, num_weeks: String(numWeeks) })
+    const response = await fetch(`${API_BASE_URL}/api/audience-metrics-per-country?${params}`)
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err?.detail || `Failed to fetch audience metrics: ${response.statusText}`)
+    }
+    return response.json()
+  })
 }
 
 /** Server-resolved audience chart budget (wide + long-format budget CSV). */
@@ -927,6 +981,7 @@ export async function getAudienceBudgetSeries(
   baseWeek: string,
   numWeeks: number = 8
 ): Promise<AudienceBudgetSeriesResponse> {
+  // No short-lived cache: this payload changes with budget logic fixes and must match client-side proration.
   const params = new URLSearchParams({ base_week: baseWeek, num_weeks: String(numWeeks) })
   const response = await fetch(`${API_BASE_URL}/api/audience-budget-series?${params}`)
   if (!response.ok) {

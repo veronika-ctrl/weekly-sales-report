@@ -75,8 +75,18 @@ export default function MenCategorySales() {
 
   return (
     <div className="space-y-8">
+      <p className="text-sm text-muted-foreground">Values shown as sales amount in SEK &apos;000.</p>
       <div className="grid grid-cols-3 gap-6">
         {sortedCategories.map((category, index) => {
+          const labelFormatter = (label: unknown) => {
+            const value = Number(label ?? 0)
+            if (category === 'MATERIAL') {
+              const kValue = value / 1000
+              if (Math.abs(kValue) < 0.05) return '0'
+              return kValue.toFixed(1)
+            }
+            return Math.round(value / 1000).toString()
+          }
           const chartData = categoryData.map(g => {
             const weekNum = g.week.split('-')[1]
             const currentValue = (g.categories && g.categories[category]) || 0
@@ -142,7 +152,7 @@ export default function MenCategorySales() {
                         offset={12}
                         fill="#4B5563"
                         fontSize={12}
-                        formatter={(label: unknown) => Math.round(Number(label ?? 0) / 1000).toString()}
+                        formatter={labelFormatter}
                       />
                     </Line>
                     <Line

@@ -35,6 +35,70 @@ const METRIC_KEYS = [
 
 const COL_COUNT = 5
 
+/** Week column uses MTD-derived plan for aMER (monthly eMER convention). */
+const STATIC_MONTH_BUDGET_KEYS = new Set<string>(['emer'])
+
+/** Body cell styles per time block: Actual highlighted, Last year vs Y/Y differ, Budget + vs budget share one green. */
+type PeriodBlock = 'week' | 'month' | 'ytd'
+
+const PERIOD_BODY: Record<
+  PeriodBlock,
+  { actual: string; lastYear: string; yoy: string; budget: string; vsBudget: string }
+> = {
+  week: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/80 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.15)]',
+    lastYear: 'bg-slate-100 text-gray-700',
+    yoy: 'bg-violet-50 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium border-r border-slate-300/80',
+  },
+  month: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/80 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.15)]',
+    lastYear: 'bg-slate-100 text-gray-700',
+    yoy: 'bg-violet-50 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium border-r border-slate-300/80',
+  },
+  ytd: {
+    actual:
+      'bg-amber-50 text-gray-900 font-semibold border-l border-amber-200/80 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.15)]',
+    lastYear: 'bg-slate-100 text-gray-700',
+    yoy: 'bg-violet-50 text-gray-700',
+    budget: 'bg-emerald-50 text-gray-800',
+    vsBudget: 'bg-emerald-50 text-gray-800 font-medium',
+  },
+}
+
+/** Header row 2 — aligned with body bands (Week / Month / YTD). */
+const PERIOD_HEAD: Record<PeriodBlock, { group: string; actual: string; lastYear: string; yoy: string; budget: string; vsBudget: string }> = {
+  week: {
+    group: 'bg-slate-300/95 border-slate-400',
+    actual: 'bg-amber-100 border-l border-amber-300',
+    lastYear: 'bg-slate-100',
+    yoy: 'bg-violet-100',
+    budget: 'bg-emerald-100/90',
+    vsBudget: 'bg-emerald-100/90 border-r border-slate-400/70',
+  },
+  month: {
+    group: 'bg-amber-200/95 border-amber-300',
+    actual: 'bg-amber-100 border-l border-amber-300',
+    lastYear: 'bg-slate-100',
+    yoy: 'bg-violet-100',
+    budget: 'bg-emerald-100/90',
+    vsBudget: 'bg-emerald-100/90 border-r border-slate-400/70',
+  },
+  ytd: {
+    group: 'bg-sky-200/90 border-sky-300',
+    actual: 'bg-amber-100 border-l border-amber-300',
+    lastYear: 'bg-slate-100',
+    yoy: 'bg-violet-100',
+    budget: 'bg-emerald-100/90',
+    vsBudget: 'bg-emerald-100/90',
+  },
+}
+
 export default function MetricsPreviewMTD({
   mtdData,
   baseWeek,
@@ -45,12 +109,49 @@ export default function MetricsPreviewMTD({
     return ((current - previous) / previous) * 100
   }
 
+  const isPercentMetric = (metricKey: string): boolean =>
+    metricKey === 'return_rate_pct' || metricKey === 'online_cost_of_sale_3'
+
+  const isSignedCostMetric = (metricKey: string): boolean =>
+    metricKey === 'returns' || metricKey === 'marketing_spend'
+
+  const isLowerBetterMetric = (metricKey: string): boolean =>
+    metricKey === 'returns' ||
+    metricKey === 'marketing_spend' ||
+    metricKey === 'return_rate_pct' ||
+    metricKey === 'online_cost_of_sale_3'
+
+  const formatYoYForMetric = (metricKey: string, actual: number, lastYear: number): string => {
+    if (isPercentMetric(metricKey)) {
+      const diff = actual - lastYear
+      const directionalDiff = isLowerBetterMetric(metricKey) ? -diff : diff
+      return formatPpDifference(directionalDiff)
+    }
+    const growth = calculateGrowthPercentage(actual, lastYear)
+    if (growth === null) return '—'
+    const directionalGrowth = isLowerBetterMetric(metricKey) ? -growth : growth
+    return formatGrowthPercentage(directionalGrowth)
+  }
+
   const formatGrowthPercentage = (value: number | null): string => {
     if (value === null) return '—'
     const absValue = Math.abs(value)
     const formatted = Math.round(absValue).toString()
     if (value < 0) return `(${formatted}%)`
     return `${formatted}%`
+  }
+
+  const formatPpDifference = (value: number | null): string => {
+    if (value === null) return '—'
+    if (value === 0) return '0 pp'
+    const absValue = Math.abs(value).toFixed(1)
+    return value < 0 ? `(${absValue} pp)` : `+${absValue} pp`
+  }
+
+  const formatPositivePpDifference = (value: number | null): string => {
+    if (value === null) return '—'
+    if (value === 0) return '0 pp'
+    return `+${Math.abs(value).toFixed(1)} pp`
   }
 
   const formatValue = (value: number, metricKey: string): string => {
@@ -73,33 +174,32 @@ export default function MetricsPreviewMTD({
     return value < 0 ? `-${formattedThousands}` : formattedThousands
   }
 
-  /** actual − budget: positive = ahead of budget, negative = shortfall. Same units as Actual (SEK raw → shown as '000); % metrics as pp. */
-  const formatBudgetVariance = (actual: number, budget: number, metricKey: string): string => {
-    const d = actual - budget
-    if (metricKey === 'return_rate_pct' || metricKey === 'online_cost_of_sale_3') {
-      if (d === 0) return '0'
-      const a = Math.abs(d).toFixed(1)
-      return d < 0 ? `(${a} pp)` : `+${a} pp`
+  /** Metric-aware vs budget: pp for % KPIs; Y/Y-style % for value rows. */
+  const formatVsBudget = (actual: number, budget: number, metricKey: string): string => {
+    if (isPercentMetric(metricKey)) {
+      const diff = actual - Math.abs(budget)
+      const signedDiff = isLowerBetterMetric(metricKey) ? -diff : diff
+      return formatPositivePpDifference(signedDiff)
     }
     if (metricKey === 'emer') {
-      if (d === 0) return '0'
-      const a = Math.abs(d).toFixed(1)
-      return d < 0 ? `(${a})` : `+${a}`
+      const a = Math.abs(actual)
+      const b = Math.abs(budget)
+      if (b === 0) return '—'
+      const pct = ((a - b) / b) * 100
+      if (!Number.isFinite(pct)) return '—'
+      const rounded = Math.round(Math.abs(pct))
+      if (rounded === 0) return '0%'
+      return pct < 0 ? `(${rounded}%)` : `${rounded}%`
     }
-    if (metricKey === 'returning_customers' || metricKey === 'new_customers') {
-      const r = Math.round(d)
-      if (r === 0) return '0'
-      const s = Math.abs(r).toLocaleString('sv-SE')
-      return r < 0 ? `(${s})` : `+${s}`
-    }
-    if (d === 0) return '0'
-    const thousandsValue = d / 1000
-    const roundedThousands = Math.round(Math.abs(thousandsValue))
-    const formattedThousands = roundedThousands.toLocaleString('sv-SE')
-    if (d < 0) {
-      return `(${formattedThousands})`
-    }
-    return `+${formattedThousands}`
+    const a = isSignedCostMetric(metricKey) ? Math.abs(actual) : actual
+    const b = isSignedCostMetric(metricKey) ? Math.abs(budget) : Math.abs(budget)
+    if (b === 0) return '—'
+    const rawPct = ((a - b) / b) * 100
+    const pct = isLowerBetterMetric(metricKey) ? -rawPct : rawPct
+    if (!Number.isFinite(pct)) return '—'
+    const rounded = Math.round(Math.abs(pct))
+    if (rounded === 0) return '0%'
+    return pct < 0 ? `(${rounded}%)` : `${rounded}%`
   }
 
   /** Visible column label + optional tooltip (native title). */
@@ -130,10 +230,8 @@ export default function MetricsPreviewMTD({
   const ytdAR = dateRanges.ytd_actual?.display || 'YTD'
   const ytdLyR = dateRanges.ytd_last_year?.display || 'YTD last year'
 
-  const cell = (value: string, bg: string, semibold = false) => (
-    <td
-      className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right text-gray-700 ${isPdfMode ? 'tabular-nums' : ''} ${bg} ${semibold ? 'font-semibold' : ''}`}
-    >
+  const cell = (value: string, bg: string) => (
+    <td className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-right ${isPdfMode ? 'tabular-nums' : ''} ${bg}`}>
       {value}
     </td>
   )
@@ -143,18 +241,23 @@ export default function MetricsPreviewMTD({
     actual: number,
     lastYear: number,
     budget: number | null | undefined,
-    weekClass: string
+    block: PeriodBlock,
   ) => {
-    const b = budget != null && !Number.isNaN(Number(budget)) ? Number(budget) : null
-    const yoy = formatGrowthPercentage(calculateGrowthPercentage(actual, lastYear))
-    const vsBud = b != null && b !== 0 ? formatBudgetVariance(actual, b, metricKey) : '—'
+    const s = PERIOD_BODY[block]
+    const rawBudget = budget != null && !Number.isNaN(Number(budget)) ? Number(budget) : null
+    const b = rawBudget != null ? Math.abs(rawBudget) : null
+    const yoy = formatYoYForMetric(metricKey, actual, lastYear)
+    const vsBud =
+      rawBudget != null && !Number.isNaN(Number(rawBudget))
+        ? formatVsBudget(actual, Number(rawBudget), metricKey)
+        : '—'
     return (
       <>
-        {cell(formatValue(actual, metricKey), `${weekClass} font-semibold`)}
-        {cell(formatValue(lastYear, metricKey), weekClass)}
-        {cell(b != null ? formatValue(b, metricKey) : '—', `${weekClass} bg-green-50/80`)}
-        {cell(yoy, weekClass)}
-        {cell(vsBud, `${weekClass} bg-green-100/80 font-medium`)}
+        {cell(formatValue(actual, metricKey), s.actual)}
+        {cell(formatValue(lastYear, metricKey), s.lastYear)}
+        {cell(b != null ? formatValue(b, metricKey) : '—', s.budget)}
+        {cell(yoy, s.yoy)}
+        {cell(vsBud, s.vsBudget)}
       </>
     )
   }
@@ -163,82 +266,91 @@ export default function MetricsPreviewMTD({
     <div className={`space-y-4 ${isPdfMode ? 'space-y-1' : ''}`}>
       {!isPdfMode && (
         <p className="text-sm text-muted-foreground">
-          <strong>Week</strong> = latest ISO week vs same week last year; <strong>budget</strong> = share of the monthly
-          budget for days of that week in the month (approximation). <strong>Month</strong> = month-to-date actuals vs
-          last year and full-month budget. <strong>YTD</strong> budget is the fiscal-year sum from your budget file
-          (through the current week; last month prorated). <strong>vs budget</strong> = actual minus budget in the same
-          units as the row (SEK &apos;000 for money): positive means ahead of budget, negative means shortfall. Return
-          rate and COS show the difference in <strong>pp</strong> (percentage points).
+          <strong>Week</strong> = latest ISO week vs same week last year; <strong>budget</strong> = sum of daily plan
+          amounts for that Mon–Sun (monthly plan spread evenly per calendar day, or exact daily rows if your budget file
+          has Date + Metric + Value). <strong>Month</strong> = month-to-date actuals vs last year; month budget = plan
+          for the same calendar dates (1st through end of the selected week). <strong>YTD</strong> budget = plan for the
+          same fiscal YTD dates as actuals (Apr 1 through week end). <strong>vs budget</strong> = percent variance
+          for value rows; <strong>Return rate</strong> and <strong>COS</strong> are shown as percentage-point difference (pp).
         </p>
       )}
       <div className={`bg-gray-50 rounded-lg overflow-hidden overflow-x-auto ${isPdfMode ? 'rounded-sm' : ''}`}>
         <table className={`w-full min-w-[1100px] ${isPdfMode ? 'text-[8pt]' : 'text-xs'} ${isPdfMode ? 'break-inside-avoid' : ''}`}>
           <thead>
-            <tr className="bg-gray-200 border-b">
+            <tr className="border-b border-gray-300">
               <th
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-left font-medium text-gray-900 border-r border-gray-300`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-left font-medium text-gray-900 border-r border-gray-300 bg-gray-100`}
                 rowSpan={2}
               >
                 (SEK &apos;000)
               </th>
               <th
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-slate-200 border-r border-gray-400`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-semibold text-gray-900 border-r border-slate-400/80 ${PERIOD_HEAD.week.group}`}
                 colSpan={COL_COUNT}
                 title={weekActualR}
               >
                 Week
               </th>
               <th
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-gray-200 border-r border-gray-400`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-semibold text-gray-900 border-r border-stone-400/80 ${PERIOD_HEAD.month.group}`}
                 colSpan={COL_COUNT}
                 title={`${mtdAR} · ${mtdLyR}`}
               >
                 Month
               </th>
               <th
-                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-medium text-gray-900 bg-blue-100`}
+                className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} text-center font-semibold text-gray-900 ${PERIOD_HEAD.ytd.group}`}
                 colSpan={COL_COUNT}
                 title={`${ytdAR} · ${ytdLyR}`}
               >
                 YTD
               </th>
             </tr>
-            <tr className="bg-gray-200 border-b">
-              {th('bg-slate-200 border-l border-slate-300', 'Actual', weekActualR)}
-              {th('bg-slate-200', 'Last year', weekLyR)}
-              {th('bg-slate-200 bg-green-50/80', 'Budget', 'Share of monthly budget for this week (days in month)')}
-              {th('bg-slate-200', 'Y/Y %', 'Actual vs last year')}
+            <tr className="border-b border-gray-300">
+              {th(PERIOD_HEAD.week.actual, 'Actual', weekActualR)}
+              {th(PERIOD_HEAD.week.lastYear, 'Last year', weekLyR)}
+              {th(PERIOD_HEAD.week.budget, 'Budget', 'Daily plan summed for this ISO week (7 days)')}
+              {th(PERIOD_HEAD.week.yoy, 'Y/Y %', 'Actual vs last year')}
               {th(
-                'bg-slate-200 bg-green-100/80 border-r border-gray-400',
+                PERIOD_HEAD.week.vsBudget,
                 'vs budget',
-                'Actual − budget (SEK ’000). + = ahead of budget, (−) = shortfall.',
+                'Week: % variance for value rows; Return rate and COS are shown as pp.',
               )}
-              {th('bg-gray-200', 'Actual', mtdAR)}
-              {th('bg-gray-200', 'Last year', mtdLyR)}
-              {th('bg-gray-200 bg-green-50/80', 'Budget', 'Full month budget')}
-              {th('bg-gray-200', 'Y/Y %', 'MTD actual vs MTD last year')}
+              {th(PERIOD_HEAD.month.actual, 'Actual', mtdAR)}
+              {th(PERIOD_HEAD.month.lastYear, 'Last year', mtdLyR)}
               {th(
-                'bg-gray-200 bg-green-100/80 border-r border-gray-400',
-                'vs budget',
-                'MTD actual − month budget (SEK ’000). + = ahead, (−) = shortfall.',
+                PERIOD_HEAD.month.budget,
+                'Budget',
+                'Daily plan summed for MTD (1st through week end — same dates as Actual)',
               )}
-              {th('bg-blue-100', 'Actual', ytdAR)}
-              {th('bg-blue-100', 'Last year', ytdLyR)}
-              {th('bg-blue-100 bg-green-50/80', 'Budget', 'YTD budget when available')}
-              {th('bg-blue-100', 'Y/Y %', 'YTD actual vs YTD last year')}
+              {th(PERIOD_HEAD.month.yoy, 'Y/Y %', 'MTD actual vs MTD last year')}
               {th(
-                'bg-blue-100 bg-green-100/80',
+                PERIOD_HEAD.month.vsBudget,
                 'vs budget',
-                'YTD actual − cumulative YTD budget (SEK ’000). + = ahead of YTD budget, (−) = shortfall.',
+                'MTD: % variance for value rows; Return rate and COS are shown as pp.',
+              )}
+              {th(PERIOD_HEAD.ytd.actual, 'Actual', ytdAR)}
+              {th(PERIOD_HEAD.ytd.lastYear, 'Last year', ytdLyR)}
+              {th(PERIOD_HEAD.ytd.budget, 'Budget', 'Daily plan summed fiscal YTD (same dates as Actual)')}
+              {th(PERIOD_HEAD.ytd.yoy, 'Y/Y %', 'YTD actual vs YTD last year')}
+              {th(
+                PERIOD_HEAD.ytd.vsBudget,
+                'vs budget',
+                'YTD: % variance for value rows; Return rate and COS are shown as pp.',
               )}
             </tr>
           </thead>
           <tbody>
             {METRIC_LABELS.map((label, index) => {
               const metricKey = METRIC_KEYS[index]
+              const yBud =
+                periods.ytd_budget?.[metricKey] != null ? Number(periods.ytd_budget[metricKey]) : null
+
               const wAct = periods.actual?.[metricKey] ?? 0
               const wLy = periods.week_last_year?.[metricKey] ?? 0
-              const wBud = periods.week_budget?.[metricKey]
+              const wBud = STATIC_MONTH_BUDGET_KEYS.has(metricKey)
+                ? periods.mtd_budget?.[metricKey]
+                : periods.week_budget?.[metricKey]
 
               const mAct = periods.mtd_actual?.[metricKey] ?? 0
               const mLy = periods.mtd_last_year?.[metricKey] ?? 0
@@ -247,19 +359,17 @@ export default function MetricsPreviewMTD({
 
               const yAct = periods.ytd_actual?.[metricKey] ?? 0
               const yLy = periods.ytd_last_year?.[metricKey] ?? 0
-              const yBud =
-                periods.ytd_budget?.[metricKey] != null ? Number(periods.ytd_budget[metricKey]) : null
 
               return (
-                <tr key={metricKey} className={`border-b border-gray-200 last:border-b-0 ${isPdfMode ? 'break-inside-avoid' : ''}`}>
+                <tr key={metricKey} className={`border-b border-gray-200/80 last:border-b-0 ${isPdfMode ? 'break-inside-avoid' : ''}`}>
                   <td
-                    className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} font-medium text-gray-900 border-r border-gray-200`}
+                    className={`${isPdfMode ? 'py-0.5 px-1' : 'py-2 px-2'} font-medium text-gray-900 border-r border-gray-300 bg-gray-50/90 ${isPdfMode ? '' : 'sticky left-0 z-[1] shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)]'}`}
                   >
                     {label}
                   </td>
-                  {fivePack(metricKey, wAct, wLy, wBud, 'bg-slate-50')}
-                  {fivePack(metricKey, mAct, mLy, mBud, 'bg-white')}
-                  {fivePack(metricKey, yAct, yLy, yBud, 'bg-blue-50/60')}
+                  {fivePack(metricKey, wAct, wLy, wBud, 'week')}
+                  {fivePack(metricKey, mAct, mLy, mBud, 'month')}
+                  {fivePack(metricKey, yAct, yLy, yBud ?? null, 'ytd')}
                 </tr>
               )
             })}
@@ -269,8 +379,8 @@ export default function MetricsPreviewMTD({
       {!isPdfMode && (
         <div className="text-sm text-gray-600">
           <p>
-            Base week: <span className="font-medium">{baseWeek}</span>. Week budget is prorated from the same monthly
-            budget used in the Month block.
+            Base week: <span className="font-medium">{baseWeek}</span>. Budgets are built from daily amounts (even
+            spread of each monthly plan when no daily rows are present).
           </p>
         </div>
       )}

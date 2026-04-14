@@ -1,15 +1,17 @@
 """Top markets: online net revenue by Week / Month / YTD with YoY and budget (per-market from budget file when available).
 
-Week budget = share of that calendar month's budget for ISO-week days in that month.
-Month budget = MTD budget for the same calendar span as mtd_actual (1st of month → week end).
-YTD budget = fiscal-year budget (Apr start) cumulated through week end, prorated in the current month.
+Budgets are built from monthly online net in the file by spreading each calendar month uniformly per day,
+then summing over the same date ranges as actuals:
+- Week: ISO Mon–Sun (7 days).
+- Month: MTD (calendar month start → week end), same as Summary MTD.
+- YTD: fiscal YTD (Apr 1 → week end), same as Summary YTD — not the full Apr–Mar year total.
 """
 
 from __future__ import annotations
 
 import calendar as _cal
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -290,21 +292,23 @@ def _resolve_budget_market_key(country: str, by_market: Dict[str, Dict[str, floa
     return None
 
 
-def _week_overlap_fraction_in_month(base_week: str) -> Tuple[int, int, float]:
-    """(year, month_of_week_end, fraction of that calendar month overlapping the ISO week)."""
-    week_range = get_week_date_range(base_week)
-    ws = datetime.strptime(week_range["start"], "%Y-%m-%d").date()
-    we = datetime.strptime(week_range["end"], "%Y-%m-%d").date()
-    y, m = we.year, we.month
-    _, dim = _cal.monthrange(y, m)
-    overlap = 0
-    d = ws
-    while d <= we:
-        if d.year == y and d.month == m:
-            overlap += 1
+def _sum_daily_online_net_uniform(
+    by_market: Dict[str, Dict[str, float]],
+    market_key: str,
+    start_d: date,
+    end_d: date,
+) -> float:
+    """Spread each calendar month's online net budget evenly per day, sum over [start_d, end_d] inclusive."""
+    if market_key not in by_market or start_d > end_d:
+        return 0.0
+    acc = 0.0
+    d = start_d
+    while d <= end_d:
+        dim = _cal.monthrange(d.year, d.month)[1]
+        mnet = _market_net_for_calendar_month(by_market, market_key, d.year, d.month)
+        acc += float(mnet) / float(dim) if dim else 0.0
         d += timedelta(days=1)
-    frac = (overlap / dim) if dim > 0 else 0.0
-    return y, m, frac
+    return acc
 
 
 def _file_budget_sum_all_market_keys(
@@ -316,25 +320,8 @@ def _file_budget_sum_all_market_keys(
     if period == "week":
         return sum(_budget_week_for_market_key(base_week, k, bmm) for k in bmm)
     if period == "month":
-        return sum(_budget_month_for_market_key(base_week, k, bmm) for k in bmm)
+        return sum(_budget_mtd_for_market_key(base_week, k, bmm) for k in bmm)
     return sum(_budget_ytd_for_market_key(base_week, k, bmm) for k in bmm)
-
-
-def _calendar_mtd_elapsed_fraction(base_week: str) -> float:
-    """Same relative span as mtd_actual: days from month start through week end ÷ days in that month."""
-    week_range = get_week_date_range(base_week)
-    we = datetime.strptime(week_range["end"], "%Y-%m-%d").date()
-    dim = _cal.monthrange(we.year, we.month)[1]
-    return (we.day / dim) if dim > 0 else 0.0
-
-
-def _prorate_full_month_total_to_mtd_span(
-    base_week: str, full_month_online_net: Optional[float]
-) -> Optional[float]:
-    """Scale group online-net budget so Total matches sum of per-market MTD budgets."""
-    if full_month_online_net is None:
-        return None
-    return float(full_month_online_net) * _calendar_mtd_elapsed_fraction(base_week)
 
 
 def _market_net_for_calendar_month(by_market: Dict[str, Dict[str, float]], market_key: str, y: int, m: int) -> float:
@@ -347,56 +334,40 @@ def _market_net_for_calendar_month(by_market: Dict[str, Dict[str, float]], marke
 def _budget_week_for_market_key(
     base_week: str, market_key: str, by_market: Dict[str, Dict[str, float]]
 ) -> float:
-    if market_key not in by_market:
-        return 0.0
-    y, m, frac = _week_overlap_fraction_in_month(base_week)
-    full = _market_net_for_calendar_month(by_market, market_key, y, m)
-    return full * frac
-
-
-def _budget_month_for_market_key(
-    base_week: str, market_key: str, by_market: Dict[str, Dict[str, float]]
-) -> float:
-    """MTD budget through week end (matches mtd_actual: 1st of month → week end)."""
+    """Online net budget for the ISO week: uniform daily spread, summed over Mon–Sun."""
     if market_key not in by_market:
         return 0.0
     week_range = get_week_date_range(base_week)
+    ws = datetime.strptime(week_range["start"], "%Y-%m-%d").date()
     we = datetime.strptime(week_range["end"], "%Y-%m-%d").date()
-    full = _market_net_for_calendar_month(by_market, market_key, we.year, we.month)
-    return full * _calendar_mtd_elapsed_fraction(base_week)
+    return _sum_daily_online_net_uniform(by_market, market_key, ws, we)
+
+
+def _budget_mtd_for_market_key(
+    base_week: str, market_key: str, by_market: Dict[str, Dict[str, float]]
+) -> float:
+    """Online net budget for MTD actual dates (month start → week end), uniform daily spread."""
+    if market_key not in by_market:
+        return 0.0
+    mtd_p = get_mtd_periods_for_week(base_week)["mtd_actual"]
+    ms = datetime.strptime(mtd_p["start"], "%Y-%m-%d").date()
+    me = datetime.strptime(mtd_p["end"], "%Y-%m-%d").date()
+    return _sum_daily_online_net_uniform(by_market, market_key, ms, me)
 
 
 def _budget_ytd_for_market_key(
     base_week: str, market_key: str, by_market: Dict[str, Dict[str, float]]
 ) -> float:
+    """Online net budget for fiscal YTD elapsed (ytd_actual start → end), uniform daily spread."""
     if market_key not in by_market:
         return 0.0
     try:
         ytd_rng = get_ytd_periods_for_week(base_week)["ytd_actual"]
-        fy_start = datetime.strptime(ytd_rng["start"], "%Y-%m-%d").date()
-        week_end = datetime.strptime(ytd_rng["end"], "%Y-%m-%d").date()
+        ys = datetime.strptime(ytd_rng["start"], "%Y-%m-%d").date()
+        ye = datetime.strptime(ytd_rng["end"], "%Y-%m-%d").date()
     except Exception:
         return 0.0
-
-    y, m = fy_start.year, fy_start.month
-    ey, em = week_end.year, week_end.month
-
-    def before(ay: int, am: int, by: int, bm: int) -> bool:
-        return (ay, am) < (by, bm)
-
-    acc = 0.0
-    while before(y, m, ey, em) or (y == ey and m == em):
-        dim = _cal.monthrange(y, m)[1]
-        is_partial = y == week_end.year and m == week_end.month
-        frac = (week_end.day / dim) if is_partial else 1.0
-        acc += _market_net_for_calendar_month(by_market, market_key, y, m) * frac
-        if y == ey and m == em:
-            break
-        if m == 12:
-            y, m = y + 1, 1
-        else:
-            m += 1
-    return acc
+    return _sum_daily_online_net_uniform(by_market, market_key, ys, ye)
 
 
 def _pool_share_of_file_row_budget(
@@ -409,23 +380,23 @@ def _pool_share_of_file_row_budget(
     Fraction of the file ROW budget to assign to named pool countries (UAE, NL, …);
     the rest stays with table ROW via reconciliation (total − sum detail).
 
-    Uses pool actuals vs Qlik ROW actuals (countries not in the top list). If both are
-    zero this period, falls back to the same ratio from last year; if still no signal, 50%.
+    Uses last-year mix first (pool LY vs Qlik ROW LY) so the split is independent from
+    current-period actuals. Falls back to current period; if still no signal, 50%.
     """
     if not pool:
         return 1.0
     detail_set = set(detail_names)
-    row_act = sum(float(v) for k, v in actual_by_c.items() if k not in detail_set)
-    pool_act = sum(float(actual_by_c.get(c, 0.0)) for c in pool)
-    denom = pool_act + row_act
-    if denom > 0:
-        return pool_act / denom
     if ly_by_c:
         row_ly = sum(float(v) for k, v in ly_by_c.items() if k not in detail_set)
         pool_ly = sum(float(ly_by_c.get(c, 0.0)) for c in pool)
         dly = pool_ly + row_ly
         if dly > 0:
             return pool_ly / dly
+    row_act = sum(float(v) for k, v in actual_by_c.items() if k not in detail_set)
+    pool_act = sum(float(actual_by_c.get(c, 0.0)) for c in pool)
+    denom = pool_act + row_act
+    if denom > 0:
+        return pool_act / denom
     return 0.5
 
 
@@ -451,10 +422,10 @@ def _detail_budget_map_with_row_bucket_split(
             return _budget_week_for_market_key(base_week, mk, by_market)
 
     elif period == "month":
-        row_total = sum(_budget_month_for_market_key(base_week, k, by_market) for k in row_keys)
+        row_total = sum(_budget_mtd_for_market_key(base_week, k, by_market) for k in row_keys)
 
         def key_b(mk: str) -> float:
-            return _budget_month_for_market_key(base_week, mk, by_market)
+            return _budget_mtd_for_market_key(base_week, mk, by_market)
 
     else:
         row_total = sum(_budget_ytd_for_market_key(base_week, k, by_market) for k in row_keys)
@@ -484,19 +455,18 @@ def _detail_budget_map_with_row_bucket_split(
             out[c] = 0.0
         return out
 
-    pool_act = sum(float(actual_by_c.get(c, 0.0)) for c in pool)
-    if pool_act > 0:
-        for c in pool:
-            out[c] = pool_budget_total * (float(actual_by_c.get(c, 0.0)) / pool_act)
-    elif ly_by_c:
+    # Prefer LY mix so distributed budgets are not mechanically tied to current actuals.
+    if ly_by_c:
         pool_ly = sum(float(ly_by_c.get(c, 0.0)) for c in pool)
         if pool_ly > 0:
             for c in pool:
                 out[c] = pool_budget_total * (float(ly_by_c.get(c, 0.0)) / pool_ly)
-        else:
-            eq = pool_budget_total / len(pool)
-            for c in pool:
-                out[c] = eq
+            return out
+
+    pool_act = sum(float(actual_by_c.get(c, 0.0)) for c in pool)
+    if pool_act > 0:
+        for c in pool:
+            out[c] = pool_budget_total * (float(actual_by_c.get(c, 0.0)) / pool_act)
     else:
         eq = pool_budget_total / len(pool)
         for c in pool:
@@ -511,16 +481,6 @@ def _market_week_budget_from_file(
     if mk is None:
         return 0.0
     return _budget_week_for_market_key(base_week, mk, by_market)
-
-
-def _market_mtd_full_month_budget_from_file(
-    base_week: str, country: str, by_market: Dict[str, Dict[str, float]]
-) -> float:
-    """MTD budget through week end (aligned with mtd_actual, not full calendar month)."""
-    mk = _resolve_budget_market_key(country, by_market)
-    if mk is None:
-        return 0.0
-    return _budget_month_for_market_key(base_week, mk, by_market)
 
 
 def _market_ytd_budget_from_file(
@@ -600,12 +560,13 @@ def calculate_top_markets_net_revenue_mtd(
     """
     Same market ordering as /api/markets/top. Online net revenue Week / MTD / YTD with YoY.
 
-    Month column: actuals are MTD (month start → week end); budgets use the same span (prorated March
-    budget, etc.). YTD uses fiscal-year budget (from Apr) through the same end date as YTD actuals.
+    Month column: actuals are MTD (month start -> week end); month budget is the plan for the same calendar
+    dates (daily sum). YTD budget is the plan for the same fiscal YTD dates as actuals (daily sum), not the
+    full-year total.
 
     If budget_by_market_month is non-empty (from budget CSV with Market dimension), budgets use those
     values. Countries without a matching line share the file's ROW bucket by actual mix; the table ROW
-    line still reconciles to the prorated group MTD total for the month block. Otherwise totals in
+    line still reconciles to the group month total for the month block. Otherwise totals in
     budget_online_net are split by mix.
     """
     budget_online_net = budget_online_net or {}
@@ -656,12 +617,12 @@ def calculate_top_markets_net_revenue_mtd(
     week_from_mtd_summary = False
     week_from_file_rollup = False
     week_file_rollup_overrode_summary = False
-    bm_mtd = _prorate_full_month_total_to_mtd_span(base_week, bm) if bm is not None else None
-    bm_mtd_before_file_max = bm_mtd
     file_week_rollup = _file_budget_sum_all_market_keys(base_week, bmm, "week")
     file_mtd_rollup = _file_budget_sum_all_market_keys(base_week, bmm, "month")
     month_from_file_rollup = False
     month_file_rollup_overrode_summary = False
+    bm_month_before_file_max = _sf(bm)
+    bm_month_for_block: Optional[float] = float(bm) if bm is not None else None
 
     # File mode: group total must be >= sum of all CSV keys (incl. ROW + markets not in top list).
     # Summary week/MTD often equals only named markets → remainder for table ROW was 0; YTD still used fuller total.
@@ -678,20 +639,31 @@ def calculate_top_markets_net_revenue_mtd(
     if _sf(bw) < 1e-6:
         try:
             if bm is not None and float(bm) > 0:
-                _, _, wfrac = _week_overlap_fraction_in_month(base_week)
-                bw = float(bm) * wfrac
-                week_from_mtd_summary = True
-                week_from_file_rollup = False
-                week_file_rollup_overrode_summary = False
+                mtd_p = get_mtd_periods_for_week(base_week)["mtd_actual"]
+                ms = datetime.strptime(mtd_p["start"], "%Y-%m-%d").date()
+                me = datetime.strptime(mtd_p["end"], "%Y-%m-%d").date()
+                wr = get_week_date_range(base_week)
+                ws = datetime.strptime(wr["start"], "%Y-%m-%d").date()
+                we = datetime.strptime(wr["end"], "%Y-%m-%d").date()
+                overlap_start = max(ws, ms)
+                overlap_end = min(we, me)
+                if overlap_start <= overlap_end:
+                    mtd_days = (me - ms).days + 1
+                    wdays = (overlap_end - overlap_start).days + 1
+                    if mtd_days > 0 and wdays > 0:
+                        bw = float(bm) * (wdays / mtd_days)
+                        week_from_mtd_summary = True
+                        week_from_file_rollup = False
+                        week_file_rollup_overrode_summary = False
         except (TypeError, ValueError):
             pass
 
     if use_file and file_mtd_rollup > 0:
-        cur_m = _sf(bm_mtd)
+        cur_m = _sf(bm_month_for_block)
         if file_mtd_rollup > cur_m + 1e-6:
             month_file_rollup_overrode_summary = cur_m > 1e-6
-        bm_mtd = max(cur_m, file_mtd_rollup)
-        if _sf(bm_mtd_before_file_max) < 1e-6:
+        bm_month_for_block = max(cur_m, file_mtd_rollup)
+        if bm_month_before_file_max < 1e-6:
             month_from_file_rollup = True
         elif month_file_rollup_overrode_summary:
             month_from_file_rollup = True
@@ -708,12 +680,12 @@ def calculate_top_markets_net_revenue_mtd(
         )
         week_b = _build_period_block_from_file(net_w, net_wly, bw, detail_names, detail_budget_map=week_map)
         month_b = _build_period_block_from_file(
-            net_m, net_mly, bm_mtd, detail_names, detail_budget_map=month_map
+            net_m, net_mly, bm_month_for_block, detail_names, detail_budget_map=month_map
         )
         ytd_b = _build_period_block_from_file(net_y, net_yly, by, detail_names, detail_budget_map=ytd_map)
     else:
         week_b = _build_period_block(net_w, net_wly, bw, detail_names)
-        month_b = _build_period_block(net_m, net_mly, bm_mtd, detail_names)
+        month_b = _build_period_block(net_m, net_mly, bm_month_for_block, detail_names)
         ytd_b = _build_period_block(net_y, net_yly, by, detail_names)
 
     out_rows: List[Dict[str, Any]] = []
@@ -746,27 +718,26 @@ def calculate_top_markets_net_revenue_mtd(
     }
 
     expl: List[str] = [
-        "Week — Per country: budget file value for the calendar month that contains the week end, "
-        "× (number of days of this ISO week in that month ÷ days in that month). "
-        "Group total (Total row) is the larger of the summary online-net week budget and the sum of all "
-        "market + ROW lines in the budget file (file mode), so the table ROW line can show long-tail + file ROW; "
-        "if the week budget is still missing, it is inferred from the full-month summary × the same fraction.",
-        "Month — Per country: that month’s plan from the file × (week-end calendar day ÷ days in month), "
-        "matching Month actuals (1st through week end). "
-        "Group MTD total is the larger of the prorated summary and the sum of all file market + ROW lines (file mode).",
-        "YTD — Fiscal year from 1 Apr through week end; each month from the file is included in full except "
-        "the last month, which is prorated to the week-end day.",
+        "Budgets use monthly online net from the file, spread uniformly per calendar day, then summed over the same "
+        "dates as actuals. Week = 7-day ISO window; Month = MTD (1st → week end); YTD = fiscal YTD (Apr 1 → week end). "
+        "vs budget is actual − budget in SEK (absolute), not a percentage.",
+        "Week — Per country: daily spread of each month’s online net, summed for Mon–Sun. Group Total is at least the "
+        "larger of the summary week online-net budget and the sum of all market + ROW lines from the file (file mode). "
+        "If the summary week line is empty, it can be inferred from the MTD summary × (ISO week days overlapping MTD ÷ MTD days).",
+        "Month — Per country: same daily-spread logic for the MTD date range. Group MTD total matches Summary MTD online "
+        "net budget when available, and is at least the file rollup of per-market MTD slices (file mode).",
+        "YTD — Per country: daily spread summed for fiscal YTD elapsed (same start/end as YTD actuals), aligned with Summary YTD budget.",
         "Countries without a own line in the file share the file ROW budget: part by pool vs long-tail actual mix "
         "(last year if the current period has no volume), then split within the pool by online net share.",
     ]
     if week_from_mtd_summary:
         expl.append(
-            "Note: This week’s group budget was derived from the full-month online net budget × "
-            "the share of the month covered by this ISO week (summary week line was empty or zero)."
+            "Note: This week's group budget was inferred from the MTD online net budget × (days of the ISO week that "
+            "fall inside the MTD range ÷ MTD days), because the summary week line was empty or zero."
         )
     if week_from_file_rollup and _sf(bw_summary) < 1e-6:
         expl.append(
-            "Note: This week’s group budget is the sum of per-market (and ROW) week slices from the budget file "
+            "Note: This week's group budget is the sum of per-market (and ROW) week slices from the budget file "
             "because the summary week budget was empty or zero."
         )
     elif week_file_rollup_overrode_summary:
@@ -775,15 +746,15 @@ def calculate_top_markets_net_revenue_mtd(
             "because that sum exceeded the summary week budget — otherwise the ROW row would show no budget "
             "while named markets used the file."
         )
-    if month_from_file_rollup and _sf(bm_mtd_before_file_max) < 1e-6:
+    if month_from_file_rollup and bm_month_before_file_max < 1e-6:
         expl.append(
-            "Note: This month’s group MTD budget is the sum of per-market MTD slices from the budget file "
+            "Note: This month's group budget is the sum of per-market MTD slices from the budget file "
             "because the summary MTD budget was empty or zero."
         )
     elif month_file_rollup_overrode_summary:
         expl.append(
             "Note: Month group Total was set to at least the sum of all budget-file MTD lines (including ROW) "
-            "because that sum exceeded the prorated summary MTD — so ROW matches the long-tail remainder."
+            "because that sum exceeded the summary MTD budget — so ROW matches the long-tail remainder."
         )
 
     return {

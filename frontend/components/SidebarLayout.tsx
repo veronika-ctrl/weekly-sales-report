@@ -12,6 +12,9 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const [isSalesReportsOpen, setIsSalesReportsOpen] = useState(true)
   const [isAdditionalB2cOpen, setIsAdditionalB2cOpen] = useState(true)
   const [isMarketingOpen, setIsMarketingOpen] = useState(true)
+  const [isProductsOpen, setIsProductsOpen] = useState(true)
+  const [isCountriesOpen, setIsCountriesOpen] = useState(true)
+  const [isBudgetOpen, setIsBudgetOpen] = useState(true)
 
   const isActive = (path: string) => pathname === path
 
@@ -573,17 +576,25 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
               {/* Products group */}
               <div>
-                <div
-                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
-                    isActive('/products/summary') || isActive('/products/product') || 
+                <button
+                  type="button"
+                  onClick={() => setIsProductsOpen(!isProductsOpen)}
+                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    isActive('/products/summary') || isActive('/products/product') ||
                     isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer')
                       ? 'bg-gray-200 text-gray-900'
-                      : 'text-gray-600'
+                      : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
                   <IconFileChart className="h-4 w-4 flex-shrink-0" />
-                  {!isCollapsed && <span className="flex-1 text-left">Products</span>}
-                </div>
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">Products</span>
+                      {isProductsOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
+                    </>
+                  )}
+                </button>
+                {(isCollapsed || isProductsOpen) && (
                 <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
                   <Link
                     href="/products/summary"
@@ -646,24 +657,33 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     {!isCollapsed && <span>Customer</span>}
                   </Link>
                 </div>
+                )}
               </div>
 
               {/* Countries group */}
               <div>
-                <div
-                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
-                    isActive('/countries/sweden') || isActive('/countries/uk') || 
+                <button
+                  type="button"
+                  onClick={() => setIsCountriesOpen(!isCountriesOpen)}
+                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    isActive('/countries/sweden') || isActive('/countries/uk') ||
                     isActive('/countries/usa') || isActive('/countries/germany') ||
                     isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') ||
                     isActive('/countries/uae') || isActive('/countries/row')
                       ? 'bg-gray-200 text-gray-900'
-                      : 'text-gray-600'
+                      : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
                   <IconFileChart className="h-4 w-4 flex-shrink-0" />
-                  {!isCollapsed && <span className="flex-1 text-left">Countries</span>}
-                </div>
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">Countries</span>
+                      {isCountriesOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
+                    </>
+                  )}
+                </button>
+                {(isCollapsed || isCountriesOpen) && (
                 <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
                   <Link
                     href="/countries/sweden"
@@ -786,20 +806,29 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     {!isCollapsed && <span>ROW</span>}
                   </Link>
                 </div>
+                )}
               </div>
 
               {/* Budget group */}
               <div>
-                <div
-                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md ${
+                <button
+                  type="button"
+                  onClick={() => setIsBudgetOpen(!isBudgetOpen)}
+                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive('/budget/general') || isActive('/budget/markets')
                       ? 'bg-gray-200 text-gray-900'
-                      : 'text-gray-600'
+                      : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
                   <IconFileChart className="h-4 w-4 flex-shrink-0" />
-                  {!isCollapsed && <span className="flex-1 text-left">Budget</span>}
-                </div>
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">Budget</span>
+                      {isBudgetOpen ? <IconChevronDown className="h-4 w-4" /> : <IconChevronRight className="h-4 w-4" />}
+                    </>
+                  )}
+                </button>
+                {(isCollapsed || isBudgetOpen) && (
                 <div className={`${!isCollapsed ? 'ml-4 mt-1' : ''} space-y-1`}>
                   <Link
                     href="/budget/general"
@@ -826,6 +855,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     {!isCollapsed && <span>Markets</span>}
                   </Link>
                 </div>
+                )}
               </div>
 
               {/* Settings */}
