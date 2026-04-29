@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2 } from 'lucide-react'
+import { getApiBaseUrl } from '@/lib/api'
 
 type Row = Record<string, any>
 
@@ -28,8 +29,8 @@ export default function BudgetMarkets() {
         return
       }
       setLoading(true)
-      
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+      const API_BASE_URL = getApiBaseUrl()
       
       // Prefer cached data for budget
       if (budget_raw) {

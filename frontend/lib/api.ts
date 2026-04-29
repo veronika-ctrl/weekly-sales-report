@@ -1,8 +1,23 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+/** Default when NEXT_PUBLIC_API_URL is unset (avoids IPv6 `localhost` quirks vs uvicorn on 127.0.0.1). */
+const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000'
 
-/** True when a backend URL is configured (local or production). When false, app reads only from Supabase and uses client-side periods. */
+/** Resolved API origin: explicit env wins, else local default. */
+export function getApiBaseUrl(): string {
+  if (typeof process === 'undefined') return DEFAULT_LOCAL_API
+  const explicit = String(process.env.NEXT_PUBLIC_API_URL || '').trim()
+  return explicit || DEFAULT_LOCAL_API
+}
+
+const API_BASE_URL = getApiBaseUrl()
+
+/**
+ * When true, the app may call the Python API (uploads, metrics, file metadata).
+ * - Production: only if NEXT_PUBLIC_API_URL is set (Supabase-only deploys stay off).
+ * - Development: true even without env, using getApiBaseUrl() → local default.
+ */
 export const hasBackend = Boolean(
-  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL && String(process.env.NEXT_PUBLIC_API_URL).trim()
+  typeof process !== 'undefined' &&
+    (Boolean(String(process.env.NEXT_PUBLIC_API_URL || '').trim()) || process.env.NODE_ENV === 'development')
 )
 
 import { getPeriodsFromBaseWeek } from './periods'
@@ -1400,4 +1415,33 @@ export async function getDiscountsCategoryCountriesMonthly(
     }
     throw error
   }
+}
+
+export interface MonthlyVeronikaKpisResponse {
+  year_month: string
+  base_week: string
+  date_range: { start: string; end: string }
+  definitions: Record<string, string>
+  kpis: Record<string, number | null | undefined>
+  supporting: Record<string, number | string>
+  notes: string[]
+}
+
+export async function getMonthlyVeronikaKpis(
+  yearMonth: string,
+  baseWeek: string
+): Promise<MonthlyVeronikaKpisResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/monthly-veronika-kpis?year_month=${encodeURIComponent(yearMonth)}&base_week=${encodeURIComponent(baseWeek)}`
+  )
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(t || response.statusText)
+  }
+  return response.json()
+}
+
+/** Direct API URL to download the one-page Veronika monthly PDF. */
+export function getMonthlyVeronikaPdfUrl(yearMonth: string, baseWeek: string): string {
+  return `${API_BASE_URL}/api/monthly-veronika-kpis/pdf?year_month=${encodeURIComponent(yearMonth)}&base_week=${encodeURIComponent(baseWeek)}`
 }

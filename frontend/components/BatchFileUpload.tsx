@@ -6,6 +6,12 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { CheckCircle, XCircle, Loader2, Upload, RefreshCw } from 'lucide-react'
+import { getApiBaseUrl } from '@/lib/api'
+
+function clampPct(n: number): number {
+  if (!Number.isFinite(n)) return 0
+  return Math.min(100, Math.max(0, n))
+}
 
 interface FileType {
   type: string
@@ -135,8 +141,7 @@ export default function BatchFileUpload({
         }, 200) // Uppdatera var 200ms
       }
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${API_BASE_URL}/api/upload-file`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
         method: 'POST',
         body: formData,
         signal: controller.signal
@@ -215,10 +220,12 @@ export default function BatchFileUpload({
     setUploadResults({ success: [], failed: [] })
     setCurrentUploadingFile(null)
     initializeStatuses()
+    // Avoid first paint with total=0 (React batches updates → "1 of 0", NaN% before loop runs).
+    setUploadProgress({ current: 0, total: filesToUpload.length })
 
     // Wake cold hosts (e.g. Render free) before uploads so the first file is less likely to fail.
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    if (process.env.NEXT_PUBLIC_API_URL) {
+    const apiBase = getApiBaseUrl()
+    if (String(process.env.NEXT_PUBLIC_API_URL || '').trim()) {
       const warm = new AbortController()
       const warmT = setTimeout(() => warm.abort(), 120000)
       try {
@@ -388,29 +395,41 @@ export default function BatchFileUpload({
                 </>
               ) : (
                 <span className="text-gray-700">
-                  Preparing upload... ({uploadProgress.current + 1} of {uploadProgress.total})
+                  Preparing upload...
+                  {uploadProgress.total > 0
+                    ? ` (${uploadProgress.current + 1} of ${uploadProgress.total})`
+                    : ''}
                 </span>
               )}
             </div>
             <div className="text-right ml-4">
               <div className="text-sm font-medium text-gray-900">
-                {currentUploadingFile 
-                  ? `${Math.round(currentUploadingFile.progress)}%` 
-                  : `${Math.round(((uploadProgress.current + 1) / uploadProgress.total) * 100)}%`
-                }
+                {currentUploadingFile
+                  ? `${Math.round(clampPct(currentUploadingFile.progress))}%`
+                  : `${Math.round(
+                      clampPct(
+                        ((uploadProgress.current + 1) / Math.max(uploadProgress.total, 1)) * 100
+                      )
+                    )}%`}
               </div>
               <div className="text-xs text-gray-500">
-                Overall: {Math.round((uploadProgress.current / uploadProgress.total) * 100)}%
+                Overall:{' '}
+                {Math.round(
+                  clampPct((uploadProgress.current / Math.max(uploadProgress.total, 1)) * 100)
+                )}
+                %
               </div>
             </div>
           </div>
-          <Progress 
-            value={
-              currentUploadingFile 
-                ? ((uploadProgress.current / uploadProgress.total) * 100) + 
-                  (currentUploadingFile.progress / uploadProgress.total)
-                : ((uploadProgress.current + 1) / uploadProgress.total) * 100
-            } 
+          <Progress
+            value={clampPct(
+              currentUploadingFile && uploadProgress.total > 0
+                ? (uploadProgress.current / uploadProgress.total) * 100 +
+                    currentUploadingFile.progress / uploadProgress.total
+                : uploadProgress.total > 0
+                  ? ((uploadProgress.current + 1) / uploadProgress.total) * 100
+                  : 0
+            )}
           />
           {currentUploadingFile && (
             <div className="h-1 bg-gray-200 rounded-full overflow-hidden">

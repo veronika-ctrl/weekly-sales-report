@@ -148,12 +148,6 @@ export default function MetricsPreviewMTD({
     return value < 0 ? `(${absValue} pp)` : `+${absValue} pp`
   }
 
-  const formatPositivePpDifference = (value: number | null): string => {
-    if (value === null) return '—'
-    if (value === 0) return '0 pp'
-    return `+${Math.abs(value).toFixed(1)} pp`
-  }
-
   const formatValue = (value: number, metricKey: string): string => {
     if (metricKey === 'return_rate_pct' || metricKey === 'online_cost_of_sale_3') {
       return `${value.toFixed(1)}%`
@@ -174,12 +168,22 @@ export default function MetricsPreviewMTD({
     return value < 0 ? `-${formattedThousands}` : formattedThousands
   }
 
-  /** Metric-aware vs budget: pp for % KPIs; Y/Y-style % for value rows. */
+  /**
+   * vs budget for % KPIs where lower is better (return rate, COS).
+   * Uses (budget − actual) in pp: **positive** = below plan (favorable); **negative** = above plan (unfavorable).
+   */
+  const formatVsBudgetPercentPp = (actual: number, budget: number): string => {
+    const b = Math.abs(budget)
+    const diff = b - actual
+    if (diff === 0) return '0 pp'
+    const absV = Math.abs(diff).toFixed(1)
+    if (diff < 0) return `-${absV} pp`
+    return `+${absV} pp`
+  }
+
   const formatVsBudget = (actual: number, budget: number, metricKey: string): string => {
     if (isPercentMetric(metricKey)) {
-      const diff = actual - Math.abs(budget)
-      const signedDiff = isLowerBetterMetric(metricKey) ? -diff : diff
-      return formatPositivePpDifference(signedDiff)
+      return formatVsBudgetPercentPp(actual, budget)
     }
     if (metricKey === 'emer') {
       const a = Math.abs(actual)
@@ -271,7 +275,9 @@ export default function MetricsPreviewMTD({
           has Date + Metric + Value). <strong>Month</strong> = month-to-date actuals vs last year; month budget = plan
           for the same calendar dates (1st through end of the selected week). <strong>YTD</strong> budget = plan for the
           same fiscal YTD dates as actuals (Apr 1 through week end). <strong>vs budget</strong> = percent variance
-          for value rows; <strong>Return rate</strong> and <strong>COS</strong> are shown as percentage-point difference (pp).
+          for value rows. <strong>Return rate</strong> and <strong>COS</strong>: pp = budget minus actual;{' '}
+          <strong>+</strong> (e.g. +1.3 pp) = below plan (favorable); <strong>−</strong> (e.g. −2.5 pp) = above plan
+          (unfavorable).
         </p>
       )}
       <div className={`bg-gray-50 rounded-lg overflow-hidden overflow-x-auto ${isPdfMode ? 'rounded-sm' : ''}`}>
@@ -314,7 +320,7 @@ export default function MetricsPreviewMTD({
               {th(
                 PERIOD_HEAD.week.vsBudget,
                 'vs budget',
-                'Week: % variance for value rows; Return rate and COS are shown as pp.',
+                'Week: % variance for value rows. Return rate &amp; COS vs budget: pp = budget−actual; + = below plan, − = above plan.',
               )}
               {th(PERIOD_HEAD.month.actual, 'Actual', mtdAR)}
               {th(PERIOD_HEAD.month.lastYear, 'Last year', mtdLyR)}
@@ -327,7 +333,7 @@ export default function MetricsPreviewMTD({
               {th(
                 PERIOD_HEAD.month.vsBudget,
                 'vs budget',
-                'MTD: % variance for value rows; Return rate and COS are shown as pp.',
+                'MTD: % variance for value rows. Return rate &amp; COS: pp = budget−actual; + below plan, − above plan.',
               )}
               {th(PERIOD_HEAD.ytd.actual, 'Actual', ytdAR)}
               {th(PERIOD_HEAD.ytd.lastYear, 'Last year', ytdLyR)}
@@ -336,7 +342,7 @@ export default function MetricsPreviewMTD({
               {th(
                 PERIOD_HEAD.ytd.vsBudget,
                 'vs budget',
-                'YTD: % variance for value rows; Return rate and COS are shown as pp.',
+                'YTD: % variance for value rows. Return rate &amp; COS: pp = budget−actual; + below plan, − above plan.',
               )}
             </tr>
           </thead>

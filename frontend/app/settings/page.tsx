@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartSettings } from '@/contexts/ChartSettingsContext'
 import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
-import { hasBackend } from '@/lib/api'
+import { hasBackend, getApiBaseUrl } from '@/lib/api'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 
@@ -78,8 +78,7 @@ export default function Settings() {
     try {
       const controller = new AbortController()
       timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiBase}/api/file-metadata?week=${selectedWeek}`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/file-metadata?week=${selectedWeek}`, {
         signal: controller.signal
       })
       
@@ -165,8 +164,7 @@ export default function Settings() {
     }
     
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiBase}/api/file-dimensions?week=${selectedWeek}`)
+      const response = await fetch(`${getApiBaseUrl()}/api/file-dimensions?week=${selectedWeek}`)
       if (!response.ok) {
         console.warn(`Failed to fetch dimensions: ${response.statusText}`)
         setDimensions({})

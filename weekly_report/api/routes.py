@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import tempfile
 import shutil
+from io import BytesIO
 from datetime import datetime, timedelta
 from loguru import logger
 import pandas as pd
@@ -34,6 +35,8 @@ from weekly_report.src.periods.calculator import get_periods_for_week, get_week_
 from weekly_report.src.metrics.table1 import calculate_table1_for_periods, calculate_table1_for_periods_with_ytd, calculate_table1_mtd_and_ytd
 from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks
 from weekly_report.src.metrics.online_kpis import calculate_online_kpis_for_weeks
+from weekly_report.src.metrics.monthly_veronika_kpis import calculate_monthly_veronika_kpis
+from weekly_report.src.pdf.veronika_monthly_pdf import build_veronika_monthly_pdf
 from weekly_report.src.metrics.contribution import calculate_contribution_for_weeks
 from weekly_report.src.metrics.gender_sales import calculate_gender_sales_for_weeks
 from weekly_report.src.metrics.men_category_sales import calculate_men_category_sales_for_weeks
@@ -2854,6 +2857,61 @@ async def get_online_kpis(
         import traceback
         logger.error(f"Error getting Online KPIs for {base_week}: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/monthly-veronika-kpis")
+async def get_monthly_veronika_kpis(
+    year_month: str = Query(..., description="Calendar month YYYY-MM"),
+    base_week: str = Query(..., description="ISO week folder under data/raw where exports live"),
+):
+    """Veronika monthly scorecard KPIs for a calendar month (filters rows by Date/Days)."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        config = load_config(week=base_week)
+        payload = calculate_monthly_veronika_kpis(year_month, base_week, Path(config.data_root))
+        return payload
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error monthly-veronika-kpis {year_month} {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/monthly-veronika-kpis/pdf")
+async def get_monthly_veronika_kpis_pdf(
+    year_month: str = Query(..., description="Calendar month YYYY-MM"),
+    base_week: str = Query(..., description="ISO week folder under data/raw"),
+):
+    """Download one-page PDF for Veronika monthly KPIs."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        config = load_config(week=base_week)
+        payload = calculate_monthly_veronika_kpis(year_month, base_week, Path(config.data_root))
+        buf = BytesIO()
+        build_veronika_monthly_pdf(payload, buf)
+        fn = f"veronika-monthly-{year_month}.pdf"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error monthly-veronika-kpis pdf {year_month} {base_week}: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

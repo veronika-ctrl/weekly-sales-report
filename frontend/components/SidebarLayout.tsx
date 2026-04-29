@@ -64,6 +64,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/countries/uae': { title: 'UAE', subtitle: 'Country-specific KPIs' },
       '/countries/row': { title: 'ROW', subtitle: 'Rest of World KPIs' },
       '/settings': { title: 'Settings', subtitle: 'Configure data sources and file uploads' },
+      '/monthly-veronika': { title: 'Monthly Veronika KPIs', subtitle: 'Calendar month scorecard (dashboard)' },
+      '/monthly-veronika/print': { title: 'Monthly Veronika — Print', subtitle: 'Print-friendly view and PDF link' },
     }
     
     if (pathname?.startsWith('/audience/') && pathname !== '/audience-total') {
@@ -120,7 +122,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/countries/sweden') || isActive('/countries/uk') || isActive('/countries/usa') ||
                     isActive('/countries/germany') || isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') || isActive('/countries/uae') ||
-                    isActive('/countries/row') || isActive('/audience-total') || pathname?.startsWith('/audience/')
+                    isActive('/countries/row') ||                     isActive('/audience-total') || pathname?.startsWith('/audience/') ||
+                    pathname?.startsWith('/monthly-veronika')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -316,6 +319,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   onClick={() => setIsAdditionalB2cOpen(!isAdditionalB2cOpen)}
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive('/online-kpis') ||
+                    isActive('/monthly-veronika') ||
+                    pathname?.startsWith('/monthly-veronika') ||
                     isActive('/contribution') ||
                     isActive('/category-sales') ||
                     isActive('/products-new')
@@ -345,6 +350,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconTrendingUp className="h-4 w-4" />
                       {!isCollapsed && <span>Online KPIs</span>}
+                    </Link>
+                    <Link
+                      href="/monthly-veronika"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/monthly-veronika')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconFileChart className="h-4 w-4" />
+                      {!isCollapsed && <span>Monthly Veronika</span>}
                     </Link>
                     <Link
                       href="/contribution"
