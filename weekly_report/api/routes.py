@@ -3854,14 +3854,26 @@ async def upload_file(
         target_dir = config.raw_data_path / file_type
         target_dir.mkdir(parents=True, exist_ok=True)
         
-        # Delete existing files in the directory (except .DS_Store)
-        for existing_file in target_dir.glob("*.*"):
-            if not existing_file.name.startswith('.'):
-                existing_file.unlink()
-                logger.info(f"Deleted old file: {existing_file}")
+        # Delete existing files in the directory (except .DS_Store).
+        # Exception: 'discounts' (Full price vs Sale) accumulates history across
+        # multiple uploads — we keep prior files and merge by date at read time,
+        # so a user can upload this year and last year (or successive weeks)
+        # one-by-one into the same slot without losing earlier data.
+        if file_type != "discounts":
+            for existing_file in target_dir.glob("*.*"):
+                if not existing_file.name.startswith('.'):
+                    existing_file.unlink()
+                    logger.info(f"Deleted old file: {existing_file}")
         
         # Save file
         target_path = target_dir / file.filename
+        # For accumulating slots, avoid overwriting when a prior upload used the
+        # same filename (the read-side dedupes overlapping dates, newest wins).
+        if file_type == "discounts" and target_path.exists():
+            import time as _time
+            stem = Path(file.filename).stem
+            suffix = Path(file.filename).suffix
+            target_path = target_dir / f"{stem}-{int(_time.time())}{suffix}"
         with target_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
