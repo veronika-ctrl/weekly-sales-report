@@ -18,10 +18,10 @@ export default function SummaryMtdPage() {
   // Ensure base week data is loaded (for header/context)
   useEffect(() => {
     if (!baseWeek) return
-    if (!periods && !loading) {
+    if ((!periods || !isDataReady) && !loading && !error) {
       loadAllData(baseWeek, false)
     }
-  }, [baseWeek, periods, loading, loadAllData])
+  }, [baseWeek, periods, isDataReady, loading, loadAllData, error])
 
   // Fetch MTD metrics when base week is set
   useEffect(() => {

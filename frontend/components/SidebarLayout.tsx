@@ -51,6 +51,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/products/summary': { title: 'Products Summary', subtitle: 'Overview of product performance' },
       '/products/product': { title: 'Products', subtitle: 'Product sales by category' },
       '/products/discounts': { title: 'Discounts', subtitle: 'Discount sales analysis' },
+      '/products/full-price-vs-sale': { title: 'Full Price vs Sale', subtitle: 'Weekly full price vs discounted with YoY' },
       '/products/discount-level': { title: 'Discount Level', subtitle: 'Discount level trend by market with YoY' },
       '/products/customer': { title: 'Customer Quality', subtitle: 'Customer discount behavior analysis' },
       '/countries/sweden': { title: 'Sweden', subtitle: 'Country-specific KPIs' },
@@ -598,7 +599,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   onClick={() => setIsProductsOpen(!isProductsOpen)}
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive('/products/summary') || isActive('/products/product') ||
-                    isActive('/products/discounts') || isActive('/products/discount-level') || isActive('/products/customer')
+                    isActive('/products/discounts') || isActive('/products/full-price-vs-sale') || isActive('/products/discount-level') || isActive('/products/customer')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -648,6 +649,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   >
                     <IconFileChart className="h-4 w-4" />
                     {!isCollapsed && <span>Discounts</span>}
+                  </Link>
+                  <Link
+                    href="/products/full-price-vs-sale"
+                    prefetch={true}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                      isActive('/products/full-price-vs-sale')
+                        ? 'bg-gray-200 text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <IconFileChart className="h-4 w-4" />
+                    {!isCollapsed && <span>Full Price vs Sale</span>}
                   </Link>
                   <Link
                     href="/products/discount-level"

@@ -26,8 +26,10 @@ export const BarChart = RBarChart as React.ForwardRefExoticComponent<
 >
 
 export {
+  Bar,
   CartesianGrid,
   LabelList,
+  Legend,
   Line,
   XAxis,
   YAxis,

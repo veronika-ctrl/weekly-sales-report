@@ -12,13 +12,13 @@ export default function Summary() {
   const { periods, baseWeek, loading, error, loadAllData, isDataReady } = useDataCache()
   const [metrics, setMetrics] = useState<unknown>(null)
 
-  // Load data when a week is selected and not already loaded
+  // Load when week is set but dashboard cache is incomplete (e.g. only periods from Supabase stub path)
   useEffect(() => {
     if (!baseWeek) return
-    if (!periods && !loading) {
+    if ((!periods || !isDataReady) && !loading && !error) {
       loadAllData(baseWeek, false)
     }
-  }, [periods, loading, baseWeek, loadAllData])
+  }, [periods, isDataReady, loading, baseWeek, loadAllData, error])
 
   const handleRetry = async () => {
     if (baseWeek) {

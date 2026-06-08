@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import LoadingProgress from '@/components/LoadingProgress'
 import { useSearchParams, usePathname } from 'next/navigation'
@@ -8,7 +8,18 @@ import Link from 'next/link'
 import { Calendar, Settings, Loader2 } from 'lucide-react'
 import WeekSelector from '@/components/WeekSelector'
 
-export default function LayoutContent({ children }: { children: React.ReactNode }) {
+/**
+ * `useSearchParams()` opts the subtree into client rendering and can suspend.
+ * Keep it inside this inner Suspense so the root layout fallback never receives
+ * a broken page slot (which surfaced as global `not-found` on /settings, etc.).
+ */
+function LayoutContentInner({
+  children,
+  isPdfMode,
+}: {
+  children: React.ReactNode
+  isPdfMode: boolean
+}) {
   const { loading, loadingProgress, baseWeek, setBaseWeek, hasRestoredWeek, isDataReady, periods } = useDataCache()
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
 
@@ -17,10 +28,7 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
       .then((m) => m.getWeeksWithDataFromSupabase())
       .then((weeks) => setWeeksWithData(new Set(weeks)))
   }, [])
-  const searchParams = useSearchParams()
   const pathname = usePathname()
-  const pdfParam = searchParams?.get('pdf')
-  const isPdfMode = pdfParam === '1' || pdfParam === 'true'
   const isSettings = pathname === '/settings'
 
   // Before we've restored week from URL/localStorage, show a neutral loading state (same on server and client to avoid hydration mismatch)
@@ -52,8 +60,9 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
     )
   }
 
-  // Don't show loading progress in PDF mode - let the page render even while loading
-  if (loading && loadingProgress && !isPdfMode) {
+  // Don't show loading progress in PDF mode - let the page render even while loading.
+  // Always allow Settings through so users can change week or reach the backend while a report load is in progress.
+  if (loading && loadingProgress && !isPdfMode && !isSettings) {
     return <LoadingProgress progress={loadingProgress} />
   }
 
@@ -98,5 +107,24 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
   }
 
   return <>{children}</>
+}
+
+function LayoutContentPdfParams({ children }: { children: React.ReactNode }) {
+  const searchParams = useSearchParams()
+  const pdfParam = searchParams?.get('pdf')
+  const isPdfMode = pdfParam === '1' || pdfParam === 'true'
+  return <LayoutContentInner isPdfMode={isPdfMode}>{children}</LayoutContentInner>
+}
+
+export default function LayoutContent({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <LayoutContentInner isPdfMode={false}>{children}</LayoutContentInner>
+      }
+    >
+      <LayoutContentPdfParams>{children}</LayoutContentPdfParams>
+    </Suspense>
+  )
 }
 

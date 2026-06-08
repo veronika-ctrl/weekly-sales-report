@@ -201,6 +201,117 @@ def calculate_discount_sales_for_weeks(base_week: str, num_weeks: int, data_root
     }
 
 
+def calculate_full_price_share_for_date_range(
+    base_week: str,
+    data_root: Path,
+    start: str,
+    end: str,
+) -> Dict[str, Any]:
+    """
+    Full-price share of net sales for a calendar date range from ``data/raw/{week}/discounts/``.
+
+    Business rule (same as Products → Discounts):
+    - ``Produktvariantens ordinare pris`` (compare-at) > 0 => sale/discounted
+    - otherwise => full price
+    """
+    raw_path = Path(data_root) / "raw" / base_week / "discounts"
+    files = [f for f in raw_path.glob("*.*") if not f.name.startswith(".")]
+    if not files:
+        return {
+            "full_price_share_pct": None,
+            "error": "no_discounts_file",
+            "filename": None,
+        }
+
+    latest_file = max(files, key=lambda f: f.stat().st_mtime)
+    df = _read_csv_flexible(latest_file)
+    df.columns = [c.strip().replace('"', "") for c in df.columns]
+
+    date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
+    net_sales_col = _pick_column(
+        df,
+        ["Nettoförsäljning", "Net Revenue", "Net sales", "Net amount", "Net sales amount"],
+    )
+    ordinary_price_col = _pick_column(
+        df,
+        [
+            "Produktvariantens ordinare pris",
+            "Produktvariantens ordinarie pris",
+            "Ordinarie pris",
+            "Ordinare pris",
+            "Regular price",
+            "Compare at price",
+        ],
+    )
+    if not date_col or not net_sales_col or not ordinary_price_col:
+        return {
+            "full_price_share_pct": None,
+            "error": "missing_columns",
+            "filename": latest_file.name,
+            "detected": {
+                "date": date_col,
+                "net_sales": net_sales_col,
+                "ordinary_price": ordinary_price_col,
+                "columns": df.columns.tolist(),
+            },
+        }
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+    start_dt = pd.to_datetime(start, errors="coerce")
+    end_dt = pd.to_datetime(end, errors="coerce")
+    if pd.isna(start_dt) or pd.isna(end_dt):
+        return {"full_price_share_pct": None, "error": "invalid_date_range", "filename": latest_file.name}
+
+    df = df.loc[(df[date_col] >= start_dt) & (df[date_col] <= end_dt)].copy()
+    if df.empty:
+        return {
+            "full_price_share_pct": None,
+            "error": "no_rows_in_range",
+            "filename": latest_file.name,
+        }
+
+    # Optional: restrict to online channel when export includes it.
+    channel_col = _pick_column(
+        df,
+        ["Sales Channel", "Sales channel", "Försäljningskanal", "Channel"],
+    )
+    if channel_col:
+        ch = df[channel_col].astype(str).str.strip().str.lower()
+        online_mask = ch.eq("online")
+        if bool(online_mask.any()):
+            df = df.loc[online_mask].copy()
+
+    net_line = _to_number(df[net_sales_col])
+    ordinary = _to_number(df[ordinary_price_col])
+    overall = float(net_line.sum() or 0.0)
+    if overall <= 1e-9:
+        return {
+            "full_price_share_pct": None,
+            "error": "zero_net_sales",
+            "filename": latest_file.name,
+        }
+
+    full = float(net_line.loc[ordinary <= 0].sum() or 0.0)
+    share = full / overall * 100.0
+    return {
+        "full_price_share_pct": round(share, 2),
+        "error": None,
+        "filename": latest_file.name,
+        "columns_used": {
+            "date": date_col,
+            "net_sales": net_sales_col,
+            "ordinary_price": ordinary_price_col,
+            "channel": channel_col,
+        },
+        "supporting": {
+            "net_revenue_overall": round(overall, 2),
+            "net_revenue_full_price": round(full, 2),
+            "net_revenue_sale": round(overall - full, 2),
+        },
+    }
+
+
 def calculate_discounts_summary_metrics(base_week: str, data_root: Path, include_ytd: bool = True) -> Dict[str, Any]:
     """
     Products Summary metrics derived from Discounts file:
@@ -2343,6 +2454,164 @@ def calculate_discount_level_for_weeks(
             "country": country_col,
         },
         "markets": markets,
+        "weeks": weeks_out,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Custom Shopify app: "revenue-over-time" format (daily revenue by 5 sale types)
+#
+# Header looks like:
+#   Date, Full Price, Compare-at Price Sale, Discount Code / Auto Discount,
+#   Both, Price Drop Sale, Total
+#
+# Unlike the raw Shopify line-item export, this file is already aggregated per
+# day. We accumulate every uploaded file (across all week folders) into one
+# daily history, deduped by date (latest uploaded file wins), so short weekly
+# exports build up a full history that enables year-over-year comparison.
+# ---------------------------------------------------------------------------
+
+def _is_revenue_over_time_format(df: pd.DataFrame) -> bool:
+    """True if the dataframe matches the custom app's daily 'revenue-over-time' export."""
+    date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
+    full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
+    total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
+    return bool(date_col and full_col and total_col)
+
+
+def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
+    """
+    Merge every uploaded ``revenue-over-time`` file (across all week folders) into a
+    single daily history, deduped by date (most recently modified file wins).
+
+    Returns a dict with a normalized DataFrame under ``df`` containing columns:
+    ``_date`` (datetime), ``_full`` (full-price net), ``_discounted`` (Total - Full),
+    ``_total`` (net). When no matching files are found, ``df`` is empty.
+    """
+    raw_root = Path(data_root) / "raw"
+    files = sorted(
+        [f for f in raw_root.glob("*/discounts/*.*") if not f.name.startswith(".")],
+        key=lambda f: f.stat().st_mtime,
+    )
+
+    frames: List[pd.DataFrame] = []
+    files_used: List[str] = []
+    for f in files:
+        try:
+            df = _read_csv_flexible(f)
+        except Exception:
+            continue
+        df.columns = [c.strip().replace('"', "") for c in df.columns]
+        if not _is_revenue_over_time_format(df):
+            continue
+
+        date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
+        full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
+        total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
+
+        sub = pd.DataFrame()
+        sub["_date"] = pd.to_datetime(df[date_col], errors="coerce")
+        sub["_full"] = _to_number(df[full_col])
+        sub["_total"] = _to_number(df[total_col])
+        sub = sub.dropna(subset=["_date"])
+        # Carry file mtime so later (newer) uploads win on duplicate dates.
+        sub["_mtime"] = f.stat().st_mtime
+        frames.append(sub)
+        files_used.append(f.name)
+
+    if not frames:
+        return {"df": pd.DataFrame(columns=["_date", "_full", "_discounted", "_total"]), "files_used": []}
+
+    alld = pd.concat(frames, ignore_index=True)
+    # Newest file wins per calendar date.
+    alld = alld.sort_values(["_date", "_mtime"]).drop_duplicates(subset=["_date"], keep="last")
+    alld["_discounted"] = (alld["_total"] - alld["_full"]).clip(lower=0.0)
+    alld = alld[["_date", "_full", "_discounted", "_total"]].sort_values("_date").reset_index(drop=True)
+    return {"df": alld, "files_used": files_used}
+
+
+def calculate_full_price_vs_sale_weekly(
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+) -> Dict[str, Any]:
+    """
+    Weekly Full Price vs Discounted net sales for the last N ISO weeks, with the
+    matching same-week-number values from last year (YoY).
+
+    Source: the custom app's accumulated ``revenue-over-time`` daily history.
+    Discounted = Total - Full Price.
+    """
+    history = load_revenue_over_time_history(data_root)
+    df = history["df"]
+    if df.empty:
+        return {
+            "base_week": base_week,
+            "num_weeks": num_weeks,
+            "source": "revenue_over_time",
+            "has_last_year": False,
+            "files_used": history["files_used"],
+            "weeks": [],
+        }
+
+    df = df.copy()
+    df["_week"] = _iso_week_series(df["_date"])
+
+    expected_weeks = _build_display_weeks(base_week, num_weeks)
+    expected_last_year = [f"{int(w.split('-')[0]) - 1}-{w.split('-')[1]}" for w in expected_weeks]
+
+    wanted = set(expected_weeks + expected_last_year)
+    sub = df[df["_week"].isin(wanted)]
+    grouped = sub.groupby("_week")[["_full", "_discounted", "_total"]].sum()
+
+    def _row_for(week: str) -> Dict[str, float]:
+        if week in grouped.index:
+            r = grouped.loc[week]
+            full = float(r["_full"] or 0.0)
+            disc = float(r["_discounted"] or 0.0)
+            total = float(r["_total"] or 0.0)
+        else:
+            full = disc = total = 0.0
+        pct = (full / total * 100.0) if total > 0 else None
+        return {"full_price": full, "discounted": disc, "total": total, "full_price_pct": pct}
+
+    has_last_year = False
+    weeks_out: List[Dict[str, Any]] = []
+    for w in expected_weeks:
+        y_str, ww = w.split("-")
+        ly_w = f"{int(y_str) - 1}-{ww}"
+        cur = _row_for(w)
+        ly = _row_for(ly_w)
+        if ly["total"] > 0:
+            has_last_year = True
+        yoy_total_pct = (
+            (cur["total"] - ly["total"]) / ly["total"] * 100.0 if ly["total"] > 0 else None
+        )
+        fp_delta = (
+            cur["full_price_pct"] - ly["full_price_pct"]
+            if cur["full_price_pct"] is not None and ly["full_price_pct"] is not None
+            else None
+        )
+        weeks_out.append(
+            {
+                "week": w,
+                **cur,
+                "last_year": {"week": ly_w, **ly},
+                "yoy_total_pct": yoy_total_pct,
+                "full_price_pct_delta": fp_delta,
+            }
+        )
+
+    return {
+        "base_week": base_week,
+        "num_weeks": num_weeks,
+        "source": "revenue_over_time",
+        "has_last_year": has_last_year,
+        "files_used": history["files_used"],
+        "history_range": {
+            "start": str(df["_date"].min().date()),
+            "end": str(df["_date"].max().date()),
+        },
         "weeks": weeks_out,
     }
 

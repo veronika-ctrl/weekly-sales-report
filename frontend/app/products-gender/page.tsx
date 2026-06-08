@@ -14,10 +14,10 @@ export default function ProductsGender() {
   // Load data when a week is selected and not already loaded
   useEffect(() => {
     if (!baseWeek) return
-    if (!periods && !loading) {
+    if ((!periods || !isDataReady) && !loading && !error) {
       loadAllData(baseWeek, false)
     }
-  }, [periods, loading, baseWeek, loadAllData])
+  }, [periods, isDataReady, loading, baseWeek, loadAllData, error])
 
   const handleRetry = async () => {
     if (baseWeek) await loadAllData(baseWeek, true)

@@ -1,6 +1,10 @@
 import pytest
+import pandas as pd
 
-from weekly_report.src.metrics.monthly_veronika_kpis import _month_bounds, _is_amer_country
+from weekly_report.src.metrics.monthly_veronika_kpis import (
+    _month_bounds,
+    _shopify_sessions_in_range,
+)
 
 
 def test_month_bounds_february():
@@ -17,7 +21,16 @@ def test_month_bounds_invalid():
         _month_bounds("26-01")
 
 
-def test_is_amer_country():
-    assert _is_amer_country("United States") is True
-    assert _is_amer_country("Canada") is True
-    assert _is_amer_country("Sweden") is False
+def test_shopify_sessions_month_column():
+    df = pd.DataFrame(
+        {
+            "Month": ["2026-05-01", "2026-05-01", "2026-04-01"],
+            "Session country": ["SE", "DE", "SE"],
+            "Sessions": [100, 50, 999],
+        }
+    )
+    start = pd.Timestamp("2026-05-01")
+    end = pd.Timestamp("2026-05-31 23:59:59")
+    assert _shopify_sessions_in_range(df, start, end) == 150
+
+

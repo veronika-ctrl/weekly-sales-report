@@ -15,8 +15,7 @@ const ROWS: { key: keyof MonthlyVeronikaKpisResponse['kpis']; title: string }[] 
   { key: 'new_customer_acquisition_cost', title: 'New customer acquisition cost (SEK)' },
   { key: 'returning_customer_revenue', title: 'Returning customer revenue (SEK)' },
   { key: 'cos_pct', title: 'COS %' },
-  { key: 'cos_amer_pct', title: 'COS % — Americas' },
-  { key: 'emer_amer', title: 'eMER / aMER — Americas' },
+  { key: 'amer', title: 'aMER' },
 ]
 
 function fmt(v: number | null | undefined, isPct: boolean) {
@@ -79,9 +78,31 @@ function PrintBody() {
                 </tr>
               )
             })}
+            {data.budget_plan && (
+              <>
+                <tr className="bg-amber-50/60">
+                  <td colSpan={2} className="border-t border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
+                    Budget (plan, same month)
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border-t border-gray-200 px-3 pl-4 py-2">Plan — COS %</td>
+                  <td className="border-t border-gray-200 px-3 py-2 text-right font-mono">
+                    {fmt(data.budget_plan.cos_pct as number, true)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border-t border-gray-200 px-3 pl-4 py-2">Plan — aMER</td>
+                  <td className="border-t border-gray-200 px-3 py-2 text-right font-mono">
+                    {fmt(data.budget_plan.amer as number, false)}
+                  </td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
       )}
+      {data?.budget_error && <p className="mt-3 text-xs text-gray-600">Budget: {data.budget_error}</p>}
       {data?.notes && data.notes.length > 0 && (
         <ul className="mt-4 text-xs text-gray-600 list-disc pl-5">
           {data.notes.map((n, i) => (

@@ -82,14 +82,14 @@ def calculate_sessions_per_country_for_weeks(base_week: str, num_weeks: int, dat
     
     # Add iso_week column if not present
     if 'iso_week' not in shopify_df.columns:
-        # Try to find date column
+        # Prefer Day/Dag (Shopify) over Date when both exist
         date_col = None
-        if 'Date' in shopify_df.columns:
-            date_col = 'Date'
-        elif 'Day' in shopify_df.columns:
+        if 'Day' in shopify_df.columns:
             date_col = 'Day'
         elif 'Dag' in shopify_df.columns:
             date_col = 'Dag'  # Swedish column name
+        elif 'Date' in shopify_df.columns:
+            date_col = 'Date'
         
         if date_col:
             iso_cal = pd.to_datetime(shopify_df[date_col]).dt.isocalendar()

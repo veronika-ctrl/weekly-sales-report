@@ -8,6 +8,17 @@ import pandas as pd
 from loguru import logger
 
 
+def normalize_dema_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Strip headers and map Day -> Days (some weekly exports use singular Day)."""
+    if df.empty:
+        return df
+    out = df.copy()
+    out.columns = out.columns.astype(str).str.strip().str.strip('"')
+    if "Days" not in out.columns and "Day" in out.columns:
+        out = out.rename(columns={"Day": "Days"})
+    return out
+
+
 def detect_csv_dialect(file_path: Path) -> csv.Dialect:
     """Detect CSV dialect from file content."""
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -86,6 +97,8 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
         combined_df = dataframes[0]
     else:
         combined_df = pd.concat(dataframes, ignore_index=True)
+
+    combined_df = normalize_dema_columns(combined_df)
     
     logger.info(f"Combined {source_name} data: {combined_df.shape}")
     return combined_df

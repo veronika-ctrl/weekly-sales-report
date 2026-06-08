@@ -102,18 +102,36 @@ def build_veronika_monthly_pdf(payload: Dict[str, Any], output: Union[Path, Byte
             Paragraph(_fmt_num(kpis.get("returning_customer_revenue")), val),
         ],
         [
-            Paragraph("COS % — marketing ÷ online gross", lab),
+            Paragraph("COS % — marketing ÷ online gross (all markets)", lab),
             Paragraph(_fmt_pct(kpis.get("cos_pct")), val),
         ],
         [
-            Paragraph("COS % — Americas (marketing ÷ online gross, AMER countries)", lab),
-            Paragraph(_fmt_pct(kpis.get("cos_amer_pct")), val),
-        ],
-        [
-            Paragraph("eMER / aMER — Americas (new net ÷ marketing)", lab),
-            Paragraph(_fmt_num(kpis.get("emer_amer")), val),
+            Paragraph("aMER (eMER) — online new-customer net ÷ marketing (all markets, same as Table 1)", lab),
+            Paragraph(_fmt_num(kpis.get("amer")), val),
         ],
     ]
+    bp = payload.get("budget_plan")
+    if isinstance(bp, dict) and (bp.get("cos_pct") is not None or bp.get("amer") is not None):
+        rows.append(
+            [
+                Paragraph("<b>Budget (plan, same month)</b>", lab),
+                Paragraph("", val),
+            ]
+        )
+        rows.append(
+            [
+                Paragraph("Plan — COS %", lab),
+                Paragraph(_fmt_pct(bp.get("cos_pct")), val),
+            ]
+        )
+        rows.append(
+            [
+                Paragraph("Plan — aMER", lab),
+                Paragraph(_fmt_num(bp.get("amer")), val),
+            ]
+        )
+    be = payload.get("budget_error")
+    added_budget = isinstance(bp, dict) and (bp.get("cos_pct") is not None or bp.get("amer") is not None)
 
     tbl = Table([[a, b] for a, b in rows], colWidths=[page_w * 0.58, page_w * 0.28])
     tbl.setStyle(
@@ -137,13 +155,23 @@ def build_veronika_monthly_pdf(payload: Dict[str, Any], output: Union[Path, Byte
         story.append(Paragraph("<b>Notes</b>", lab))
         for n in notes:
             story.append(Paragraph(str(n), lab))
+    if be and not added_budget:
+        story.append(Paragraph(f"<i>Budget: {str(be)}</i>", lab))
     story.append(Spacer(1, 6))
-    story.append(
-        Paragraph(
-            "<i>Corridor vs budget: compare to your monthly budget file for AMER COS / aMER targets.</i>",
-            lab,
+    if added_budget:
+        story.append(
+            Paragraph(
+                "<i>Plan — COS % and aMER: same month column in the budget CSV as Table 1 MTD (upload in Settings).</i>",
+                lab,
+            )
         )
-    )
+    else:
+        story.append(
+            Paragraph(
+                "<i>Budget: upload a budget CSV (Settings) with COS % and aMER / New Net and Marketing to show plan here.</i>",
+                lab,
+            )
+        )
 
     doc.build(story)
     logger.info(f"Veronika monthly PDF built for {ym}")

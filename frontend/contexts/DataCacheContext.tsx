@@ -24,12 +24,12 @@ import {
   getContributionReturningPerCountry,
   getContributionReturningTotalPerCountry,
   getTotalContributionPerCountry,
-  getBatchMetrics,
   getBudgetGeneral,
   getActualsGeneral,
   getBudgetRaw,
   getActualsMarkets,
   getActualsMarketsDetailed,
+  getBatchMetrics,
   type PeriodsResponse,
   type MetricsResponse,
   type MarketsResponse,
@@ -51,7 +51,6 @@ import {
   type ContributionReturningPerCountryResponse,
   type ContributionReturningTotalPerCountryResponse,
   type TotalContributionPerCountryResponse,
-  type BatchMetricsResponse,
   type BudgetGeneralResponse,
   type ActualsGeneralResponse
 } from '@/lib/api'
@@ -177,16 +176,18 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
   const [isDataReady, setIsDataReady] = useState(false)
   /** Ref to invalidate in-flight passive Supabase loads when baseWeek changes or a new load starts (so stale load cannot overwrite state). */
   const passiveLoadWeekRef = useRef<string | null>(null)
+  const loadInFlightRef = useRef<string | null>(null)
   
   // Wrap setBaseWeek to also save to localStorage (empty string = no week selected)
   const setBaseWeek = useCallback((week: string) => {
+    setError(null)
     setBaseWeekInternal(week)
     if (week) localStorage.setItem('selected_week', week)
     else localStorage.removeItem('selected_week')
   }, [])
 
   // Bump cache version to invalidate stale data after backend calc changes
-  const CACHE_VERSION = 'v3'
+  const CACHE_VERSION = 'v9'
   const getCacheKey = (week: string) => `dashboard_cache_${CACHE_VERSION}_${week}`
 
   const getCachedData = (week: string): CacheData | null => {
@@ -219,6 +220,11 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
 
   const loadAllData = useCallback(async (week: string, forceRefresh = false) => {
     if (!week) return
+    if (loadInFlightRef.current === week) {
+      console.debug(`loadAllData already running for ${week}, skipping duplicate request`)
+      return
+    }
+    loadInFlightRef.current = week
     setError(null)
 
     // Check cache first
@@ -255,6 +261,9 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       // @ts-ignore
       setActuals_markets_detailed(cached.actuals_markets_detailed ?? null)
       setIsDataReady(true)
+      if (loadInFlightRef.current === week) {
+        loadInFlightRef.current = null
+      }
       return
     }
   }
@@ -387,44 +396,46 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
           console.debug('Supabase read error:', supabaseError)
         }
       } else {
-        setLoadingProgress(prev => ({
-          step: 'metrics',
+        setLoadingProgress((prev) => ({
+          step: 'periods',
           stepNumber: 1,
           totalSteps: 27,
-          message: 'Supabase disabled – loading from API...',
-          percentage: 5,
-          supabaseStatus: prev?.supabaseStatus ?? 'Supabase: Disabled (API only)'
+          message: 'Supabase disabled — loading from API (step by step)...',
+          percentage: 2,
+          supabaseStatus: prev?.supabaseStatus ?? 'Supabase: Disabled (API only)',
         }))
       }
 
-      // Only load from API when Supabase is disabled (API-only mode)
-      if (!batchData && SUPABASE_DISABLED) {
-        setLoadingProgress(prev => ({
+      // API-only: one batch request loads raw files once on the server (much faster than 27 sequential calls).
+      if (SUPABASE_DISABLED && hasBackend) {
+        setLoadingProgress((prev) => ({
           step: 'metrics',
           stepNumber: 1,
-          totalSteps: 27,
-          message: 'Loading all metrics from API...',
-          percentage: 5,
-          supabaseStatus: prev?.supabaseStatus
+          totalSteps: 3,
+          message:
+            'Computing all metrics from uploaded files (large Qlik exports can take 3–8 minutes — please wait)...',
+          percentage: 15,
+          supabaseStatus: prev?.supabaseStatus ?? 'Supabase: Disabled (API only)',
         }))
         try {
           batchData = await getBatchMetrics(week, 8)
           batchMode = true
-          console.log(`📦 Loaded all metrics from API for ${week}`)
-        } catch (batchError) {
-          console.warn('Batch endpoint failed, falling back to individual calls:', batchError)
-          batchMode = false
-          setLoadingProgress(prev => ({
+          setLoadingProgress((prev) => ({
             step: 'metrics',
-            stepNumber: 1,
-            totalSteps: 27,
-            message:
-              'Batch API unavailable or timed out — loading metrics one request at a time. ' +
-              'If this hangs, start the backend: uvicorn on port 8000 (see NEXT_PUBLIC_API_URL).',
-            percentage: 6,
+            stepNumber: 2,
+            totalSteps: 3,
+            message: 'Metrics computed — loading budget data...',
+            percentage: 85,
             supabaseStatus: prev?.supabaseStatus,
           }))
+        } catch (batchErr) {
+          console.warn('Batch metrics failed, falling back to step-by-step API:', batchErr)
+          batchMode = false
+          batchData = null
         }
+      } else if (SUPABASE_DISABLED) {
+        batchMode = false
+        batchData = null
       }
 
       // Supabase is primary but no data for this week – error already set above; load periods only and exit
@@ -917,6 +928,9 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
       console.error('Error loading dashboard data:', err)
     } finally {
+      if (loadInFlightRef.current === week) {
+        loadInFlightRef.current = null
+      }
       setLoading(false)
       setIsDataReady(true)
       // Clear progress after a short delay
@@ -1023,7 +1037,37 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       }
       return
     }
-    
+
+    // No cache for this week — clear stale dashboard state from any previous week (avoids wrong week on screen
+    // and ensures pages see !isDataReady and run loadAllData).
+    setPeriods(null)
+    setMetrics(null)
+    setMarkets(null)
+    setKpis(null)
+    setContribution(null)
+    setGender_sales(null)
+    setMen_category_sales(null)
+    setWomen_category_sales(null)
+    setSessions_per_country(null)
+    setConversion_per_country(null)
+    setNew_customers_per_country(null)
+    setReturning_customers_per_country(null)
+    setAov_new_customers_per_country(null)
+    setAov_returning_customers_per_country(null)
+    setMarketing_spend_per_country(null)
+    setNcac_per_country(null)
+    setContribution_new_per_country(null)
+    setContribution_new_total_per_country(null)
+    setContribution_returning_per_country(null)
+    setContribution_returning_total_per_country(null)
+    setTotal_contribution_per_country(null)
+    setBudget_general(null)
+    setActuals_general(null)
+    setBudget_raw(null)
+    setActuals_markets(null)
+    setActuals_markets_detailed(null)
+    setIsDataReady(false)
+
     // No cache - try Supabase (silent, no progress spinner)
     // Use a ref so only the latest load for the current week can write state (stale loads are ignored)
     const loadForWeek = baseWeek
@@ -1033,10 +1077,18 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       try {
         const { loadWeeklyReportMetricsFromSupabase } = await import('@/lib/supabase-queries')
         const { isSupabaseAvailable } = await import('@/lib/supabase')
-        
-        // Only try Supabase if it's available
+
         if (!isSupabaseAvailable()) {
-          console.debug('Supabase not available, skipping Supabase load')
+          console.debug('Supabase not available — loading periods from API only; full metrics via loadAllData')
+          if (isStale()) return
+          try {
+            const periodsData = await getPeriods(loadForWeek)
+            if (isStale()) return
+            setPeriods(periodsData)
+            console.debug(`Loaded periods from API for ${loadForWeek} (Supabase unavailable)`)
+          } catch (periodsError) {
+            console.warn('Failed to load periods:', periodsError)
+          }
           return
         }
         

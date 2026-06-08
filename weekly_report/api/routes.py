@@ -64,6 +64,10 @@ from weekly_report.src.pdf.table1_builder import build_table1_pdf
 # from weekly_report.src.pdf.weekly_reports_builder import build_weekly_reports_pdf
 from weekly_report.src.cache.manager import metrics_cache, raw_data_cache
 from weekly_report.src.config import load_config
+from weekly_report.src.compute.budget_table1_month import (
+    budget_table1_for_calendar_month as _budget_table1_for_calendar_month,
+    derive_emer_from_budget_components as _derive_emer_from_budget_components,
+)
 from weekly_report.src.utils.file_metadata import extract_file_metadata
 
 
@@ -903,28 +907,6 @@ def _budget_label_is_new_net_revenue(label: str) -> bool:
     return L == "new net revenue" or (L.startswith("new ") and "net revenue" in L)
 
 
-def _derive_emer_from_budget_components(
-    emer_explicit: float,
-    new_net_new_customers: float,
-    marketing_spend: float,
-) -> float:
-    """Match Table 1: eMER = new customers online net / marketing spend when aMER is absent or zero."""
-    try:
-        e = float(emer_explicit or 0)
-    except (TypeError, ValueError):
-        e = 0.0
-    if abs(e) >= 1e-9:
-        return e
-    try:
-        mkt = float(marketing_spend or 0)
-        nn = float(new_net_new_customers or 0)
-    except (TypeError, ValueError):
-        return 0.0
-    if abs(mkt) > 1e-9 and abs(nn) > 1e-9:
-        return abs(nn) / abs(mkt)
-    return e
-
-
 def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, target_month: int) -> Dict[str, Any]:
     """Parse loaded budget CSV dataframe for one calendar month (same layouts as former _load_mtd_budget_direct)."""
     try:
@@ -1489,122 +1471,6 @@ def _prorate_mtd_budget_to_week(
         except (TypeError, ValueError):
             out[k] = 0.0
     return out
-
-
-def _budget_table1_for_calendar_month(table: Dict[str, Any], target_year: int, target_month: int) -> Dict[str, Any]:
-    """One calendar month's budget mapped to table1 keys (same logic as former MTD-only builder)."""
-    try:
-        from datetime import datetime as _dt
-
-        anchor = _dt(target_year, target_month, 1)
-        month_str = anchor.strftime("%B %Y")
-    except Exception:
-        return {}
-
-    month_variants = [
-        month_str,
-        anchor.strftime("%Y-%m"),
-        anchor.strftime("%b %Y"),
-        anchor.strftime("%B %Y"),
-    ]
-
-    _swedish_months = {
-        "januari": 1, "februari": 2, "mars": 3, "april": 4, "maj": 5, "juni": 6,
-        "juli": 7, "augusti": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
-    }
-    _english_months = {
-        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-        "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
-    }
-
-    def _month_matches(m_key: str) -> bool:
-        if not m_key or not str(m_key).strip():
-            return False
-        s = str(m_key).strip()
-        for fmt in ("%B %Y", "%b %Y", "%Y-%m"):
-            try:
-                if fmt == "%Y-%m" and len(s) >= 7:
-                    dt = datetime.strptime(s[:7], "%Y-%m")
-                else:
-                    dt = datetime.strptime(s, fmt)
-                return dt.year == target_year and dt.month == target_month
-            except Exception:
-                continue
-        if s.lower() == month_str.lower():
-            return True
-        parts = s.replace(".", " ").lower().split()
-        if len(parts) >= 2 and parts[-1].isdigit():
-            yr = int(parts[-1])
-            mo = _swedish_months.get(parts[0]) or _english_months.get(parts[0])
-            if mo is not None and mo == target_month and yr == target_year:
-                return True
-        return False
-
-    def get_val(metric_name: str) -> float:
-        by_month = table.get(metric_name) or {}
-        for variant in month_variants:
-            v = by_month.get(variant)
-            if v is not None:
-                return float(v)
-        for m_key, val in by_month.items():
-            if _month_matches(m_key):
-                return float(val)
-        return 0.0
-
-    def get_budget_val(*preferred_names: str) -> float:
-        for name in preferred_names:
-            v = get_val(name)
-            if v != 0.0 or name == preferred_names[-1]:
-                return v
-        key_lower = {k.strip().lower(): k for k in table.keys()}
-        for name in preferred_names:
-            k = key_lower.get(name.strip().lower())
-            if k is not None:
-                return get_val(k)
-        return 0.0
-
-    # Wide "total" rows vs grouped budget-general (Returning + New); Swedish month keys vs English anchor
-    total_gross = get_budget_val("Total Gross Revenue", "Online Gross Revenue")
-    if total_gross == 0.0:
-        total_gross = get_budget_val("Returning Gross Revenue") + get_budget_val("New Gross Revenue")
-
-    returns = get_budget_val("Returns")
-    if returns == 0.0:
-        returns = get_budget_val("Returning Returns") + get_budget_val("New Returns")
-
-    return_rate_pct = get_budget_val("Return rate (%)")
-    if return_rate_pct == 0.0 and total_gross and total_gross > 0 and returns != 0.0:
-        return_rate_pct = (returns / total_gross) * 100
-
-    total_net = get_budget_val("Net Revenue", "Online Net Revenue")
-    if total_net == 0.0:
-        total_net = get_budget_val("Returning Net Revenue") + get_budget_val("New Net Revenue")
-
-    returning_customers = int(round(get_budget_val("Returning Customers")))
-    new_customers = int(round(get_budget_val("New Customers")))
-    marketing_spend = get_budget_val("Online Marketing Spend")
-    cos_pct = get_budget_val("COS %", "COS")
-    amer = get_budget_val("aMER", "AMER", "eMER", "emer")
-    new_net_new_customers = get_budget_val("New Net Revenue")
-    amer = _derive_emer_from_budget_components(amer, new_net_new_customers, marketing_spend)
-    return {
-        "online_gross_revenue": total_gross,
-        "returns": returns,
-        "return_rate_pct": round(return_rate_pct, 1),
-        "online_net_revenue": total_net,
-        "retail_concept_store": 0.0,
-        "retail_popups_outlets": 0.0,
-        "retail_net_revenue": 0.0,
-        "wholesale_net_revenue": 0.0,
-        "total_net_revenue": total_net,
-        "returning_customers": returning_customers,
-        "new_customers": new_customers,
-        "marketing_spend": float(marketing_spend),
-        "online_cost_of_sale_3": round(float(cos_pct), 1),
-        "emer": round(float(amer), 1),
-        # Internal: YTD budget eMER = Σ this / Σ marketing (not in Table 1 schema for API)
-        "new_net_revenue_new_seg": float(new_net_new_customers or 0),
-    }
 
 
 def _table1_budget_dict_for_api(d: Dict[str, Any]) -> Dict[str, Any]:
@@ -2826,7 +2692,7 @@ async def get_online_kpis(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
-    """Get Online KPIs for the last N weeks. Reads from Supabase if available."""
+    """Get Online KPIs for the last N weeks (always computed from local raw files)."""
     
     try:
         # Validate input
@@ -2836,14 +2702,9 @@ async def get_online_kpis(
         if num_weeks < 1 or num_weeks > 52:
             raise HTTPException(status_code=400, detail=f"Number of weeks must be between 1 and 52")
         
-        # Try to read from Supabase first
-        found, kpis_data = get_metrics_from_supabase(base_week, "kpis")
-        if found:
-            logger.info(f"✅ Returning KPIs from Supabase for {base_week}")
-            response = OnlineKPIsResponse(**kpis_data)
-            return response
-        
-        # Fallback: Calculate Online KPIs
+        # Always compute Online KPIs from disk (not Supabase cache). The metrics blob can lag
+        # behind Shopify/Qlik uploads until a full re-sync; sessions especially must match the
+        # latest files and server-side column logic.
         config = load_config(week=base_week)
         kpis_data = calculate_online_kpis_for_weeks(base_week, num_weeks, config.data_root)
         
@@ -3965,7 +3826,7 @@ async def get_batch_all_metrics(
 async def upload_file(
     file: UploadFile = File(...),
     week: str = Form(...),
-    file_type: str = Form(..., description="qlik, dema_spend, dema_gm2, or shopify")
+    file_type: str = Form(..., description="qlik, dema_spend, dema_gm2, shopify, discounts, or budget")
 ):
     """
     Upload data file for specific week and type.
@@ -3977,7 +3838,7 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
         
         # Validate file_type
-        allowed_types = ["qlik", "dema_spend", "dema_gm2", "shopify", "budget"]
+        allowed_types = ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget"]
         if file_type not in allowed_types:
             raise HTTPException(status_code=400, detail=f"Invalid file type. Must be one of {allowed_types}")
         
@@ -3985,7 +3846,7 @@ async def upload_file(
         file_extension = Path(file.filename).suffix.lower()
         if file_type == "qlik" and file_extension not in ['.xlsx', '.csv']:
             raise HTTPException(status_code=400, detail="Qlik file must be .xlsx or .csv")
-        if file_type in ["dema_spend", "dema_gm2", "shopify", "budget"] and file_extension != '.csv':
+        if file_type in ["dema_spend", "dema_gm2", "shopify", "discounts", "budget"] and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
         
         # Create target directory
@@ -4145,7 +4006,7 @@ def validate_file_dimensions(file_path: Path, file_type: str) -> Dict[str, Any]:
             # Check for country dimension (case insensitive)
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
-        elif file_type == "shopify":
+        elif file_type in ("shopify", "discounts"):
             # Try to load the file
             try:
                 df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
@@ -4210,7 +4071,7 @@ async def get_file_dimensions(week: str = Query(...)):
             cached_result = _dimensions_cache[cache_key]
             # Verify files haven't changed
             cache_valid = True
-            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "budget"]:
+            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget"]:
                 type_path = raw_path / file_type
                 if type_path.exists():
                     files = list(type_path.glob("*.*"))
@@ -4239,7 +4100,7 @@ async def get_file_dimensions(week: str = Query(...)):
         file_hashes = []
         
         # Check each file type
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "budget"]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget"]:
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))
@@ -4309,7 +4170,7 @@ async def get_file_metadata(week: str = Query(...)):
         
         metadata = {}
         file_hashes = []
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "budget"]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget"]:
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))
@@ -4456,6 +4317,26 @@ async def get_discounts_sales_yoy(
     except Exception as e:
         logger.error(f"Error loading discounts sales YoY: {e}")
         raise HTTPException(status_code=500, detail="Failed to load discounts sales YoY")
+
+
+@app.get("/api/discounts/full-price-vs-sale")
+async def get_discounts_full_price_vs_sale(
+    base_week: str = Query(...),
+    num_weeks: int = Query(8),
+):
+    """Weekly Full Price vs Discounted net sales (with YoY) from the custom app's
+    accumulated revenue-over-time history."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.discounts_sales import calculate_full_price_vs_sale_weekly
+        return calculate_full_price_vs_sale_weekly(base_week, num_weeks, config.data_root)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading full price vs sale: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load full price vs sale")
 
 
 @app.get("/api/discounts/monthly-metrics")

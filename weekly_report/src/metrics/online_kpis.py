@@ -2,7 +2,7 @@
 Calculate Online KPIs for the last 8 weeks.
 """
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
@@ -29,6 +29,120 @@ def filter_data_by_iso_week(df: pd.DataFrame, iso_week: str, date_column: str = 
     
     filtered = df[df['iso_week'] == iso_week].copy()
     return filtered
+
+
+def _normalize_shopify_columns(shopify_df: pd.DataFrame) -> pd.DataFrame:
+    """Strip header whitespace (common in CSV exports) and align session column names."""
+    if shopify_df.empty:
+        return shopify_df
+    df = shopify_df.copy()
+    df.columns = df.columns.astype(str).str.strip()
+    if 'Sessions' not in df.columns and 'Sessioner' in df.columns:
+        df['Sessions'] = pd.to_numeric(df['Sessioner'], errors='coerce')
+    elif 'Sessions' in df.columns:
+        df['Sessions'] = pd.to_numeric(df['Sessions'], errors='coerce')
+    return df
+
+
+def _detect_shopify_date_column(df: pd.DataFrame) -> Optional[str]:
+    if df.empty:
+        return None
+    cols = list(df.columns)
+    if 'Day' in cols:
+        return 'Day'
+    if 'Dag' in cols:
+        return 'Dag'
+    if 'Date' in cols:
+        return 'Date'
+    if 'Month' in cols:
+        return 'Month'
+    norm = {str(c).strip().lower(): c for c in cols}
+    for key in ('day', 'dag', 'date', 'month', 'visit date', 'session date'):
+        if key in norm:
+            return norm[key]
+    return None
+
+
+def _detect_shopify_session_value_column(df: pd.DataFrame) -> Optional[str]:
+    """Column to aggregate per day (prefer daily session counts; skip obvious total/cumulative columns)."""
+    if df.empty:
+        return None
+    norm = {str(c).strip().lower(): c for c in df.columns}
+    for key in ('sessions', 'sessioner', 'online store sessions', 'online sessions'):
+        if key in norm:
+            return norm[key]
+    for c in df.columns:
+        sl = str(c).strip().lower()
+        if sl.startswith('_'):
+            continue
+        if 'session' in sl and 'total' not in sl and 'cumulative' not in sl and 'ytd' not in sl and 'mtd' not in sl:
+            return str(c).strip()
+    return None
+
+
+def _rollup_shopify_sessions_by_calendar_day(shopify_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sum Shopify session metrics by calendar day, then attach ISO week.
+
+    Many exports are one row per day (or per day × breakdown). Online KPIs need the **sum of
+    those daily values inside each ISO week**, not a single pre-aggregated total repeated on rows.
+    """
+    if shopify_df.empty:
+        return shopify_df
+    df = _normalize_shopify_columns(shopify_df)
+    date_col = _detect_shopify_date_column(df)
+    if not date_col:
+        logger.warning(f"Shopify: no Day/Date/Dag column; cannot roll sessions up by day. Columns: {df.columns.tolist()}")
+        return _attach_iso_week_to_shopify(df)
+
+    sess_col = _detect_shopify_session_value_column(df)
+    if not sess_col:
+        logger.warning(f"Shopify: no sessions column found. Columns: {df.columns.tolist()}")
+        return _attach_iso_week_to_shopify(df)
+
+    raw = df[date_col]
+    # Drop footer / summary rows where the date cell looks like "Total"
+    bad_label = raw.astype(str).str.lower().str.contains(r'^\s*total\s*$|^total$', na=False)
+    dt = pd.to_datetime(raw, errors='coerce')
+    sess = pd.to_numeric(df[sess_col], errors='coerce').fillna(0.0)
+    work = pd.DataFrame({'_dt': dt, '_sess': sess})
+    work = work.loc[~bad_label & work['_dt'].notna()].copy()
+    if work.empty:
+        logger.warning("Shopify: no valid dated rows after day-level cleanup")
+        return pd.DataFrame(columns=['iso_week', 'Sessions'])
+
+    work['_day'] = work['_dt'].dt.normalize()
+    daily = work.groupby('_day', as_index=False)['_sess'].sum()
+    daily.rename(columns={'_sess': 'Sessions'}, inplace=True)
+    iso_cal = daily['_day'].dt.isocalendar()
+    daily['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
+    logger.info(
+        f"Shopify sessions: rolled {len(shopify_df)} raw rows → {len(daily)} calendar days "
+        f"(date={date_col!r}, metric={sess_col!r})"
+    )
+    return daily
+
+
+def _attach_iso_week_to_shopify(shopify_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Match sessions-per-country / conversion metrics: derive iso_week from Shopify date column.
+    Online KPIs previously only looked at Day/Dag, so exports using 'Date' never got iso_week and
+    every week reused the full Shopify frame (wrong sessions series).
+    """
+    if shopify_df.empty or 'iso_week' in shopify_df.columns:
+        return shopify_df
+    df = shopify_df.copy()
+    date_col = _detect_shopify_date_column(df)
+    if not date_col:
+        logger.warning(
+            f"Shopify data missing date column (Date/Day/Dag). Columns: {df.columns.tolist()}"
+        )
+        return df
+    dt = pd.to_datetime(df[date_col], errors='coerce')
+    iso_cal = dt.dt.isocalendar()
+    df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
+    logger.info(f"Pre-computed ISO weeks for Shopify data via '{date_col}': {df.shape}")
+    return df
 
 
 def _has_53_weeks(year: int) -> bool:
@@ -109,9 +223,11 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
             # Shopify data is loaded separately as it's not in load_all_raw_data
             from weekly_report.src.adapters.shopify import load_data as load_shopify_data
             shopify_df = load_shopify_data(latest_data_path)
-            logger.info(f"Loaded Shopify data: {shopify_df.shape}, columns: {shopify_df.columns.tolist() if not shopify_df.empty else 'empty'}")
+            # Sum session counts per calendar day, then bucket by ISO week (avoids mis-using total columns)
+            shopify_df = _rollup_shopify_sessions_by_calendar_day(shopify_df)
+            logger.info(f"Loaded Shopify (daily→weekly pipeline): {shopify_df.shape}, columns: {shopify_df.columns.tolist() if not shopify_df.empty else 'empty'}")
             
-            # Pre-compute ISO week column for all dataframes to avoid repeated computation
+            # Pre-compute ISO week column for Qlik / DEMA (Shopify handled above)
             if not qlik_df.empty and 'Date' in qlik_df.columns:
                 qlik_df['Date'] = pd.to_datetime(qlik_df['Date'], errors='coerce')
                 iso_cal = qlik_df['Date'].dt.isocalendar()
@@ -124,23 +240,6 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
                 dema_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
                 logger.info(f"Pre-computed ISO weeks for DEMA data: {dema_df.shape}")
             
-            if not shopify_df.empty and 'Day' in shopify_df.columns:
-                shopify_df['Day'] = pd.to_datetime(shopify_df['Day'], errors='coerce')
-                iso_cal = shopify_df['Day'].dt.isocalendar()
-                shopify_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-                logger.info(f"Pre-computed ISO weeks for Shopify data: {shopify_df.shape}")
-            elif not shopify_df.empty and 'Dag' in shopify_df.columns:
-                # Handle Swedish column names
-                shopify_df['Day'] = pd.to_datetime(shopify_df['Dag'], errors='coerce')
-                iso_cal = shopify_df['Day'].dt.isocalendar()
-                shopify_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-                # Normalize column names: 'Sessioner' -> 'Sessions'
-                if 'Sessioner' in shopify_df.columns:
-                    shopify_df['Sessions'] = shopify_df['Sessioner']
-                logger.info(f"Pre-computed ISO weeks for Shopify data (Swedish columns): {shopify_df.shape}")
-            else:
-                logger.warning(f"Shopify data missing 'Day' or 'Dag' column. Available columns: {shopify_df.columns.tolist()}")
-                
         except Exception as e:
             logger.warning(f"Failed to load data for week {base_week}: {e}")
     
@@ -213,6 +312,17 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
     }
 
 
+def _sessions_total_from_shopify_slice(shopify_df: pd.DataFrame) -> int:
+    """Sum sessions for an already week-filtered Shopify frame (or empty)."""
+    if shopify_df.empty:
+        return 0
+    if 'Sessions' in shopify_df.columns:
+        return int(round(float(pd.to_numeric(shopify_df['Sessions'], errors='coerce').fillna(0).sum())))
+    if 'Sessioner' in shopify_df.columns:
+        return int(round(float(pd.to_numeric(shopify_df['Sessioner'], errors='coerce').fillna(0).sum())))
+    return 0
+
+
 def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df: pd.DataFrame, week_str: str) -> Dict[str, Any]:
     """Calculate KPIs for a single week."""
     
@@ -231,7 +341,7 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
             'conversion_rate': 0.0,
             'new_customers': 0,
             'returning_customers': 0,
-            'sessions': int(shopify_df['Sessions'].sum()) if (not shopify_df.empty and 'Sessions' in shopify_df.columns) else 0,
+            'sessions': _sessions_total_from_shopify_slice(shopify_df),
             'new_customer_cac': 0.0,
             'total_orders': 0,
             'return_rate_pct': 0.0,
@@ -281,20 +391,15 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
     aov_new_customer = new_customer_revenue / new_customers if new_customers > 0 else 0
     aov_returning_customer = returning_customer_revenue / returning_customers if returning_customers > 0 else 0
     
-    # Sessions from Shopify
+    # Sessions from Shopify (week slice; see calculate_online_kpis_for_weeks filter)
+    sessions = float(_sessions_total_from_shopify_slice(shopify_df))
     if shopify_df.empty:
         logger.warning(f"Shopify data is empty for week {week_str}")
-        sessions = 0
-    elif 'Sessions' in shopify_df.columns:
-        sessions = shopify_df['Sessions'].sum()
-        logger.debug(f"Calculated sessions for week {week_str}: {sessions}")
-    elif 'Sessioner' in shopify_df.columns:
-        # Handle Swedish column name
-        sessions = shopify_df['Sessioner'].sum()
-        logger.debug(f"Calculated sessions for week {week_str} (Swedish column): {sessions}")
-    else:
-        logger.warning(f"Shopify data missing 'Sessions' or 'Sessioner' column for week {week_str}. Available columns: {shopify_df.columns.tolist()}")
-        sessions = 0
+    elif sessions <= 0:
+        logger.warning(
+            f"Week {week_str}: no numeric sessions in Shopify slice (rows={len(shopify_df)}). "
+            f"Columns: {shopify_df.columns.tolist()}"
+        )
     
     # Conversion rate
     unique_orders = online_df['Order No'].nunique()
@@ -356,7 +461,7 @@ def calculate_week_kpis(qlik_df: pd.DataFrame, shopify_df: pd.DataFrame, dema_df
         'conversion_rate': float(conversion_rate),
         'new_customers': int(new_customers),
         'returning_customers': int(returning_customers),
-        'sessions': int(sessions),
+        'sessions': int(round(sessions)),
         'new_customer_cac': float(new_customer_cac),
         'total_orders': int(total_orders),
         'return_rate_pct': round(return_rate_pct, 1),

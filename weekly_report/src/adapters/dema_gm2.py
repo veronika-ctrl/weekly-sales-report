@@ -7,6 +7,8 @@ from typing import List, Optional
 import pandas as pd
 from loguru import logger
 
+from weekly_report.src.adapters.dema import normalize_dema_columns
+
 
 def detect_csv_dialect(file_path: Path) -> csv.Dialect:
     """Detect CSV dialect from file content."""
@@ -86,6 +88,8 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
         combined_df = dataframes[0]
     else:
         combined_df = pd.concat(dataframes, ignore_index=True)
+
+    combined_df = normalize_dema_columns(combined_df)
     
     logger.info(f"Combined {source_name} data: {combined_df.shape}")
     return combined_df

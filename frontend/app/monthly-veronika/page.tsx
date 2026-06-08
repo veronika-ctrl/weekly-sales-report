@@ -15,6 +15,19 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Loader2, FileDown, Printer } from 'lucide-react'
 
+const DEFINITION_ORDER: { key: keyof MonthlyVeronikaKpisResponse['definitions']; label: string }[] = [
+  { key: 'repeat_purchase_rate_pct', label: 'Repeat purchase rate' },
+  { key: 'ltv_proxy_ttm', label: 'LTV proxy (TTM)' },
+  { key: 'ltv_cac_ratio', label: 'LTV / CAC ratio' },
+  { key: 'conversion_rate_pct', label: 'Conversion rate' },
+  { key: 'full_price_share_pct', label: 'Full-price share of ecom' },
+  { key: 'new_customer_acquisition_cost', label: 'New customer acquisition cost (nCAC)' },
+  { key: 'returning_customer_revenue', label: 'Returning customer revenue' },
+  { key: 'cos_pct', label: 'COS %' },
+  { key: 'amer', label: 'aMER' },
+  { key: 'corridor', label: 'Budget corridor' },
+]
+
 const ROWS: { key: keyof MonthlyVeronikaKpisResponse['kpis']; title: string }[] = [
   { key: 'repeat_purchase_rate_pct', title: 'Repeat purchase rate' },
   { key: 'ltv_cac_ratio', title: 'LTV / CAC (ratio)' },
@@ -24,8 +37,7 @@ const ROWS: { key: keyof MonthlyVeronikaKpisResponse['kpis']; title: string }[] 
   { key: 'new_customer_acquisition_cost', title: 'New customer acquisition cost (SEK)' },
   { key: 'returning_customer_revenue', title: 'Returning customer revenue (SEK)' },
   { key: 'cos_pct', title: 'COS % (marketing ÷ online gross)' },
-  { key: 'cos_amer_pct', title: 'COS % — Americas' },
-  { key: 'emer_amer', title: 'eMER / aMER — Americas (new net ÷ marketing)' },
+  { key: 'amer', title: 'aMER (online new net ÷ marketing, all markets)' },
 ]
 
 function fmt(v: number | null | undefined, isPct: boolean) {
@@ -42,6 +54,8 @@ export default function MonthlyVeronikaPage() {
   const [data, setData] = useState<MonthlyVeronikaKpisResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [slowHint, setSlowHint] = useState(false)
+  const [loadSeconds, setLoadSeconds] = useState(0)
 
   useEffect(() => {
     if (!baseWeek || !hasBackend) return
@@ -83,6 +97,21 @@ export default function MonthlyVeronikaPage() {
     if (yearMonth && baseWeek && hasBackend) void load()
   }, [yearMonth, baseWeek, load])
 
+  useEffect(() => {
+    if (!loading) {
+      setSlowHint(false)
+      setLoadSeconds(0)
+      return
+    }
+    setLoadSeconds(0)
+    const t = setTimeout(() => setSlowHint(true), 8000)
+    const int = setInterval(() => setLoadSeconds((s) => s + 1), 1000)
+    return () => {
+      clearTimeout(t)
+      clearInterval(int)
+    }
+  }, [loading])
+
   if (!hasBackend) {
     return (
       <Card>
@@ -109,6 +138,9 @@ export default function MonthlyVeronikaPage() {
         </div>
         <div className="text-sm text-gray-600 pb-2">
           Raw folder: <span className="font-mono">{baseWeek || '—'}</span> (Settings → week)
+          {!baseWeek && hasBackend && (
+            <span className="ml-2 text-amber-800">— choose a data week in Settings so metrics can load.</span>
+          )}
         </div>
         <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading || !yearMonth}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
@@ -139,17 +171,33 @@ export default function MonthlyVeronikaPage() {
           <CardTitle>Veronika — monthly scorecard</CardTitle>
           <CardDescription>
             {data
-              ? `${data.date_range.start} → ${data.date_range.end} · definitions in API JSON`
+              ? `${data.date_range.start} → ${data.date_range.end} · online channel, calendar month (see “How these metrics are calculated” below).`
               : 'Select a month and ensure raw exports under the selected week include those dates.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loading && !data ? (
-            <div className="flex items-center gap-2 text-gray-600">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Loading…
+            <div className="space-y-2 text-gray-600">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>
+                  Loading… {loadSeconds > 0 && <>({loadSeconds}s)</>}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground max-w-prose">
+                This is finished and supported on localhost: the page calls <code className="text-xs">/api/monthly-veronika-kpis</code>.
+                The first run can take a long time while Python reads the full Qlik/Excel in <code className="text-xs">data/raw/…</code> (often 1–5+ minutes for large
+                files). If the API is not running, the request will fail with an error below.
+              </p>
+              {slowHint && (
+                <p className="text-xs text-amber-800">
+                  Still working — large exports keep the CPU busy. If nothing happens for 5 minutes you will get a timeout;
+                  then confirm Uvicorn is running and watch the API terminal for errors.
+                </p>
+              )}
             </div>
           ) : (
+            <>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b">
@@ -169,8 +217,62 @@ export default function MonthlyVeronikaPage() {
                     </tr>
                   )
                 })}
+                {data?.budget_plan && (
+                  <>
+                    <tr className="border-b border-gray-200 bg-amber-50/40">
+                      <td className="py-2 pr-4 text-gray-800" colSpan={2}>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">Budget (same month, from budget file)</span>
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-2 pr-4 pl-2 text-gray-800">Plan — COS %</td>
+                      <td className="py-2 text-right font-mono tabular-nums">
+                        {fmt(data.budget_plan.cos_pct as number, true)}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-2 pr-4 pl-2 text-gray-800">Plan — aMER</td>
+                      <td className="py-2 text-right font-mono tabular-nums">
+                        {fmt(data.budget_plan.amer as number, false)}
+                      </td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
+            {data?.budget_error && (
+              <p className="mt-3 text-xs text-gray-600">Budget: {data.budget_error}</p>
+            )}
+            </>
+          )}
+          {data?.definitions && !loading && (
+            <details className="mt-6 rounded-md border border-gray-200 bg-gray-50/80 p-4 text-sm">
+              <summary className="cursor-pointer font-medium text-gray-900">How these metrics are calculated</summary>
+              <div className="mt-3 text-xs text-gray-700 space-y-3">
+                <p>
+                  <strong>Scope:</strong> Qlik rows with <code className="text-[11px]">Sales channel = online</code>, with{' '}
+                  <code className="text-[11px]">Date</code> inside the selected calendar month. DEMA marketing spend and Shopify
+                  sessions are summed over the same calendar month (from files in{' '}
+                  <code className="text-[11px]">data/raw/{data.base_week}/</code>).
+                </p>
+                <p>
+                  <strong>Segments:</strong> New vs returning uses the Qlik <code className="text-[11px]">New/Returning Customer</code>{' '}
+                  column (normalized the same way as the weekly online KPIs). Customers are distinct by email when that column
+                  exists.
+                </p>
+                <ul className="list-disc pl-5 space-y-2">
+                  {DEFINITION_ORDER.map(({ key, label }) => {
+                    const text = data.definitions[key as keyof typeof data.definitions]
+                    if (!text) return null
+                    return (
+                      <li key={key}>
+                        <span className="font-medium text-gray-800">{label}:</span> {text}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </details>
           )}
           {data?.notes && data.notes.length > 0 && (
             <ul className="mt-4 text-xs text-amber-800 list-disc pl-5 space-y-1">

@@ -108,7 +108,9 @@ export default function Settings() {
       const errorMessage = error?.message || String(error) || 'Unknown error'
       
       if (errorName === 'AbortError' || errorName === 'TimeoutError') {
-        // Request was aborted (timeout or rapid refresh). Ignore to avoid noisy console errors.
+        setMetadata({
+          error: `Request timed out after 10s while contacting ${getApiBaseUrl()}. If the API is still starting, click Retry. Otherwise start it from the project root: venv/bin/python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000`,
+        })
         return
       } else if (
         errorName === 'TypeError' ||
@@ -119,7 +121,7 @@ export default function Settings() {
         errorMessage.includes('ERR_CONNECTION_REFUSED')
       ) {
         setMetadata({
-          error: 'Backend not reachable. Start the API (e.g. run from project root: python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000) and ensure NEXT_PUBLIC_API_URL is set (e.g. http://127.0.0.1:8000).',
+          error: `Backend not reachable at ${getApiBaseUrl()}. Start the API from the project root: venv/bin/python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000. If the app still cannot connect, set NEXT_PUBLIC_API_URL in frontend/.env.local (e.g. http://127.0.0.1:8000) and restart npm run dev.`,
         })
       } else {
         console.error('Failed to load metadata:', error)
@@ -208,7 +210,12 @@ export default function Settings() {
     { type: 'dema_spend', label: 'DEMA Marketing Spend', formats: '.csv' },
     { type: 'dema_gm2', label: 'DEMA GM2 Data', formats: '.csv' },
     { type: 'shopify', label: 'Shopify Sessions Data', formats: '.csv' },
-    { type: 'budget', label: 'Budget Data', formats: '.csv' }
+    {
+      type: 'discounts',
+      label: 'Shopify order lines (full price / sale)',
+      formats: '.csv',
+    },
+    { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
 
   return (
@@ -370,7 +377,7 @@ export default function Settings() {
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Reload file metadata to check current file status. Use "Check Dimensions" to validate file structure. Data refresh happens automatically after file upload.
+              Reload file metadata to check current file status. Use "Check Dimensions" to validate file structure. After uploading files, click <strong>Refresh All Data</strong> when all files for the week are ready (one file at a time is fine).
             </p>
           </div>
 

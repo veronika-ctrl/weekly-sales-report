@@ -89,8 +89,8 @@ export default function AudienceTotalPage() {
 
   useEffect(() => {
     if (!baseWeek) return
-    if (!periods && !loading) loadAllData(baseWeek, false)
-  }, [baseWeek, loading, periods, loadAllData])
+    if ((!periods || !isDataReady) && !loading && !error) loadAllData(baseWeek, false)
+  }, [baseWeek, loading, periods, isDataReady, loadAllData, error])
 
   let kpis: Array<{
     week: string

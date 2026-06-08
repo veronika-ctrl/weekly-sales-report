@@ -80,21 +80,27 @@ def calculate_table1_metrics(
     # Filter Dema data to the specific week
     dema_spend_df = dema_spend_df.copy()
     dema_spend_df.columns = dema_spend_df.columns.str.strip()
-    if 'Days' in dema_spend_df.columns:
-        dema_spend_df['Days'] = pd.to_datetime(dema_spend_df['Days'], errors='coerce')
-    dema_spend_filtered = dema_spend_df[
-        (dema_spend_df['Days'] >= start_date) & 
-        (dema_spend_df['Days'] <= end_date)
-    ].copy()
+    spend_date_col = _dema_date_column(dema_spend_df)
+    if spend_date_col:
+        dema_spend_df[spend_date_col] = pd.to_datetime(dema_spend_df[spend_date_col], errors='coerce')
+        dema_spend_filtered = dema_spend_df[
+            (dema_spend_df[spend_date_col] >= start_date) &
+            (dema_spend_df[spend_date_col] <= end_date)
+        ].copy()
+    else:
+        dema_spend_filtered = dema_spend_df.iloc[0:0].copy()
     
     dema_gm2_df = dema_gm2_df.copy()
     dema_gm2_df.columns = dema_gm2_df.columns.str.strip()
-    if 'Days' in dema_gm2_df.columns:
-        dema_gm2_df['Days'] = pd.to_datetime(dema_gm2_df['Days'], errors='coerce')
-    dema_gm2_filtered = dema_gm2_df[
-        (dema_gm2_df['Days'] >= start_date) & 
-        (dema_gm2_df['Days'] <= end_date)
-    ].copy()
+    gm2_date_col = _dema_date_column(dema_gm2_df)
+    if gm2_date_col:
+        dema_gm2_df[gm2_date_col] = pd.to_datetime(dema_gm2_df[gm2_date_col], errors='coerce')
+        dema_gm2_filtered = dema_gm2_df[
+            (dema_gm2_df[gm2_date_col] >= start_date) &
+            (dema_gm2_df[gm2_date_col] <= end_date)
+        ].copy()
+    else:
+        dema_gm2_filtered = dema_gm2_df.iloc[0:0].copy()
     
     logger.debug(f"Filtered Dema spend data to {len(dema_spend_filtered)} records")
     logger.debug(f"Filtered Dema GM2 data to {len(dema_gm2_filtered)} records")
@@ -278,38 +284,58 @@ def load_all_raw_data(data_path: Path) -> Dict[str, pd.DataFrame]:
         data_sources['qlik']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
         logger.info("Added iso_week column to Qlik data")
     
-    # Add ISO week to Dema spend data if Days column exists
-    if not data_sources['dema_spend'].empty and 'Days' in data_sources['dema_spend'].columns:
-        data_sources['dema_spend']['Days'] = pd.to_datetime(data_sources['dema_spend']['Days'], errors='coerce')
-        iso_cal = data_sources['dema_spend']['Days'].dt.isocalendar()
+    # Add ISO week to Dema spend data if Days/Day column exists
+    spend_date_col = _dema_date_column(data_sources['dema_spend'])
+    if not data_sources['dema_spend'].empty and spend_date_col:
+        data_sources['dema_spend'][spend_date_col] = pd.to_datetime(
+            data_sources['dema_spend'][spend_date_col], errors='coerce'
+        )
+        iso_cal = data_sources['dema_spend'][spend_date_col].dt.isocalendar()
         data_sources['dema_spend']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
         logger.info("Added iso_week column to Dema spend data")
     
-    # Add ISO week to Dema GM2 data if Days column exists
-    if not data_sources['dema_gm2'].empty and 'Days' in data_sources['dema_gm2'].columns:
-        data_sources['dema_gm2']['Days'] = pd.to_datetime(data_sources['dema_gm2']['Days'], errors='coerce')
-        iso_cal = data_sources['dema_gm2']['Days'].dt.isocalendar()
+    # Add ISO week to Dema GM2 data if Days/Day column exists
+    gm2_date_col = _dema_date_column(data_sources['dema_gm2'])
+    if not data_sources['dema_gm2'].empty and gm2_date_col:
+        data_sources['dema_gm2'][gm2_date_col] = pd.to_datetime(
+            data_sources['dema_gm2'][gm2_date_col], errors='coerce'
+        )
+        iso_cal = data_sources['dema_gm2'][gm2_date_col].dt.isocalendar()
         data_sources['dema_gm2']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
         logger.info("Added iso_week column to Dema GM2 data")
     
-    # Add ISO week to Shopify data if Day column exists
+    # Add ISO week to Shopify data (Day / Dag / Date — prefer Day for native Shopify exports)
     if not data_sources['shopify'].empty:
         if 'Day' in data_sources['shopify'].columns:
             data_sources['shopify']['Day'] = pd.to_datetime(data_sources['shopify']['Day'], errors='coerce')
             iso_cal = data_sources['shopify']['Day'].dt.isocalendar()
             data_sources['shopify']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-            logger.info("Added iso_week column to Shopify data")
+            logger.info("Added iso_week column to Shopify data (Day)")
+        elif 'Dag' in data_sources['shopify'].columns:
+            data_sources['shopify']['Dag'] = pd.to_datetime(data_sources['shopify']['Dag'], errors='coerce')
+            iso_cal = data_sources['shopify']['Dag'].dt.isocalendar()
+            data_sources['shopify']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
+            logger.info("Added iso_week column to Shopify data (Dag)")
         elif 'Date' in data_sources['shopify'].columns:
             data_sources['shopify']['Date'] = pd.to_datetime(data_sources['shopify']['Date'], errors='coerce')
             iso_cal = data_sources['shopify']['Date'].dt.isocalendar()
             data_sources['shopify']['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-            logger.info("Added iso_week column to Shopify data")
+            logger.info("Added iso_week column to Shopify data (Date)")
     
     # Cache the loaded data
     raw_data_cache.set(data_path_str, data_sources)
     
     logger.info(f"Successfully loaded and cached all raw data sources with pre-calculated ISO weeks")
     return data_sources
+
+
+def _dema_date_column(df: pd.DataFrame) -> Optional[str]:
+    """Return the date column name in a DEMA frame (Days or Day)."""
+    if "Days" in df.columns:
+        return "Days"
+    if "Day" in df.columns:
+        return "Day"
+    return None
 
 
 def filter_data_for_period(all_data: Dict[str, pd.DataFrame], period_week: str) -> Dict[str, pd.DataFrame]:
@@ -344,32 +370,34 @@ def filter_data_for_period(all_data: Dict[str, pd.DataFrame], period_week: str) 
     
     # Filter Dema spend data by ISO week
     dema_spend_data = all_data['dema_spend'].copy()
-    if 'Days' in dema_spend_data.columns:
-        dema_spend_data['Days'] = pd.to_datetime(dema_spend_data['Days'], errors='coerce')
-        dema_spend_data['ISO_Week'] = dema_spend_data['Days'].dt.isocalendar().week
-        dema_spend_data['ISO_Year'] = dema_spend_data['Days'].dt.isocalendar().year
+    spend_date_col = _dema_date_column(dema_spend_data)
+    if spend_date_col:
+        dema_spend_data[spend_date_col] = pd.to_datetime(dema_spend_data[spend_date_col], errors='coerce')
+        dema_spend_data['ISO_Week'] = dema_spend_data[spend_date_col].dt.isocalendar().week
+        dema_spend_data['ISO_Year'] = dema_spend_data[spend_date_col].dt.isocalendar().year
         dema_spend_data['ISO_Week_Str'] = dema_spend_data['ISO_Year'].astype(str) + '-' + dema_spend_data['ISO_Week'].astype(str).str.zfill(2)
         
         period_data = dema_spend_data[dema_spend_data['ISO_Week_Str'] == period_week]
         filtered_data['dema_spend'] = period_data.drop(['ISO_Week', 'ISO_Year', 'ISO_Week_Str'], axis=1)
         logger.info(f"Filtered Dema spend data for {period_week}: {filtered_data['dema_spend'].shape}")
     else:
-        logger.error(f"No Days column found in Dema spend data for filtering")
+        logger.error(f"No Days/Day column found in Dema spend data for filtering")
         raise ValueError(f"Cannot filter Dema spend data for {period_week}")
     
     # Filter Dema GM2 data by ISO week
     dema_gm2_data = all_data['dema_gm2'].copy()
-    if 'Days' in dema_gm2_data.columns:
-        dema_gm2_data['Days'] = pd.to_datetime(dema_gm2_data['Days'], errors='coerce')
-        dema_gm2_data['ISO_Week'] = dema_gm2_data['Days'].dt.isocalendar().week
-        dema_gm2_data['ISO_Year'] = dema_gm2_data['Days'].dt.isocalendar().year
+    gm2_date_col = _dema_date_column(dema_gm2_data)
+    if gm2_date_col:
+        dema_gm2_data[gm2_date_col] = pd.to_datetime(dema_gm2_data[gm2_date_col], errors='coerce')
+        dema_gm2_data['ISO_Week'] = dema_gm2_data[gm2_date_col].dt.isocalendar().week
+        dema_gm2_data['ISO_Year'] = dema_gm2_data[gm2_date_col].dt.isocalendar().year
         dema_gm2_data['ISO_Week_Str'] = dema_gm2_data['ISO_Year'].astype(str) + '-' + dema_gm2_data['ISO_Week'].astype(str).str.zfill(2)
         
         period_data = dema_gm2_data[dema_gm2_data['ISO_Week_Str'] == period_week]
         filtered_data['dema_gm2'] = period_data.drop(['ISO_Week', 'ISO_Year', 'ISO_Week_Str'], axis=1)
         logger.info(f"Filtered Dema GM2 data for {period_week}: {filtered_data['dema_gm2'].shape}")
     else:
-        logger.error(f"No Days column found in Dema GM2 data for filtering")
+        logger.error(f"No Days/Day column found in Dema GM2 data for filtering")
         raise ValueError(f"Cannot filter Dema GM2 data for {period_week}")
     
     logger.info(f"Successfully filtered all data for {period_week}")
@@ -410,30 +438,32 @@ def filter_data_for_date_range(all_data: Dict[str, pd.DataFrame], start_date: st
     
     # Filter Dema spend data by date range
     dema_spend_data = all_data['dema_spend'].copy()
-    if 'Days' in dema_spend_data.columns:
-        dema_spend_data['Days'] = pd.to_datetime(dema_spend_data['Days'], errors='coerce')
+    spend_date_col = _dema_date_column(dema_spend_data)
+    if spend_date_col:
+        dema_spend_data[spend_date_col] = pd.to_datetime(dema_spend_data[spend_date_col], errors='coerce')
         period_data = dema_spend_data[
-            (dema_spend_data['Days'] >= start_dt) & 
-            (dema_spend_data['Days'] <= end_dt)
+            (dema_spend_data[spend_date_col] >= start_dt) &
+            (dema_spend_data[spend_date_col] <= end_dt)
         ]
         filtered_data['dema_spend'] = period_data
         logger.info(f"Filtered Dema spend data for date range: {filtered_data['dema_spend'].shape}")
     else:
-        logger.error(f"No Days column found in Dema spend data for filtering")
+        logger.error(f"No Days/Day column found in Dema spend data for filtering")
         raise ValueError(f"Cannot filter Dema spend data for date range {start_date} to {end_date}")
     
     # Filter Dema GM2 data by date range
     dema_gm2_data = all_data['dema_gm2'].copy()
-    if 'Days' in dema_gm2_data.columns:
-        dema_gm2_data['Days'] = pd.to_datetime(dema_gm2_data['Days'], errors='coerce')
+    gm2_date_col = _dema_date_column(dema_gm2_data)
+    if gm2_date_col:
+        dema_gm2_data[gm2_date_col] = pd.to_datetime(dema_gm2_data[gm2_date_col], errors='coerce')
         period_data = dema_gm2_data[
-            (dema_gm2_data['Days'] >= start_dt) & 
-            (dema_gm2_data['Days'] <= end_dt)
+            (dema_gm2_data[gm2_date_col] >= start_dt) &
+            (dema_gm2_data[gm2_date_col] <= end_dt)
         ]
         filtered_data['dema_gm2'] = period_data
         logger.info(f"Filtered Dema GM2 data for date range: {filtered_data['dema_gm2'].shape}")
     else:
-        logger.error(f"No Days column found in Dema GM2 data for filtering")
+        logger.error(f"No Days/Day column found in Dema GM2 data for filtering")
         raise ValueError(f"Cannot filter Dema GM2 data for date range {start_date} to {end_date}")
     
     logger.info(f"Successfully filtered all data for date range {start_date} to {end_date}")

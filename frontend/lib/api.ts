@@ -10,6 +10,34 @@ export function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl()
 
+/** Table 1 / Qlik path can read very large exports; 2+ min is common on first request. */
+const HEAVY_METRICS_TIMEOUT_MS = 600_000
+/** Short calls (periods, health-style). */
+const LIGHT_REQUEST_TIMEOUT_MS = 60_000
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit,
+  timeoutMs: number = LIGHT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(
+        `Request timed out after ${timeoutMs / 1000}s (${API_BASE_URL}). ` +
+          'If nothing is listening, start: venv/bin/python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000. ' +
+          'If the API is running, large Excel/Qlik exports can take several minutes—check the server terminal for progress.',
+      )
+    }
+    throw e
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 /**
  * When true, the app may call the Python API (uploads, metrics, file metadata).
  * - Production: only if NEXT_PUBLIC_API_URL is set (Supabase-only deploys stay off).
@@ -276,7 +304,7 @@ export async function getPeriods(baseWeek: string): Promise<PeriodsResponse> {
   if (!hasBackend) {
     return getPeriodsFromBaseWeek(baseWeek) as PeriodsResponse
   }
-  const response = await fetch(`${API_BASE_URL}/api/periods?base_week=${baseWeek}`)
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/periods?base_week=${baseWeek}`)
   if (!response.ok) {
     throw new Error(`Failed to fetch periods: ${response.statusText}`)
   }
@@ -285,7 +313,11 @@ export async function getPeriods(baseWeek: string): Promise<PeriodsResponse> {
 
 export async function getTable1Metrics(baseWeek: string, periods: string[], includeYtd: boolean = true): Promise<MetricsResponse> {
   const periodsParam = periods.join(',')
-  const response = await fetch(`${API_BASE_URL}/api/metrics/table1?base_week=${baseWeek}&periods=${periodsParam}&include_ytd=${includeYtd}`)
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/metrics/table1?base_week=${baseWeek}&periods=${periodsParam}&include_ytd=${includeYtd}`,
+    undefined,
+    HEAVY_METRICS_TIMEOUT_MS,
+  )
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}))
     const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
@@ -856,7 +888,8 @@ export interface BatchMetricsResponse {
 }
 
 /** Batch compute can be slow; without a timeout the UI sits at ~5% forever if the API is down. */
-const BATCH_METRICS_TIMEOUT_MS = 180_000
+/** Same order of magnitude as Table 1: batch recomputes all metrics from raw files. */
+const BATCH_METRICS_TIMEOUT_MS = 600_000
 
 export async function getBatchMetrics(baseWeek: string, numWeeks: number = 8): Promise<BatchMetricsResponse> {
   const controller = new AbortController()
@@ -1098,6 +1131,46 @@ export async function getDiscountsSalesYoY(
   )
   if (!response.ok) {
     throw new Error(`Failed to fetch Discounts YoY: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export interface FullPriceVsSaleWeek {
+  week: string
+  full_price: number
+  discounted: number
+  total: number
+  full_price_pct: number | null
+  last_year: {
+    week: string
+    full_price: number
+    discounted: number
+    total: number
+    full_price_pct: number | null
+  }
+  yoy_total_pct: number | null
+  full_price_pct_delta: number | null
+}
+
+export interface FullPriceVsSaleResponse {
+  base_week: string
+  num_weeks: number
+  source: string
+  has_last_year: boolean
+  files_used: string[]
+  history_range?: { start: string; end: string }
+  weeks: FullPriceVsSaleWeek[]
+}
+
+export async function getFullPriceVsSale(
+  baseWeek: string,
+  numWeeks: number = 8,
+): Promise<FullPriceVsSaleResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale?base_week=${baseWeek}&num_weeks=${numWeeks}`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch full price vs sale: ${response.statusText}`)
   }
   return response.json()
 }
@@ -1425,20 +1498,40 @@ export interface MonthlyVeronikaKpisResponse {
   kpis: Record<string, number | null | undefined>
   supporting: Record<string, number | string>
   notes: string[]
+  /** From uploaded budget CSV (same month column as Table 1 MTD), when the file loads. */
+  budget_plan?: { cos_pct: number | null; amer: number | null } | null
+  /** Set when the budget file is missing or could not be parsed. */
+  budget_error?: string | null
 }
 
 export async function getMonthlyVeronikaKpis(
   yearMonth: string,
   baseWeek: string
 ): Promise<MonthlyVeronikaKpisResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/monthly-veronika-kpis?year_month=${encodeURIComponent(yearMonth)}&base_week=${encodeURIComponent(baseWeek)}`
-  )
-  if (!response.ok) {
-    const t = await response.text()
-    throw new Error(t || response.statusText)
+  // Monthly endpoint loads full Qlik/Dema/Shopify; large Excel can take several minutes.
+  const timeoutMs = 300_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/monthly-veronika-kpis?year_month=${encodeURIComponent(yearMonth)}&base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: any) {
+    clearTimeout(timeoutId)
+    if (e?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 5 minutes. The API may still be loading a very large export, or it is not reachable. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it (e.g. http://127.0.0.1:8000).'
+      )
+    }
+    throw e
   }
-  return response.json()
 }
 
 /** Direct API URL to download the one-page Veronika monthly PDF. */

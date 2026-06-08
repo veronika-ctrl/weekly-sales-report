@@ -288,28 +288,18 @@ export default function BatchFileUpload({
     setIsUploading(false)
     setCurrentUploadingFile(null)
 
-    // If at least one file was uploaded successfully, trigger refresh
+    // Reload file metadata only — full dashboard refresh is slow (large Qlik export) and optional
+    // until all files for the week are uploaded. User clicks "Refresh All Data" when ready.
     if (results.success.length > 0) {
-      setOverallStatus('refreshing')
-      setIsRefreshing(true)
-      
+      setOverallStatus('complete')
       try {
-        // First call onUploadComplete to update metadata
         await onUploadComplete()
-        
-        // Then trigger refreshData (this includes Supabase sync via DataCacheContext)
-        await refreshData()
       } catch (error) {
-        console.error('Error during refresh:', error)
-      } finally {
-        setIsRefreshing(false)
-        setOverallStatus('complete')
-        // Reset after a delay
-        setTimeout(() => {
-          setOverallStatus('idle')
-          setRefreshProgress('')
-        }, 2000)
+        console.error('Error updating metadata after upload:', error)
       }
+      setTimeout(() => {
+        setOverallStatus('idle')
+      }, 3000)
     } else {
       setOverallStatus('idle')
     }
@@ -490,6 +480,13 @@ export default function BatchFileUpload({
         </div>
       ) : null}
 
+      {overallStatus === 'complete' && uploadResults.success.length > 0 && (
+        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md p-3">
+          Upload complete. When all files for this week are uploaded, click{' '}
+          <strong>Refresh All Data</strong> below to reload the dashboard (may take several minutes for large Qlik files).
+        </p>
+      )}
+
       {/* Upload All Button */}
       <div className="flex justify-end">
         <Button
@@ -516,7 +513,7 @@ export default function BatchFileUpload({
           ) : hasSelectedFiles ? (
             <>
               <Upload className="mr-2 h-4 w-4" />
-              Upload All & Refresh
+              Upload Selected Files
             </>
           ) : (
             <>

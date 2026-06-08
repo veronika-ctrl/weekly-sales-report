@@ -4,7 +4,7 @@ import { useKPIs } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { CartesianGrid, LabelList, Line, LineChart, XAxis } from '@/lib/recharts'
+import { CartesianGrid, LabelList, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
 import { Loader2 } from 'lucide-react'
 import type { OnlineKPIsResponse } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -151,6 +151,11 @@ export default function OnlineKPIsClient({ isPdfMode = false, dataOverride }: On
                           tickMargin={8}
                           tickFormatter={(value) => value.replace('W', '')}
                         />
+                        <YAxis
+                          hide
+                          domain={['dataMin', 'dataMax']}
+                          allowDataOverflow={false}
+                        />
                         <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
                         <Line
                           dataKey="current"
@@ -198,6 +203,11 @@ export default function OnlineKPIsClient({ isPdfMode = false, dataOverride }: On
                         axisLine={false}
                         tickMargin={8}
                         tickFormatter={(value) => value.replace('W', '')}
+                      />
+                      <YAxis
+                        hide
+                        domain={['dataMin', 'dataMax']}
+                        allowDataOverflow={false}
                       />
                       <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
                       <Line
