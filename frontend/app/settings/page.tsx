@@ -10,8 +10,14 @@ import PeriodSelector from '@/components/PeriodSelector'
 import { Separator } from '@/components/ui/separator'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartSettings } from '@/contexts/ChartSettingsContext'
-import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
-import { hasBackend, getApiBaseUrl } from '@/lib/api'
+import { RefreshCw, CheckCircle2, XCircle, Trash2 } from 'lucide-react'
+import {
+  hasBackend,
+  getApiBaseUrl,
+  getDiscountsHistoryInfo,
+  resetDiscountsHistory,
+  type DiscountsHistoryInfo,
+} from '@/lib/api'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 
@@ -28,6 +34,9 @@ export default function Settings() {
   const [supabaseVerifyLoading, setSupabaseVerifyLoading] = useState(false)
   const [supabaseVerifyResult, setSupabaseVerifyResult] = useState<any>(null) // Track if PDF has been downloaded to prevent duplicate downloads
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
+  const [discountsHistory, setDiscountsHistory] = useState<DiscountsHistoryInfo | null>(null)
+  const [discountsHistoryLoading, setDiscountsHistoryLoading] = useState(false)
+  const [resettingDiscounts, setResettingDiscounts] = useState(false)
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
 
   useEffect(() => {
@@ -185,6 +194,27 @@ export default function Settings() {
       setLoadingDimensions(false)
     }
   }, [selectedWeek])
+
+  const loadDiscountsHistory = useCallback(async () => {
+    if (!selectedWeek || !hasBackend) {
+      setDiscountsHistory(null)
+      return
+    }
+    setDiscountsHistoryLoading(true)
+    try {
+      const info = await getDiscountsHistoryInfo(selectedWeek)
+      setDiscountsHistory(info)
+    } catch (err) {
+      console.warn('Failed to load discounts history:', err)
+      setDiscountsHistory(null)
+    } finally {
+      setDiscountsHistoryLoading(false)
+    }
+  }, [selectedWeek])
+
+  useEffect(() => {
+    loadDiscountsHistory()
+  }, [loadDiscountsHistory])
 
   // Load metadata on mount and when week changes
   useEffect(() => {
@@ -394,6 +424,7 @@ export default function Settings() {
               currentWeek={selectedWeek}
               onUploadComplete={async () => {
                 await loadMetadata(true)
+                await loadDiscountsHistory()
                 // Don't auto-load dimensions - user can click button if needed
               }}
               refreshData={async () => {
@@ -469,6 +500,110 @@ export default function Settings() {
                 </div>
               )}
             </div>
+
+            {/* Full price vs Sale — accumulated history (spans all weeks) */}
+            {selectedWeek && hasBackend && (
+              <div className="mt-8 rounded-md border bg-muted/30 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-medium">Full price vs Sale — accumulated history</h4>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                      These uploads merge by date across all weeks (newest wins), so one big export or several
+                      small ones build the same history. This is separate from the per-week file list above.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={loadDiscountsHistory}
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 shrink-0"
+                    disabled={discountsHistoryLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${discountsHistoryLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="mt-3 text-sm">
+                  {discountsHistoryLoading && !discountsHistory ? (
+                    <span className="text-gray-500 italic">Loading history…</span>
+                  ) : discountsHistory && discountsHistory.count > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-700">
+                        <span>
+                          <strong>{discountsHistory.count}</strong> file(s) accumulated
+                        </span>
+                        {discountsHistory.range && (
+                          <span>
+                            Covers <strong>{discountsHistory.range.start}</strong> →{' '}
+                            <strong>{discountsHistory.range.end}</strong>
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          {discountsHistory.has_discount ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              Weighted discount column detected
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-4 w-4 text-amber-600" />
+                              No Discount Amount column yet (weighted discount blank)
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <ul className="text-xs text-gray-500 list-disc pl-5 max-h-32 overflow-auto">
+                        {discountsHistory.files.map((f, i) => (
+                          <li key={`${f.week}-${f.name}-${i}`}>
+                            {f.name} <span className="text-gray-400">({f.week})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">
+                      No Full price vs Sale files uploaded yet. Upload the Shopify revenue-over-time export above.
+                    </span>
+                  )}
+                </div>
+
+                {discountsHistory && discountsHistory.count > 0 && (
+                  <div className="mt-4">
+                    <Button
+                      onClick={async () => {
+                        if (
+                          !window.confirm(
+                            `Delete all ${discountsHistory.count} accumulated Full price vs Sale file(s)? ` +
+                              'This clears the entire history and cannot be undone.'
+                          )
+                        ) {
+                          return
+                        }
+                        setResettingDiscounts(true)
+                        try {
+                          await resetDiscountsHistory(selectedWeek)
+                          await loadDiscountsHistory()
+                          await loadMetadata(true)
+                        } catch (err) {
+                          console.error('Failed to reset discounts history:', err)
+                          window.alert('Failed to reset history. Check that the backend is running.')
+                        } finally {
+                          setResettingDiscounts(false)
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                      disabled={resettingDiscounts}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {resettingDiscounts ? 'Resetting…' : 'Reset history'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

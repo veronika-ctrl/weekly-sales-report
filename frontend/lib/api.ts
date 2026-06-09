@@ -1233,6 +1233,32 @@ export async function getFullPriceVsSaleMonthly(
   return response.json()
 }
 
+export interface DiscountsHistoryInfo {
+  files: { name: string; week: string; uploaded_at: string }[]
+  count: number
+  matched_files: string[]
+  range: { start: string; end: string } | null
+  has_discount: boolean
+}
+
+export async function getDiscountsHistoryInfo(baseWeek: string): Promise<DiscountsHistoryInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/discounts/history-info?base_week=${baseWeek}`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch discounts history info: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function resetDiscountsHistory(baseWeek: string): Promise<{ deleted: string[]; count: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/discounts/reset-history?base_week=${baseWeek}`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to reset discounts history: ${response.statusText}`)
+  }
+  return response.json()
+}
+
 export async function getDiscountsLevel(
   baseWeek: string,
   numWeeks: number = 8

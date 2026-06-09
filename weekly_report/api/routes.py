@@ -4357,6 +4357,74 @@ async def get_discounts_full_price_vs_sale(
         raise HTTPException(status_code=500, detail="Failed to load full price vs sale")
 
 
+@app.get("/api/discounts/history-info")
+async def get_discounts_history_info(base_week: str = Query(...)):
+    """Summarize the accumulated Full price vs Sale (revenue-over-time) history that
+    spans all week folders: which files contributed, the covered date range, and
+    whether a Discount Amount column / last-year data is present."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.discounts_sales import load_revenue_over_time_history
+
+        history = load_revenue_over_time_history(config.data_root)
+        df = history.get("df")
+        raw_root = Path(config.data_root) / "raw"
+        files = []
+        for f in sorted(raw_root.glob("*/discounts/*.*"), key=lambda p: p.stat().st_mtime):
+            if f.name.startswith("."):
+                continue
+            files.append({
+                "name": f.name,
+                "week": f.parent.parent.name,
+                "uploaded_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+            })
+
+        rng = None
+        if df is not None and not df.empty:
+            rng = {"start": str(df["_date"].min().date()), "end": str(df["_date"].max().date())}
+        return {
+            "files": files,
+            "count": len(files),
+            "matched_files": history.get("files_used", []),
+            "range": rng,
+            "has_discount": bool(history.get("has_discount")),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading discounts history info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load discounts history info")
+
+
+@app.post("/api/discounts/reset-history")
+async def reset_discounts_history(base_week: str = Query(...)):
+    """Delete every accumulated Full price vs Sale (revenue-over-time) file across all
+    week folders so the user can start the history fresh."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        raw_root = Path(config.data_root) / "raw"
+        deleted = []
+        for f in raw_root.glob("*/discounts/*.*"):
+            if f.name.startswith("."):
+                continue
+            try:
+                f.unlink()
+                deleted.append(f"{f.parent.parent.name}/{f.name}")
+                logger.info(f"Reset discounts history: deleted {f}")
+            except Exception as ex:
+                logger.warning(f"Could not delete {f}: {ex}")
+        return {"deleted": deleted, "count": len(deleted)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resetting discounts history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset discounts history")
+
+
 @app.get("/api/discounts/monthly-metrics")
 async def get_discounts_monthly_metrics(
     base_week: str = Query(...),
