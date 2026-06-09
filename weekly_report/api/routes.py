@@ -4366,12 +4366,18 @@ async def get_discounts_history_info(base_week: str = Query(...)):
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
         config = load_config(week=base_week)
-        from weekly_report.src.metrics.discounts_sales import load_revenue_over_time_history
+        from weekly_report.src.metrics.discounts_sales import (
+            _inspect_revenue_over_time_discount_column,
+            _is_revenue_over_time_format,
+            _read_csv_flexible,
+            load_revenue_over_time_history,
+        )
 
         history = load_revenue_over_time_history(config.data_root)
         df = history.get("df")
         raw_root = Path(config.data_root) / "raw"
         files = []
+        latest_inspection: Dict[str, Any] = {}
         for f in sorted(raw_root.glob("*/discounts/*.*"), key=lambda p: p.stat().st_mtime):
             if f.name.startswith("."):
                 continue
@@ -4380,6 +4386,16 @@ async def get_discounts_history_info(base_week: str = Query(...)):
                 "week": f.parent.parent.name,
                 "uploaded_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
             })
+            try:
+                cdf = _read_csv_flexible(f)
+                cdf.columns = [c.strip().replace('"', "") for c in cdf.columns]
+                if _is_revenue_over_time_format(cdf):
+                    latest_inspection = {
+                        "file": f.name,
+                        **_inspect_revenue_over_time_discount_column(cdf),
+                    }
+            except Exception:
+                pass
 
         rng = None
         if df is not None and not df.empty:
@@ -4390,6 +4406,7 @@ async def get_discounts_history_info(base_week: str = Query(...)):
             "matched_files": history.get("files_used", []),
             "range": rng,
             "has_discount": bool(history.get("has_discount")),
+            "latest_file_inspection": latest_inspection,
         }
     except HTTPException:
         raise

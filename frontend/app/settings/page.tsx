@@ -543,16 +543,32 @@ export default function Settings() {
                           {discountsHistory.has_discount ? (
                             <>
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              Weighted discount column detected
+                              Discount depth column detected
+                              {discountsHistory.latest_file_inspection?.discount_column
+                                ? ` (${discountsHistory.latest_file_inspection.discount_column})`
+                                : ''}
                             </>
                           ) : (
                             <>
                               <XCircle className="h-4 w-4 text-amber-600" />
-                              No Discount Amount column yet (weighted discount blank)
+                              Missing &quot;Discount Amount&quot; column — weighted disc % stays blank
                             </>
                           )}
                         </span>
                       </div>
+                      {discountsHistory.latest_file_inspection?.columns && (
+                        <p className="text-xs text-gray-500">
+                          Latest export columns ({discountsHistory.latest_file_inspection.file}):{' '}
+                          {discountsHistory.latest_file_inspection.columns.join(', ')}
+                          {!discountsHistory.has_discount && (
+                            <>
+                              {' '}
+                              — expected an 8th column{' '}
+                              <strong>Discount Amount</strong> (or Weighted disc % / Revenue excl. Discount).
+                            </>
+                          )}
+                        </p>
+                      )}
                       <ul className="text-xs text-gray-500 list-disc pl-5 max-h-32 overflow-auto">
                         {discountsHistory.files.map((f, i) => (
                           <li key={`${f.week}-${f.name}-${i}`}>

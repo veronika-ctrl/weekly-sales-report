@@ -1239,6 +1239,14 @@ export interface DiscountsHistoryInfo {
   matched_files: string[]
   range: { start: string; end: string } | null
   has_discount: boolean
+  latest_file_inspection?: {
+    file?: string
+    columns?: string[]
+    discount_column?: string | null
+    discount_source?: string | null
+    expected_column?: string
+    has_discount_depth?: boolean
+  }
 }
 
 export async function getDiscountsHistoryInfo(baseWeek: string): Promise<DiscountsHistoryInfo> {

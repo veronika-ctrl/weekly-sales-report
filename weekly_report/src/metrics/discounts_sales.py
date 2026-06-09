@@ -2479,6 +2479,82 @@ def _is_revenue_over_time_format(df: pd.DataFrame) -> bool:
     return bool(date_col and full_col and total_col)
 
 
+def _inspect_revenue_over_time_discount_column(df: pd.DataFrame) -> Dict[str, Any]:
+    """Report which optional discount-depth column (if any) is present in an export."""
+    full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
+    total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
+    discount_col = _pick_column(
+        df,
+        [
+            "Discount Amount",
+            "Discount amount",
+            "Discount Amount (SEK)",
+            "Total Discount Amount",
+            "Total Discount",
+            "Total discount",
+            "Markdown Amount",
+            "Markdown",
+            "Rabattbelopp",
+            "Rabatt",
+        ],
+    )
+    rev_excl_col = _pick_column(
+        df,
+        [
+            "Revenue excl. Discount",
+            "Revenue excl Discount",
+            "Revenue excluding discount",
+            "Revenue excl. discount",
+        ],
+    )
+    weighted_col = _pick_column(
+        df,
+        [
+            "Weighted Discount %",
+            "Weighted discount %",
+            "Weighted disc %",
+            "Weighted Discount",
+            "Discount depth %",
+            "Discount Depth %",
+            "Discount Rate (Discounted)",
+            "Discounted Discount Rate",
+        ],
+    )
+    source = None
+    if discount_col:
+        source = "discount_amount"
+    elif rev_excl_col:
+        source = "revenue_excl_discount"
+    elif weighted_col:
+        source = "weighted_discount_pct"
+    return {
+        "columns": [str(c).strip() for c in df.columns],
+        "discount_column": discount_col or rev_excl_col or weighted_col,
+        "discount_source": source,
+        "expected_column": "Discount Amount",
+        "has_discount_depth": source is not None,
+    }
+
+
+def _discount_series_from_export(df: pd.DataFrame, full_col: str, total_col: str) -> pd.Series:
+    """Derive per-day discount amount (SEK) from optional export columns."""
+    meta = _inspect_revenue_over_time_discount_column(df)
+    source = meta["discount_source"]
+    col = meta["discount_column"]
+    if source == "discount_amount" and col:
+        return _to_number(df[col])
+    if source == "revenue_excl_discount" and col:
+        discounted_rev = (_to_number(df[total_col]) - _to_number(df[full_col])).clip(lower=0.0)
+        return (_to_number(df[col]) - discounted_rev).clip(lower=0.0)
+    if source == "weighted_discount_pct" and col:
+        disc = (_to_number(df[total_col]) - _to_number(df[full_col])).clip(lower=0.0)
+        w = _to_number(df[col])
+        damt = disc * w / (100.0 - w)
+        damt = damt.where((w > 0) & (w < 100) & (disc > 0))
+        return damt
+    return pd.Series([pd.NA] * len(df), index=df.index, dtype="float64")
+
+
 def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
     """
     Merge every uploaded ``revenue-over-time`` file (across all week folders) into a
@@ -2508,42 +2584,12 @@ def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
         date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
         full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
         total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
-        # Optional: discount depth on discounted items (added later by the export).
-        discount_col = _pick_column(
-            df,
-            [
-                "Discount Amount",
-                "Discount amount",
-                "Discount Amount (SEK)",
-                "Total Discount",
-                "Discount",
-                "Markdown",
-                "Rabattbelopp",
-                "Rabatt",
-            ],
-        )
-        rev_excl_col = _pick_column(
-            df,
-            [
-                "Revenue excl. Discount",
-                "Revenue excl Discount",
-                "Revenue excluding discount",
-                "Revenue excl. discount",
-            ],
-        )
 
         sub = pd.DataFrame()
         sub["_date"] = pd.to_datetime(df[date_col], errors="coerce")
         sub["_full"] = _to_number(df[full_col])
         sub["_total"] = _to_number(df[total_col])
-        if discount_col:
-            sub["_discount"] = _to_number(df[discount_col])
-        elif rev_excl_col:
-            # Discount amount on discounted items = revenue-excl-discount minus discounted revenue.
-            discounted_rev = (sub["_total"] - sub["_full"]).clip(lower=0.0)
-            sub["_discount"] = (_to_number(df[rev_excl_col]) - discounted_rev).clip(lower=0.0)
-        else:
-            sub["_discount"] = pd.NA
+        sub["_discount"] = _discount_series_from_export(df, full_col, total_col)
         sub = sub.dropna(subset=["_date"])
         # Carry file mtime so later (newer) uploads win on duplicate dates.
         sub["_mtime"] = f.stat().st_mtime
