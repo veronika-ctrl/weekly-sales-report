@@ -2552,7 +2552,7 @@ def _discount_series_from_export(df: pd.DataFrame, full_col: str, total_col: str
         damt = disc * w / (100.0 - w)
         damt = damt.where((w > 0) & (w < 100) & (disc > 0))
         return damt
-    return pd.Series([pd.NA] * len(df), index=df.index, dtype="float64")
+    return pd.Series(float("nan"), index=df.index, dtype="float64")
 
 
 def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
