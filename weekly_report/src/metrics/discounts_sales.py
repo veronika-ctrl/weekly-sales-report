@@ -2508,11 +2508,42 @@ def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
         date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
         full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
         total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
+        # Optional: discount depth on discounted items (added later by the export).
+        discount_col = _pick_column(
+            df,
+            [
+                "Discount Amount",
+                "Discount amount",
+                "Discount Amount (SEK)",
+                "Total Discount",
+                "Discount",
+                "Markdown",
+                "Rabattbelopp",
+                "Rabatt",
+            ],
+        )
+        rev_excl_col = _pick_column(
+            df,
+            [
+                "Revenue excl. Discount",
+                "Revenue excl Discount",
+                "Revenue excluding discount",
+                "Revenue excl. discount",
+            ],
+        )
 
         sub = pd.DataFrame()
         sub["_date"] = pd.to_datetime(df[date_col], errors="coerce")
         sub["_full"] = _to_number(df[full_col])
         sub["_total"] = _to_number(df[total_col])
+        if discount_col:
+            sub["_discount"] = _to_number(df[discount_col])
+        elif rev_excl_col:
+            # Discount amount on discounted items = revenue-excl-discount minus discounted revenue.
+            discounted_rev = (sub["_total"] - sub["_full"]).clip(lower=0.0)
+            sub["_discount"] = (_to_number(df[rev_excl_col]) - discounted_rev).clip(lower=0.0)
+        else:
+            sub["_discount"] = pd.NA
         sub = sub.dropna(subset=["_date"])
         # Carry file mtime so later (newer) uploads win on duplicate dates.
         sub["_mtime"] = f.stat().st_mtime
@@ -2520,14 +2551,20 @@ def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
         files_used.append(f.name)
 
     if not frames:
-        return {"df": pd.DataFrame(columns=["_date", "_full", "_discounted", "_total"]), "files_used": []}
+        return {
+            "df": pd.DataFrame(columns=["_date", "_full", "_discounted", "_total", "_discount"]),
+            "files_used": [],
+            "has_discount": False,
+        }
 
     alld = pd.concat(frames, ignore_index=True)
     # Newest file wins per calendar date.
     alld = alld.sort_values(["_date", "_mtime"]).drop_duplicates(subset=["_date"], keep="last")
     alld["_discounted"] = (alld["_total"] - alld["_full"]).clip(lower=0.0)
-    alld = alld[["_date", "_full", "_discounted", "_total"]].sort_values("_date").reset_index(drop=True)
-    return {"df": alld, "files_used": files_used}
+    alld["_discount"] = pd.to_numeric(alld["_discount"], errors="coerce")
+    has_discount = bool(alld["_discount"].notna().any())
+    alld = alld[["_date", "_full", "_discounted", "_total", "_discount"]].sort_values("_date").reset_index(drop=True)
+    return {"df": alld, "files_used": files_used, "has_discount": has_discount}
 
 
 def calculate_full_price_vs_sale_weekly(
@@ -2550,30 +2587,44 @@ def calculate_full_price_vs_sale_weekly(
             "num_weeks": num_weeks,
             "source": "revenue_over_time",
             "has_last_year": False,
+            "has_discount": False,
             "files_used": history["files_used"],
             "weeks": [],
         }
 
     df = df.copy()
     df["_week"] = _iso_week_series(df["_date"])
+    has_discount = bool(history.get("has_discount"))
 
     expected_weeks = _build_display_weeks(base_week, num_weeks)
     expected_last_year = [f"{int(w.split('-')[0]) - 1}-{w.split('-')[1]}" for w in expected_weeks]
 
     wanted = set(expected_weeks + expected_last_year)
     sub = df[df["_week"].isin(wanted)]
-    grouped = sub.groupby("_week")[["_full", "_discounted", "_total"]].sum()
+    grouped = sub.groupby("_week")[["_full", "_discounted", "_total", "_discount"]].sum(min_count=1)
 
-    def _row_for(week: str) -> Dict[str, float]:
+    def _row_for(week: str) -> Dict[str, Any]:
         if week in grouped.index:
             r = grouped.loc[week]
             full = float(r["_full"] or 0.0)
             disc = float(r["_discounted"] or 0.0)
             total = float(r["_total"] or 0.0)
+            damt = float(r["_discount"]) if pd.notna(r["_discount"]) else None
         else:
             full = disc = total = 0.0
+            damt = None
         pct = (full / total * 100.0) if total > 0 else None
-        return {"full_price": full, "discounted": disc, "total": total, "full_price_pct": pct}
+        weighted = None
+        if has_discount and damt is not None and (disc + damt) > 0:
+            weighted = damt / (disc + damt) * 100.0
+        return {
+            "full_price": full,
+            "discounted": disc,
+            "total": total,
+            "full_price_pct": pct,
+            "discount_amount": damt,
+            "weighted_discount_pct": weighted,
+        }
 
     has_last_year = False
     weeks_out: List[Dict[str, Any]] = []
@@ -2607,12 +2658,144 @@ def calculate_full_price_vs_sale_weekly(
         "num_weeks": num_weeks,
         "source": "revenue_over_time",
         "has_last_year": has_last_year,
+        "has_discount": has_discount,
         "files_used": history["files_used"],
         "history_range": {
             "start": str(df["_date"].min().date()),
             "end": str(df["_date"].max().date()),
         },
         "weeks": weeks_out,
+    }
+
+
+def calculate_full_price_vs_sale_monthly(
+    base_week: str,
+    months: int,
+    data_root: Path,
+) -> Dict[str, Any]:
+    """
+    Monthly Full Price vs Discounted net sales for the last N calendar months,
+    each with the same month last year and two years ago, plus a fiscal-YTD block
+    (fiscal year starts April 1, matching the rest of the app).
+
+    The latest month is month-to-date (clamped to the base week's end date); the
+    last-year / two-years-ago comparisons for the latest month are clamped to the
+    same day-of-period cutoff.
+    """
+    history = load_revenue_over_time_history(data_root)
+    df = history["df"]
+    base_out: Dict[str, Any] = {
+        "base_week": base_week,
+        "months": months,
+        "granularity": "month",
+        "source": "revenue_over_time",
+        "files_used": history["files_used"],
+    }
+    if df.empty:
+        return {**base_out, "has_last_year": False, "months_data": [], "ytd": None}
+
+    df = df.copy()
+    has_discount = bool(history.get("has_discount"))
+
+    week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
+    if pd.isna(week_end):
+        return {**base_out, "error": "Invalid base_week date range", "months_data": [], "ytd": None}
+
+    def _agg(start: pd.Timestamp, end: pd.Timestamp) -> Dict[str, Any]:
+        m = (df["_date"] >= start) & (df["_date"] <= end)
+        sub = df.loc[m]
+        full = float(sub["_full"].sum() or 0.0)
+        disc = float(sub["_discounted"].sum() or 0.0)
+        total = float(sub["_total"].sum() or 0.0)
+        damt_series = pd.to_numeric(sub["_discount"], errors="coerce")
+        damt = float(damt_series.sum()) if damt_series.notna().any() else None
+        pct = (full / total * 100.0) if total > 0 else None
+        weighted = None
+        if has_discount and damt is not None and (disc + damt) > 0:
+            weighted = damt / (disc + damt) * 100.0
+        return {
+            "full_price": full,
+            "discounted": disc,
+            "total": total,
+            "full_price_pct": pct,
+            "discount_amount": damt,
+            "weighted_discount_pct": weighted,
+        }
+
+    def _yoy(cur: Dict[str, Any], prev: Dict[str, Any]) -> Dict[str, Any]:
+        yoy_total = (
+            (cur["total"] - prev["total"]) / prev["total"] * 100.0 if prev["total"] > 0 else None
+        )
+        fp_delta = (
+            cur["full_price_pct"] - prev["full_price_pct"]
+            if cur["full_price_pct"] is not None and prev["full_price_pct"] is not None
+            else None
+        )
+        return {"yoy_total_pct": yoy_total, "full_price_pct_delta": fp_delta}
+
+    end_period = week_end.to_period("M")
+    min_dt = pd.to_datetime(df["_date"].min(), errors="coerce")
+    min_period = min_dt.to_period("M") if not pd.isna(min_dt) else end_period
+
+    requested = int(months or 0)
+    if requested <= 0:
+        count = int(end_period.ordinal - min_period.ordinal + 1)
+        count = max(1, count)
+    else:
+        count = max(1, requested)
+    month_keys = [(end_period - i) for i in range(count)]
+
+    has_last_year = False
+    months_data: List[Dict[str, Any]] = []
+    for mp in month_keys:
+        is_latest = mp == end_period
+        start = mp.start_time.normalize()
+        end = week_end if is_latest else mp.end_time.normalize()
+
+        ly_p = mp - 12
+        two_p = mp - 24
+        ly_end = (week_end - pd.DateOffset(years=1)) if is_latest else ly_p.end_time.normalize()
+        two_end = (week_end - pd.DateOffset(years=2)) if is_latest else two_p.end_time.normalize()
+
+        cur = _agg(start, end)
+        ly = _agg(ly_p.start_time.normalize(), ly_end)
+        two = _agg(two_p.start_time.normalize(), two_end)
+        if ly["total"] > 0:
+            has_last_year = True
+
+        months_data.append(
+            {
+                "month": mp.strftime("%Y-%m"),
+                **cur,
+                "last_year": {"month": ly_p.strftime("%Y-%m"), **ly},
+                "two_years_ago": {"month": two_p.strftime("%Y-%m"), **two},
+                **_yoy(cur, ly),
+            }
+        )
+
+    # Fiscal YTD (fiscal year starts April 1).
+    year = int(week_end.year)
+    fy_start_year = year if week_end.month >= 4 else year - 1
+    ytd_cur = _agg(pd.Timestamp(f"{fy_start_year}-04-01"), week_end)
+    ytd_ly = _agg(pd.Timestamp(f"{fy_start_year-1}-04-01"), week_end - pd.DateOffset(years=1))
+    ytd_two = _agg(pd.Timestamp(f"{fy_start_year-2}-04-01"), week_end - pd.DateOffset(years=2))
+    ytd = {
+        "label": f"FY{fy_start_year}/{str(fy_start_year+1)[-2:]} to date",
+        "fy_start": f"{fy_start_year}-04-01",
+        "end": str(week_end.date()),
+        **ytd_cur,
+        "last_year": ytd_ly,
+        "two_years_ago": ytd_two,
+        **_yoy(ytd_cur, ytd_ly),
+    }
+
+    return {
+        **base_out,
+        "has_last_year": has_last_year,
+        "has_discount": has_discount,
+        "history_range": {"start": str(df["_date"].min().date()), "end": str(df["_date"].max().date())},
+        "months_data": months_data,
+        "ytd": ytd,
     }
 
 

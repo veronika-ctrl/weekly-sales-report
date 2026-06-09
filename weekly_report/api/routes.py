@@ -4335,13 +4335,19 @@ async def get_discounts_sales_yoy(
 async def get_discounts_full_price_vs_sale(
     base_week: str = Query(...),
     num_weeks: int = Query(8),
+    granularity: str = Query("week", description="week or month"),
+    months: int = Query(12),
 ):
-    """Weekly Full Price vs Discounted net sales (with YoY) from the custom app's
-    accumulated revenue-over-time history."""
+    """Full Price vs Discounted net sales (with YoY) from the custom app's
+    accumulated revenue-over-time history. granularity=week returns the weekly
+    series; granularity=month returns monthly series plus a fiscal-YTD block."""
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
         config = load_config(week=base_week)
+        if granularity == "month":
+            from weekly_report.src.metrics.discounts_sales import calculate_full_price_vs_sale_monthly
+            return calculate_full_price_vs_sale_monthly(base_week, months, config.data_root)
         from weekly_report.src.metrics.discounts_sales import calculate_full_price_vs_sale_weekly
         return calculate_full_price_vs_sale_weekly(base_week, num_weeks, config.data_root)
     except HTTPException:

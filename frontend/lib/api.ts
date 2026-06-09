@@ -1141,12 +1141,16 @@ export interface FullPriceVsSaleWeek {
   discounted: number
   total: number
   full_price_pct: number | null
+  discount_amount: number | null
+  weighted_discount_pct: number | null
   last_year: {
     week: string
     full_price: number
     discounted: number
     total: number
     full_price_pct: number | null
+    discount_amount: number | null
+    weighted_discount_pct: number | null
   }
   yoy_total_pct: number | null
   full_price_pct_delta: number | null
@@ -1157,6 +1161,7 @@ export interface FullPriceVsSaleResponse {
   num_weeks: number
   source: string
   has_last_year: boolean
+  has_discount: boolean
   files_used: string[]
   history_range?: { start: string; end: string }
   weeks: FullPriceVsSaleWeek[]
@@ -1171,6 +1176,59 @@ export async function getFullPriceVsSale(
   )
   if (!response.ok) {
     throw new Error(`Failed to fetch full price vs sale: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+interface FullPriceVsSaleBucket {
+  full_price: number
+  discounted: number
+  total: number
+  full_price_pct: number | null
+  discount_amount: number | null
+  weighted_discount_pct: number | null
+}
+
+export interface FullPriceVsSaleMonth extends FullPriceVsSaleBucket {
+  month: string
+  last_year: FullPriceVsSaleBucket & { month: string }
+  two_years_ago: FullPriceVsSaleBucket & { month: string }
+  yoy_total_pct: number | null
+  full_price_pct_delta: number | null
+}
+
+export interface FullPriceVsSaleYtd extends FullPriceVsSaleBucket {
+  label: string
+  fy_start: string
+  end: string
+  last_year: FullPriceVsSaleBucket
+  two_years_ago: FullPriceVsSaleBucket
+  yoy_total_pct: number | null
+  full_price_pct_delta: number | null
+}
+
+export interface FullPriceVsSaleMonthlyResponse {
+  base_week: string
+  months: number
+  granularity: string
+  source: string
+  has_last_year: boolean
+  has_discount: boolean
+  files_used: string[]
+  history_range?: { start: string; end: string }
+  months_data: FullPriceVsSaleMonth[]
+  ytd: FullPriceVsSaleYtd | null
+}
+
+export async function getFullPriceVsSaleMonthly(
+  baseWeek: string,
+  months: number = 12,
+): Promise<FullPriceVsSaleMonthlyResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale?base_week=${baseWeek}&granularity=month&months=${months}`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch full price vs sale (monthly): ${response.statusText}`)
   }
   return response.json()
 }
