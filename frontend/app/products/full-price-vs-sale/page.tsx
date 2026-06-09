@@ -134,6 +134,8 @@ export default function FullPriceVsSalePage() {
   const splitData = view === 'week' ? weeklySplit : monthlySplit
   const periodHeader = view === 'week' ? 'Week' : 'Month'
   const ytd = monthly?.ytd || null
+  const ytdDateRange =
+    ytd?.fy_start && ytd?.end ? `${ytd.fy_start} → ${ytd.end}` : null
 
   return (
     <div className="space-y-6">
@@ -193,51 +195,103 @@ export default function FullPriceVsSalePage() {
             </div>
           )}
 
-          {/* Fiscal YTD summary (always available; shown above either view) */}
+          <div className="rounded-md border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-950 space-y-2">
+            <p className="font-medium">How to read this page</p>
+            <ul className="text-xs text-blue-900/90 space-y-1 list-disc pl-4">
+              <li>
+                <strong>Week / Month</strong> only changes the charts and table below. The three summary cards stay the
+                same — they are always <strong>fiscal year-to-date (YTD)</strong>, not weekly or monthly totals.
+              </li>
+              <li>
+                <strong>Week view</strong> — last 8 ISO weeks (Mon–Sun). Each row sums the daily Shopify export for that
+                week. Good for operations.
+              </li>
+              <li>
+                <strong>Month view</strong> — last 13 calendar months. The current month is month-to-date (cut off at your
+                selected week&apos;s end date). Good for board / KPI reporting.
+              </li>
+              <li>
+                <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change in full
+                price share. <strong>YoY %</strong> = change in total net sales.
+              </li>
+            </ul>
+          </div>
+
+          {/* Fiscal YTD summary — same on Week and Month tabs; only charts/table below switch */}
           {ytd && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">{ytd.label} · Full price share</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-semibold text-gray-900">{pct(ytd.full_price_pct)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    LY {pct(ytd.last_year?.full_price_pct)} · {signedPp(ytd.full_price_pct_delta)} pp
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">{ytd.label} · Net sales (SEK &apos;000)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-semibold text-gray-900">{thousands(ytd.total)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    LY {thousands(ytd.last_year?.total)} · {signedPct(ytd.yoy_total_pct)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">{ytd.label} · Discounted (SEK &apos;000)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-semibold text-gray-900">{thousands(ytd.discounted)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    LY {thousands(ytd.last_year?.discounted)}
-                    {ytd.weighted_discount_pct != null && <> · depth {pct(ytd.weighted_discount_pct)}</>}
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="space-y-2">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900">Fiscal year-to-date summary</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Fixed period: {ytdDateRange ?? ytd.label}. Sums every day in your Shopify export from 1 April through
+                  your selected week&apos;s end date. Does not change when you switch Week / Month.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">
+                      {ytd.label} · Full price share
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-gray-900">{pct(ytd.full_price_pct)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      LY {pct(ytd.last_year?.full_price_pct)} · {signedPp(ytd.full_price_pct_delta)} pp
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                      Full price ÷ total net sales × 100. Share of revenue sold at full price (not discounted).
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">
+                      {ytd.label} · Net sales (SEK &apos;000)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-gray-900">{thousands(ytd.total)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      LY {thousands(ytd.last_year?.total)} · {signedPct(ytd.yoy_total_pct)}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                      Sum of daily &quot;Total&quot; column in the export (all sale types combined).
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">
+                      {ytd.label} · Discounted (SEK &apos;000)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-gray-900">{thousands(ytd.discounted)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      LY {thousands(ytd.last_year?.discounted)}
+                      {ytd.weighted_discount_pct != null && <> · depth {pct(ytd.weighted_discount_pct)}</>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                      Total − full price. Compare-at, discount codes, price drops, and &quot;both&quot; combined.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Full price share %</CardTitle>
-                <p className="text-xs text-muted-foreground">Full price / total, this year vs last year</p>
+                <CardTitle className="text-sm font-medium">
+                  Full price share % — by {view === 'week' ? 'week' : 'month'}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {view === 'week'
+                    ? 'Last 8 weeks. Each point = that week’s full price ÷ total, vs the same ISO week last year.'
+                    : 'Last 13 months. Each point = that month’s full price ÷ total; current month is month-to-date.'}
+                </p>
               </CardHeader>
               <CardContent className="overflow-visible">
                 <ChartContainer config={shareConfig} className="h-[280px] w-full min-w-0 overflow-visible">
@@ -281,8 +335,13 @@ export default function FullPriceVsSalePage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Net sales split (SEK &apos;000)</CardTitle>
-                <p className="text-xs text-muted-foreground">Full price vs discounted, this year</p>
+                <CardTitle className="text-sm font-medium">
+                  Net sales split (SEK &apos;000) — by {view === 'week' ? 'week' : 'month'}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Stacked bars: full price (dark) + discounted (orange) per {view === 'week' ? 'week' : 'month'}.
+                  Separate from the YTD cards above.
+                </p>
               </CardHeader>
               <CardContent className="overflow-visible">
                 <ChartContainer config={splitConfig} className="h-[280px] w-full min-w-0 overflow-visible">
@@ -303,6 +362,11 @@ export default function FullPriceVsSalePage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium">{periodHeader}ly detail (SEK &apos;000)</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {view === 'week'
+                  ? 'One row per ISO week (last 8). Totals are that week only — not YTD.'
+                  : 'One row per calendar month (last 13). Latest month is partial (through your selected week). Not YTD.'}
+              </p>
               {!data.has_discount && (
                 <p className="text-xs text-muted-foreground">
                   Weighted discount % stays blank until you upload the export with a &quot;Discount Amount&quot; column.
