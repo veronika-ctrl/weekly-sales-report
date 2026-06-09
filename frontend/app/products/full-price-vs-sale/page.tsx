@@ -38,6 +38,11 @@ const signedPct = (value: number | null | undefined) =>
 const signedPp = (value: number | null | undefined) =>
   value == null ? '–' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}`
 
+const wdPpDelta = (
+  current: number | null | undefined,
+  lastYear: number | null | undefined,
+) => (current == null || lastYear == null ? null : current - lastYear)
+
 const weekLabel = (w: string) => `W${String(w).split('-')[1]}`
 const monthLabel = (m: string) => {
   const [y, mo] = m.split('-')
@@ -211,8 +216,13 @@ export default function FullPriceVsSalePage() {
                 selected week&apos;s end date). Good for board / KPI reporting.
               </li>
               <li>
-                <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change in full
-                price share. <strong>YoY %</strong> = change in total net sales.
+                <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change vs LY.
+                <strong> YoY total %</strong> = change in <strong>total net sales</strong> (full price + discounted
+                combined) — not full-price growth alone.
+              </li>
+              <li>
+                <strong>Weighted disc %</strong> = discount depth on discounted sales only. <strong>LY weighted disc
+                %</strong> compares the same metric to last year.
               </li>
             </ul>
           </div>
@@ -256,7 +266,8 @@ export default function FullPriceVsSalePage() {
                       LY {thousands(ytd.last_year?.total)} · {signedPct(ytd.yoy_total_pct)}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-                      Sum of daily &quot;Total&quot; column in the export (all sale types combined).
+                      Sum of daily &quot;Total&quot; column (all sale types). YoY % is total net sales growth, not
+                      full-price-only growth.
                     </p>
                   </CardContent>
                 </Card>
@@ -268,12 +279,16 @@ export default function FullPriceVsSalePage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-semibold text-gray-900">{thousands(ytd.discounted)}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      LY {thousands(ytd.last_year?.discounted)}
-                      {ytd.weighted_discount_pct != null && <> · depth {pct(ytd.weighted_discount_pct)}</>}
-                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">LY {thousands(ytd.last_year?.discounted)}</div>
+                    {ytd.weighted_discount_pct != null && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Weighted disc {pct(ytd.weighted_discount_pct)} · LY{' '}
+                        {pct(ytd.last_year?.weighted_discount_pct)} ·{' '}
+                        {signedPp(wdPpDelta(ytd.weighted_discount_pct, ytd.last_year?.weighted_discount_pct))} pp
+                      </div>
+                    )}
                     <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-                      Total − full price. Compare-at, discount codes, price drops, and &quot;both&quot; combined.
+                      Total − full price. Weighted disc % = markdown depth on those discounted sales vs last year.
                     </p>
                   </CardContent>
                 </Card>
@@ -385,8 +400,9 @@ export default function FullPriceVsSalePage() {
                     <th className="py-2 px-4 font-medium text-right">LY full price %</th>
                     <th className="py-2 px-4 font-medium text-right">Δ pp</th>
                     <th className="py-2 px-4 font-medium text-right">YoY total %</th>
-                    {view === 'month' && <th className="py-2 px-4 font-medium text-right">2Y full price %</th>}
-                    <th className="py-2 pl-4 font-medium text-right">Weighted disc %</th>
+                    <th className="py-2 px-4 font-medium text-right">Weighted disc %</th>
+                    <th className="py-2 px-4 font-medium text-right">LY weighted disc %</th>
+                    <th className="py-2 pl-4 font-medium text-right">Δ wd pp</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -401,7 +417,13 @@ export default function FullPriceVsSalePage() {
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(w.last_year?.full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPp(w.full_price_pct_delta)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPct(w.yoy_total_pct)}</td>
-                          <td className="py-2 pl-4 text-right tabular-nums">{pct(w.weighted_discount_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{pct(w.weighted_discount_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                            {pct(w.last_year?.weighted_discount_pct)}
+                          </td>
+                          <td className="py-2 pl-4 text-right tabular-nums">
+                            {signedPp(wdPpDelta(w.weighted_discount_pct, w.last_year?.weighted_discount_pct))}
+                          </td>
                         </tr>
                       ))
                     : monthsAsc.map((m) => (
@@ -414,8 +436,13 @@ export default function FullPriceVsSalePage() {
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(m.last_year?.full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPp(m.full_price_pct_delta)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPct(m.yoy_total_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(m.two_years_ago?.full_price_pct)}</td>
-                          <td className="py-2 pl-4 text-right tabular-nums">{pct(m.weighted_discount_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{pct(m.weighted_discount_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                            {pct(m.last_year?.weighted_discount_pct)}
+                          </td>
+                          <td className="py-2 pl-4 text-right tabular-nums">
+                            {signedPp(wdPpDelta(m.weighted_discount_pct, m.last_year?.weighted_discount_pct))}
+                          </td>
                         </tr>
                       ))}
                 </tbody>
