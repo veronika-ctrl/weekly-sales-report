@@ -1153,6 +1153,7 @@ export interface FullPriceVsSaleWeek {
     weighted_discount_pct: number | null
   }
   yoy_total_pct: number | null
+  yoy_full_price_pct: number | null
   full_price_pct_delta: number | null
 }
 
@@ -1205,6 +1206,7 @@ export interface FullPriceVsSaleMonth extends FullPriceVsSaleBucket {
   last_year: FullPriceVsSaleBucket & { month: string }
   two_years_ago: FullPriceVsSaleBucket & { month: string }
   yoy_total_pct: number | null
+  yoy_full_price_pct: number | null
   full_price_pct_delta: number | null
 }
 
@@ -1215,6 +1217,7 @@ export interface FullPriceVsSaleYtd extends FullPriceVsSaleBucket {
   last_year: FullPriceVsSaleBucket
   two_years_ago: FullPriceVsSaleBucket
   yoy_total_pct: number | null
+  yoy_full_price_pct: number | null
   full_price_pct_delta: number | null
 }
 

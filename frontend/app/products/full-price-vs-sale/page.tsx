@@ -224,8 +224,8 @@ export default function FullPriceVsSalePage() {
               </li>
               <li>
                 <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change vs LY.
-                <strong> YoY total %</strong> = change in <strong>total net sales</strong> (full price + discounted
-                combined) — not full-price growth alone.
+                <strong> YoY total %</strong> = change in <strong>total net sales</strong> (full price + discounted).
+                <strong> YoY full price %</strong> = change in <strong>absolute full-price revenue</strong> only.
               </li>
               <li>
                 <strong>Weighted disc %</strong> = discount depth on discounted sales only. <strong>LY weighted disc
@@ -256,8 +256,12 @@ export default function FullPriceVsSalePage() {
                     <div className="text-xs text-muted-foreground mt-1">
                       LY {pct(ytd.last_year?.full_price_pct)} · {signedPp(ytd.full_price_pct_delta)} pp
                     </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Full price sales {thousands(ytd.full_price)} · LY {thousands(ytd.last_year?.full_price)} ·{' '}
+                      {signedPct(ytd.yoy_full_price_pct)}
+                    </div>
                     <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-                      Full price ÷ total net sales × 100. Share of revenue sold at full price (not discounted).
+                      Share = full price ÷ total. Second line = absolute full-price revenue YoY (SEK).
                     </p>
                   </CardContent>
                 </Card>
@@ -407,6 +411,7 @@ export default function FullPriceVsSalePage() {
                     <th className="py-2 px-4 font-medium text-right">LY full price %</th>
                     <th className="py-2 px-4 font-medium text-right">Δ pp</th>
                     <th className="py-2 px-4 font-medium text-right">YoY total %</th>
+                    <th className="py-2 px-4 font-medium text-right">YoY full price %</th>
                     <th className="py-2 px-4 font-medium text-right">Weighted disc %</th>
                     <th className="py-2 px-4 font-medium text-right">LY weighted disc %</th>
                     <th className="py-2 pl-4 font-medium text-right">Δ wd pp</th>
@@ -424,6 +429,7 @@ export default function FullPriceVsSalePage() {
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(w.last_year?.full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPp(w.full_price_pct_delta)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPct(w.yoy_total_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(w.yoy_full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(w.weighted_discount_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
                             {pct(w.last_year?.weighted_discount_pct)}
@@ -443,6 +449,7 @@ export default function FullPriceVsSalePage() {
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(m.last_year?.full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPp(m.full_price_pct_delta)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{signedPct(m.yoy_total_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(m.yoy_full_price_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(m.weighted_discount_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
                             {pct(m.last_year?.weighted_discount_pct)}

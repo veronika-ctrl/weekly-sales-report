@@ -2699,12 +2699,18 @@ def calculate_full_price_vs_sale_weekly(
             if cur["full_price_pct"] is not None and ly["full_price_pct"] is not None
             else None
         )
+        yoy_full_price_pct = (
+            (cur["full_price"] - ly["full_price"]) / ly["full_price"] * 100.0
+            if ly["full_price"] > 0
+            else None
+        )
         weeks_out.append(
             {
                 "week": w,
                 **cur,
                 "last_year": {"week": ly_w, **ly},
                 "yoy_total_pct": yoy_total_pct,
+                "yoy_full_price_pct": yoy_full_price_pct,
                 "full_price_pct_delta": fp_delta,
             }
         )
@@ -2789,7 +2795,16 @@ def calculate_full_price_vs_sale_monthly(
             if cur["full_price_pct"] is not None and prev["full_price_pct"] is not None
             else None
         )
-        return {"yoy_total_pct": yoy_total, "full_price_pct_delta": fp_delta}
+        yoy_full_price = (
+            (cur["full_price"] - prev["full_price"]) / prev["full_price"] * 100.0
+            if prev["full_price"] > 0
+            else None
+        )
+        return {
+            "yoy_total_pct": yoy_total,
+            "yoy_full_price_pct": yoy_full_price,
+            "full_price_pct_delta": fp_delta,
+        }
 
     end_period = week_end.to_period("M")
     min_dt = pd.to_datetime(df["_date"].min(), errors="coerce")
