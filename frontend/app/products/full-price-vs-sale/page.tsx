@@ -148,19 +148,12 @@ export default function FullPriceVsSalePage() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Full Price vs Sale</h2>
           <p className="text-sm text-muted-foreground">
-            Net sales split into full price vs discounted, vs last year. Built from the accumulated daily
-            revenue-over-time export.
+            Net sales split into full price vs discounted, vs last year. All monetary values are shown in{' '}
+            <strong>SEK</strong> (thousands) to match the rest of this app.
           </p>
           {data?.history_range && (
             <p className="text-xs text-muted-foreground mt-1">
               History: {data.history_range.start} → {data.history_range.end} · {data.files_used.length} file(s)
-              {data.fx?.applied && (
-                <>
-                  {' '}
-                  · Converted {data.fx.source_currency} → {data.fx.target_currency} (ECB daily rate
-                  {data.fx.sample_rate != null ? `, latest ≈ ${data.fx.sample_rate.toFixed(2)}` : ''})
-                </>
-              )}
             </p>
           )}
         </div>
@@ -204,6 +197,28 @@ export default function FullPriceVsSalePage() {
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               No last-year data in history yet, so year-over-year shows 0. Upload last year&apos;s export once and it
               will fill in automatically.
+            </div>
+          )}
+
+          {data.fx?.applied ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-950">
+              <p className="font-medium">Currency (fixed)</p>
+              <p className="text-xs mt-1 leading-relaxed">
+                The Shopify app export is in <strong>{data.fx.source_currency ?? 'USD'}</strong> (shop money). This
+                report converts every day to <strong>{data.fx.target_currency ?? 'SEK'}</strong> so it aligns with Qlik
+                and the other weekly reports. We use the{' '}
+                <strong>European Central Bank (ECB) daily {data.fx.source_currency ?? 'USD'}/{data.fx.target_currency ?? 'SEK'} rate</strong>{' '}
+                for each calendar day (Frankfurter API); weekends and holidays use the last published ECB rate.
+                {data.fx.sample_rate != null && (
+                  <> Latest rate in history: ≈ {data.fx.sample_rate.toFixed(2)} SEK/USD.</>
+                )}{' '}
+                Percentages (full price share, weighted discount) are not affected by conversion.
+              </p>
+            </div>
+          ) : data.currency === 'SEK' ? null : (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              Currency conversion to SEK was not applied
+              {data.fx?.error ? ` (${data.fx.error})` : ''}. Amounts may still be in USD.
             </div>
           )}
 

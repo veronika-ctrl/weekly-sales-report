@@ -539,6 +539,16 @@ export default function Settings() {
                             <strong>{discountsHistory.range.end}</strong>
                           </span>
                         )}
+                        {discountsHistory.fx?.applied && (
+                          <span>
+                            Display currency: <strong>{discountsHistory.currency ?? 'SEK'}</strong> (converted from{' '}
+                            {discountsHistory.fx.source_currency} via ECB daily rate
+                            {discountsHistory.fx.sample_rate != null
+                              ? `, ≈ ${discountsHistory.fx.sample_rate.toFixed(2)}`
+                              : ''}
+                            )
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           {discountsHistory.has_discount ? (
                             <>

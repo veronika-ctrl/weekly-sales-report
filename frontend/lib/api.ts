@@ -1255,6 +1255,8 @@ export interface DiscountsHistoryInfo {
   matched_files: string[]
   range: { start: string; end: string } | null
   has_discount: boolean
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
   latest_file_inspection?: {
     file?: string
     columns?: string[]
