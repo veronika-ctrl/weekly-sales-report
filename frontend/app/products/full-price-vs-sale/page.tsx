@@ -154,6 +154,13 @@ export default function FullPriceVsSalePage() {
           {data?.history_range && (
             <p className="text-xs text-muted-foreground mt-1">
               History: {data.history_range.start} → {data.history_range.end} · {data.files_used.length} file(s)
+              {data.fx?.applied && (
+                <>
+                  {' '}
+                  · Converted {data.fx.source_currency} → {data.fx.target_currency} (ECB daily rate
+                  {data.fx.sample_rate != null ? `, latest ≈ ${data.fx.sample_rate.toFixed(2)}` : ''})
+                </>
+              )}
             </p>
           )}
         </div>

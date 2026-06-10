@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from weekly_report.src.fx_rates import convert_revenue_over_time_to_sek
 from weekly_report.src.periods.calculator import get_week_date_range
 
 
@@ -2601,6 +2602,8 @@ def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
             "df": pd.DataFrame(columns=["_date", "_full", "_discounted", "_total", "_discount"]),
             "files_used": [],
             "has_discount": False,
+            "fx": {"applied": False},
+            "currency": "SEK",
         }
 
     alld = pd.concat(frames, ignore_index=True)
@@ -2610,7 +2613,14 @@ def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
     alld["_discount"] = pd.to_numeric(alld["_discount"], errors="coerce")
     has_discount = bool(alld["_discount"].notna().any())
     alld = alld[["_date", "_full", "_discounted", "_total", "_discount"]].sort_values("_date").reset_index(drop=True)
-    return {"df": alld, "files_used": files_used, "has_discount": has_discount}
+    alld, fx = convert_revenue_over_time_to_sek(alld, Path(data_root))
+    return {
+        "df": alld,
+        "files_used": files_used,
+        "has_discount": has_discount,
+        "fx": fx,
+        "currency": fx.get("target_currency", "SEK") if fx.get("applied") else "USD",
+    }
 
 
 def calculate_full_price_vs_sale_weekly(
@@ -2705,6 +2715,8 @@ def calculate_full_price_vs_sale_weekly(
         "source": "revenue_over_time",
         "has_last_year": has_last_year,
         "has_discount": has_discount,
+        "currency": history.get("currency", "SEK"),
+        "fx": history.get("fx"),
         "files_used": history["files_used"],
         "history_range": {
             "start": str(df["_date"].min().date()),
@@ -2839,6 +2851,8 @@ def calculate_full_price_vs_sale_monthly(
         **base_out,
         "has_last_year": has_last_year,
         "has_discount": has_discount,
+        "currency": history.get("currency", "SEK"),
+        "fx": history.get("fx"),
         "history_range": {"start": str(df["_date"].min().date()), "end": str(df["_date"].max().date())},
         "months_data": months_data,
         "ytd": ytd,

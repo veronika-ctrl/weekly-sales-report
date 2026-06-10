@@ -4406,6 +4406,8 @@ async def get_discounts_history_info(base_week: str = Query(...)):
             "matched_files": history.get("files_used", []),
             "range": rng,
             "has_discount": bool(history.get("has_discount")),
+            "currency": history.get("currency", "SEK"),
+            "fx": history.get("fx"),
             "latest_file_inspection": latest_inspection,
         }
     except HTTPException:

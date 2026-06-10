@@ -1156,12 +1156,23 @@ export interface FullPriceVsSaleWeek {
   full_price_pct_delta: number | null
 }
 
+export interface FullPriceVsSaleFx {
+  applied: boolean
+  source_currency?: string
+  target_currency?: string
+  provider?: string
+  sample_rate?: number
+  error?: string | null
+}
+
 export interface FullPriceVsSaleResponse {
   base_week: string
   num_weeks: number
   source: string
   has_last_year: boolean
   has_discount: boolean
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
   files_used: string[]
   history_range?: { start: string; end: string }
   weeks: FullPriceVsSaleWeek[]
@@ -1214,6 +1225,8 @@ export interface FullPriceVsSaleMonthlyResponse {
   source: string
   has_last_year: boolean
   has_discount: boolean
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
   files_used: string[]
   history_range?: { start: string; end: string }
   months_data: FullPriceVsSaleMonth[]
