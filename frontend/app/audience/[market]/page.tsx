@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import {
@@ -20,6 +20,7 @@ import {
   type BudgetGeneralResponse,
 } from '@/lib/api'
 import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
+import { AudienceSlideView } from '@/components/audience/AudienceSlideView'
 
 function budgetGeneralUsable(b: BudgetGeneralResponse | null | undefined): boolean {
   return Boolean(b && !b.error && b.table && Object.keys(b.table).length > 0)
@@ -52,6 +53,7 @@ export default function AudienceMarketPage() {
   const { baseWeek, loading, periods, loadAllData, isDataReady, error, budget_general } = useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
+  const [slideView, setSlideView] = useState(false)
 
   const [audienceData, setAudienceData] = useState<
     Array<
@@ -223,15 +225,29 @@ export default function AudienceMarketPage() {
       )}
       {hasData && (
         <>
-          <h2 className="text-lg font-semibold text-gray-900">Audience — {marketName}</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            Same layout as Audience Total: main KPIs first, then below the divider returning and new AOV, customer
-            share, blended return rate, and CAC.
-            Comparison to last year uses the same ISO week (matching weekdays). Hover a point for this year and last year
-            values.
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-gray-900">Audience — {marketName}</h2>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setSlideView(true)}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Slide view
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Same layout as Audience Total. Hover a point for this year and last year values.{' '}
+            <Link href="/audience-total" className="text-primary hover:underline">
+              ← Back to Audience Total
+            </Link>
           </p>
-          <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={isAnimationActive} />
-          <Link href="/audience-total" className="text-sm text-muted-foreground hover:text-foreground">← Back to Audience Total</Link>
+          <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={isAnimationActive} compact />
+          <AudienceSlideView title={`Audience — ${marketName}`} open={slideView} onClose={() => setSlideView(false)}>
+            <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={false} compact />
+          </AudienceSlideView>
         </>
       )}
     </div>

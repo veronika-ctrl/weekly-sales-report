@@ -1,17 +1,21 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import ProductsGenderTable from '@/components/ProductsGenderTable'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Maximize2, X } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+
+type GenderTab = 'men' | 'women'
 
 export default function ProductsGender() {
   const { baseWeek, periods, loading, error, loadAllData, isDataReady } = useDataCache()
+  const [activeTab, setActiveTab] = useState<GenderTab>('men')
+  const [slideView, setSlideView] = useState(false)
 
-  // Load data when a week is selected and not already loaded
   useEffect(() => {
     if (!baseWeek) return
     if ((!periods || !isDataReady) && !loading && !error) {
@@ -25,10 +29,13 @@ export default function ProductsGender() {
 
   const noDataForWeek = baseWeek && !loading && !error && (!periods || !isDataReady)
 
+  const tableBlock = (gender: GenderTab) =>
+    baseWeek ? <ProductsGenderTable baseWeek={baseWeek} genderFilter={gender} compact /> : null
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-2">
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
           <p className="text-sm text-red-800 mb-2">{error}</p>
           <Button onClick={handleRetry} variant="outline" size="sm" className="text-red-800 border-red-300 hover:bg-red-100">
             Retry
@@ -44,31 +51,85 @@ export default function ProductsGender() {
         </div>
       )}
       {periods && isDataReady ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-            <h2 className="text-base font-semibold text-gray-900 mb-2">Products Men</h2>
-            <ProductsGenderTable baseWeek={baseWeek} genderFilter="men" />
-          </div>
-          <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-4">
-            <h2 className="text-base font-semibold text-gray-900 mb-2">Products Women</h2>
-            <ProductsGenderTable baseWeek={baseWeek} genderFilter="women" />
-          </div>
-        </div>
-      ) : !noDataForWeek && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Loading Products</h2>
-              <p className="text-sm text-gray-600">{loading ? 'Loading data...' : 'Initializing data...'}</p>
+        <>
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as GenderTab)}
+            className="w-full max-w-4xl"
+          >
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <TabsList className="h-8">
+                <TabsTrigger value="men" className="text-xs px-3 py-1">
+                  Products Men
+                </TabsTrigger>
+                <TabsTrigger value="women" className="text-xs px-3 py-1">
+                  Products Women
+                </TabsTrigger>
+              </TabsList>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setSlideView(true)}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                Slide view
+              </Button>
             </div>
+            <TabsContent value="men" className="mt-0">
+              {tableBlock('men')}
+            </TabsContent>
+            <TabsContent value="women" className="mt-0">
+              {tableBlock('women')}
+            </TabsContent>
+          </Tabs>
+
+          {slideView && baseWeek && (
+            <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+              <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5 shrink-0">
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(v) => setActiveTab(v as GenderTab)}
+                  className="flex-1"
+                >
+                  <TabsList className="h-7">
+                    <TabsTrigger value="men" className="text-[11px] px-2.5 py-0.5">
+                      Men
+                    </TabsTrigger>
+                    <TabsTrigger value="women" className="text-[11px] px-2.5 py-0.5">
+                      Women
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 shrink-0"
+                  onClick={() => setSlideView(false)}
+                  aria-label="Close slide view"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex-1 overflow-hidden p-2 min-h-0">
+                <div className="h-full max-w-4xl mx-auto">
+                  {tableBlock(activeTab)}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : !noDataForWeek && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <p className="text-sm text-gray-600">{loading ? 'Loading data…' : 'Initializing…'}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <Skeleton className="h-96 w-full" />
-          </div>
+          <Skeleton className="h-64 w-full" />
         </div>
       )}
     </div>
   )
 }
-

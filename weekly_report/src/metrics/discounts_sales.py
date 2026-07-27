@@ -209,12 +209,60 @@ def calculate_full_price_share_for_date_range(
     end: str,
 ) -> Dict[str, Any]:
     """
-    Full-price share of net sales for a calendar date range from ``data/raw/{week}/discounts/``.
+    Full-price share of net sales for a calendar date range.
 
-    Business rule (same as Products → Discounts):
-    - ``Produktvariantens ordinare pris`` (compare-at) > 0 => sale/discounted
-    - otherwise => full price
+    Priority:
+    1) Custom Shopify app ``revenue-over-time`` export (same source as Products → Full price vs Sale):
+       ``sum(Full Price) ÷ sum(Total)`` over calendar days in range (accumulated across week folders).
+    2) Legacy Shopify order-line export in ``data/raw/{week}/discounts/``:
+       compare-at price > 0 => sale, otherwise full price.
     """
+    start_dt = pd.to_datetime(start, errors="coerce")
+    end_dt = pd.to_datetime(end, errors="coerce")
+    if pd.isna(start_dt) or pd.isna(end_dt):
+        return {"full_price_share_pct": None, "error": "invalid_date_range", "filename": None}
+
+    # 1) Revenue-over-time daily history (Products → Full price vs Sale).
+    history = load_revenue_over_time_history(data_root)
+    hist_df = history.get("df")
+    if hist_df is not None and not hist_df.empty:
+        sub = hist_df.loc[(hist_df["_date"] >= start_dt) & (hist_df["_date"] <= end_dt)]
+        total = float(sub["_total"].sum() or 0.0)
+        if total > 1e-9:
+            full = float(sub["_full"].sum() or 0.0)
+            share = full / total * 100.0
+            files_used = history.get("files_used") or []
+            filename = files_used[-1] if files_used else None
+            fx = history.get("fx") or {}
+            currency = history.get("currency", "SEK")
+            return {
+                "full_price_share_pct": round(share, 2),
+                "error": None,
+                "filename": filename,
+                "source": "revenue_over_time",
+                "currency": currency,
+                "fx_applied": bool(fx.get("applied")),
+                "files_used": files_used,
+                "columns_used": {
+                    "full_price": "Full Price",
+                    "total": "Total",
+                    "date": "Date",
+                },
+                "supporting": {
+                    "net_revenue_overall": round(total, 2),
+                    "net_revenue_full_price": round(full, 2),
+                    "net_revenue_sale": round(total - full, 2),
+                    "days_in_range": int(sub["_date"].nunique()),
+                },
+            }
+        if not sub.empty:
+            return {
+                "full_price_share_pct": None,
+                "error": "zero_net_sales",
+                "filename": (history.get("files_used") or [None])[-1],
+                "source": "revenue_over_time",
+            }
+
     raw_path = Path(data_root) / "raw" / base_week / "discounts"
     files = [f for f in raw_path.glob("*.*") if not f.name.startswith(".")]
     if not files:
@@ -259,10 +307,6 @@ def calculate_full_price_share_for_date_range(
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
     df = df.dropna(subset=[date_col])
-    start_dt = pd.to_datetime(start, errors="coerce")
-    end_dt = pd.to_datetime(end, errors="coerce")
-    if pd.isna(start_dt) or pd.isna(end_dt):
-        return {"full_price_share_pct": None, "error": "invalid_date_range", "filename": latest_file.name}
 
     df = df.loc[(df[date_col] >= start_dt) & (df[date_col] <= end_dt)].copy()
     if df.empty:
@@ -299,6 +343,7 @@ def calculate_full_price_share_for_date_range(
         "full_price_share_pct": round(share, 2),
         "error": None,
         "filename": latest_file.name,
+        "source": "shopify_order_lines",
         "columns_used": {
             "date": date_col,
             "net_sales": net_sales_col,

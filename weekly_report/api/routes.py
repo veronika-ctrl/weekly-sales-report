@@ -36,6 +36,7 @@ from weekly_report.src.metrics.table1 import calculate_table1_for_periods, calcu
 from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks
 from weekly_report.src.metrics.online_kpis import calculate_online_kpis_for_weeks
 from weekly_report.src.metrics.monthly_veronika_kpis import calculate_monthly_veronika_kpis
+from weekly_report.src.metrics.quarterly_veronika_board import calculate_quarterly_veronika_board_kpis
 from weekly_report.src.pdf.veronika_monthly_pdf import build_veronika_monthly_pdf
 from weekly_report.src.metrics.contribution import calculate_contribution_for_weeks
 from weekly_report.src.metrics.gender_sales import calculate_gender_sales_for_weeks
@@ -2776,6 +2777,30 @@ async def get_monthly_veronika_kpis_pdf(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/quarterly-veronika-board")
+async def get_quarterly_veronika_board(
+    year_quarter: str = Query(..., description="Calendar quarter YYYY-Q1..Q4"),
+    base_week: str = Query(..., description="ISO week folder under data/raw where exports live"),
+):
+    """Quarterly board scorecard for CFO reporting (customer counts, sales, full-price, aMER, COS, CLV/CAC)."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        config = load_config(week=base_week)
+        payload = calculate_quarterly_veronika_board_kpis(year_quarter, base_week, Path(config.data_root))
+        return payload
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error quarterly-veronika-board {year_quarter} {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.get("/api/contribution", response_model=ContributionResponse)
 async def get_contribution(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
@@ -4355,6 +4380,41 @@ async def get_discounts_full_price_vs_sale(
     except Exception as e:
         logger.error(f"Error loading full price vs sale: {e}")
         raise HTTPException(status_code=500, detail="Failed to load full price vs sale")
+
+
+@app.get("/api/discounts/full-price-vs-sale/excel")
+async def get_discounts_full_price_vs_sale_excel(
+    base_week: str = Query(...),
+    months: int = Query(13),
+    num_weeks: int = Query(8),
+):
+    """Download Full Price vs Sale report as Excel (YTD summary + monthly + weekly)."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.export.full_price_vs_sale_excel import build_full_price_vs_sale_excel
+
+        buf = build_full_price_vs_sale_excel(
+            base_week,
+            Path(config.data_root),
+            months=months,
+            num_weeks=num_weeks,
+        )
+        fn = f"full-price-vs-sale-{base_week}.xlsx"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error exporting full price vs sale excel {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to export full price vs sale Excel")
 
 
 @app.get("/api/discounts/history-info")

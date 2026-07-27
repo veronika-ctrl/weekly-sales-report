@@ -160,6 +160,9 @@ export default function MonthlyVeronikaPage() {
             Print view
           </Link>
         </Button>
+        <Button asChild variant="outline">
+          <Link href="/quarterly-veronika">Quarterly board view</Link>
+        </Button>
       </div>
 
       {err && (

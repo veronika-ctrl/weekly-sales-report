@@ -67,6 +67,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/settings': { title: 'Settings', subtitle: 'Configure data sources and file uploads' },
       '/monthly-veronika': { title: 'Monthly Veronika KPIs', subtitle: 'Calendar month scorecard (dashboard)' },
       '/monthly-veronika/print': { title: 'Monthly Veronika — Print', subtitle: 'Print-friendly view and PDF link' },
+      '/quarterly-veronika': { title: 'Quarterly Board KPIs', subtitle: 'CFO quarterly scorecard with YoY (board reporting)' },
     }
     
     if (pathname?.startsWith('/audience/') && pathname !== '/audience-total') {
@@ -322,6 +323,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/online-kpis') ||
                     isActive('/monthly-veronika') ||
                     pathname?.startsWith('/monthly-veronika') ||
+                    isActive('/quarterly-veronika') ||
                     isActive('/contribution') ||
                     isActive('/category-sales') ||
                     isActive('/products-new')
@@ -363,6 +365,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconFileChart className="h-4 w-4" />
                       {!isCollapsed && <span>Monthly Veronika</span>}
+                    </Link>
+                    <Link
+                      href="/quarterly-veronika"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/quarterly-veronika')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconFileChart className="h-4 w-4" />
+                      {!isCollapsed && <span>Quarterly Board</span>}
                     </Link>
                     <Link
                       href="/contribution"

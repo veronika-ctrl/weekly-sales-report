@@ -349,44 +349,33 @@ def _candidate_cols(df: pd.DataFrame, keywords: tuple[str, ...], limit: int = 8)
     return out
 
 
-def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: Path) -> Dict[str, Any]:
+def _aggregate_veronika_online_period(
+    all_data: Dict[str, Any],
+    data_root: Path,
+    base_week: str,
+    start_s: str,
+    end_s: str,
+) -> Dict[str, Any]:
     """
-    Aggregate Veronika KPIs for a calendar month.
+    Core online ecom metrics for an arbitrary calendar date range.
 
-    Args:
-        year_month: Calendar month ``YYYY-MM``.
-        base_week: ISO week folder under ``data/raw/`` where CSV exports live.
-        data_root: Project ``data`` root (parent of ``raw``).
-
-    Returns:
-        JSON-serialisable dict with KPI values, definitions, and coverage notes.
+    Used by monthly scorecard and quarterly board report.
     """
-    from weekly_report.src.periods.calculator import validate_iso_week
-
-    if not validate_iso_week(base_week):
-        raise ValueError(f"Invalid base_week: {base_week!r}")
-    start_s, end_s, ym_label = _month_bounds(year_month)
     start_dt = pd.to_datetime(start_s)
-    end_dt = pd.to_datetime(end_s) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)  # end of day
+    end_dt = pd.to_datetime(end_s) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
-    raw_path = data_root / "raw" / base_week
-    if not raw_path.is_dir():
-        raise FileNotFoundError(f"Raw data folder not found: {raw_path}")
-
-    all_data = load_all_raw_data(raw_path)
     filtered = filter_data_for_date_range(all_data, start_s, end_s)
     qlik_m = filtered.get("qlik", pd.DataFrame()).copy()
     dema_m = filtered.get("dema_spend", pd.DataFrame()).copy()
     sessions = _shopify_sessions_in_range(all_data.get("shopify", pd.DataFrame()), start_dt, end_dt)
     qlik_m.columns = qlik_m.columns.astype(str).str.strip()
     if qlik_m.empty or "Sales Channel" not in qlik_m.columns:
-        logger.warning("Monthly Veronika: no Qlik rows for month %s", ym_label)
-        return _empty_payload(ym_label, base_week, start_s, end_s, note="No Qlik data for this date range in the selected export.")
+        return {"error": "no_qlik_data"}
 
     _sc = qlik_m["Sales Channel"].astype(str).str.strip()
     online = qlik_m.loc[_sc.str.lower().eq("online")].copy()
     if online.empty:
-        return _empty_payload(ym_label, base_week, start_s, end_s, note="No online rows for this month.")
+        return {"error": "no_online_rows"}
 
     if "Date" in online.columns:
         online["Date"] = pd.to_datetime(online["Date"], errors="coerce")
@@ -420,13 +409,12 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
     order_col = "Order No" if "Order No" in online.columns else None
     unique_orders = int(online[order_col].nunique()) if order_col else 0
     conversion_rate = (unique_orders / sessions * 100.0) if sessions > 0 else 0.0
+    aov = (net / unique_orders) if unique_orders > 0 else None
 
     cac = (marketing / new_customers) if new_customers > 0 else 0.0
     cos_pct = (marketing / gross * 100.0) if gross > 0 else 0.0
-    # Same definition as Table 1 eMER / slide 1 aMER: online new-customer net ÷ total DEMA marketing (month, global)
     amer = (new_net / marketing) if marketing > 1e-9 else 0.0
 
-    # Repeat purchase rate: share of online customers (month) with 2+ distinct orders
     repeat_purchase_rate_pct: Optional[float] = None
     if email_col and order_col:
         oc = online.dropna(subset=[email_col])
@@ -435,17 +423,14 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
         repeaters = int((per_c >= 2).sum())
         repeat_purchase_rate_pct = (repeaters / buyers * 100.0) if buyers > 0 else 0.0
 
-    # Full-price share of ecom net revenue:
-    # 1) Shopify order export in data/raw/{week}/discounts/ (compare-at price logic)
-    # 2) Shopify app/order CSV in shopify/ folder (if it has net + price classification)
-    # 3) Qlik discount column (rare — most Qlik exports lack discount fields)
     full_price_share_pct: Optional[float] = None
     full_price_share_method: Optional[str] = None
     qlik_fallback_discount_col: Optional[str] = None
     discounts_fp = calculate_full_price_share_for_date_range(base_week, data_root, start_s, end_s)
     if discounts_fp.get("full_price_share_pct") is not None:
         full_price_share_pct = float(discounts_fp["full_price_share_pct"])
-        full_price_share_method = f"discounts:{discounts_fp.get('filename')}"
+        src = discounts_fp.get("source") or "discounts"
+        full_price_share_method = f"{src}:{discounts_fp.get('filename')}"
     else:
         shopify_full_share, shopify_method = _shopify_full_price_share_pct(
             all_data.get("shopify", pd.DataFrame()), start_dt, end_dt
@@ -463,7 +448,14 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
                 full_price_share_method = f"qlik:{dcol}"
                 qlik_fallback_discount_col = dcol
 
-    # TTM LTV proxy: mean trailing-12-month online net per distinct customer (in export date range)
+    # E-com amounts always tie to Qlik online net. Share % may come from the Shopify app
+    # export (shop-wide daily file has no channel column); amounts = online net × share.
+    full_price_net: Optional[float] = None
+    discounted_net: Optional[float] = None
+    if full_price_share_pct is not None and net > 1e-9:
+        full_price_net = net * full_price_share_pct / 100.0
+        discounted_net = net - full_price_net
+
     ltv_proxy_ttm: Optional[float] = None
     ltv_cac_ratio: Optional[float] = None
     ttm_note: Optional[str] = None
@@ -476,7 +468,9 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
         ttm_start = (pd.Timestamp(end_s) - pd.DateOffset(months=11)).normalize()
         ttm_df = full_online[(full_online["Date"] >= ttm_start) & (full_online["Date"] <= pd.Timestamp(end_s))]
         if not ttm_df.empty and email_col in ttm_df.columns:
-            cust_net = ttm_df.groupby(email_col)["Net Revenue"].apply(lambda s: pd.to_numeric(s, errors="coerce").fillna(0.0).sum())
+            cust_net = ttm_df.groupby(email_col)["Net Revenue"].apply(
+                lambda s: pd.to_numeric(s, errors="coerce").fillna(0.0).sum()
+            )
             ltv_proxy_ttm = float(cust_net.mean()) if len(cust_net) > 0 else None
             min_d = full_online["Date"].min()
             if pd.notna(min_d) and min_d > ttm_start:
@@ -487,6 +481,91 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
             if ltv_proxy_ttm is not None and cac > 0:
                 ltv_cac_ratio = ltv_proxy_ttm / cac
 
+    return {
+        "gross": gross,
+        "net": net,
+        "new_customers": new_customers,
+        "returning_customers": returning_customers,
+        "new_net": new_net,
+        "returning_net": returning_net,
+        "marketing": marketing,
+        "unique_orders": unique_orders,
+        "sessions": sessions,
+        "conversion_rate": conversion_rate,
+        "aov": aov,
+        "cac": cac,
+        "cos_pct": cos_pct,
+        "amer": amer,
+        "repeat_purchase_rate_pct": repeat_purchase_rate_pct,
+        "full_price_share_pct": full_price_share_pct,
+        "full_price_share_method": full_price_share_method,
+        "full_price_net": full_price_net,
+        "discounted_net": discounted_net,
+        "discounts_fp": discounts_fp,
+        "qlik_fallback_discount_col": qlik_fallback_discount_col,
+        "ltv_proxy_ttm": ltv_proxy_ttm,
+        "ltv_cac_ratio": ltv_cac_ratio,
+        "ttm_note": ttm_note,
+        "online": online,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+    }
+
+
+def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: Path) -> Dict[str, Any]:
+    """
+    Aggregate Veronika KPIs for a calendar month.
+
+    Args:
+        year_month: Calendar month ``YYYY-MM``.
+        base_week: ISO week folder under ``data/raw/`` where CSV exports live.
+        data_root: Project ``data`` root (parent of ``raw``).
+
+    Returns:
+        JSON-serialisable dict with KPI values, definitions, and coverage notes.
+    """
+    from weekly_report.src.periods.calculator import validate_iso_week
+
+    if not validate_iso_week(base_week):
+        raise ValueError(f"Invalid base_week: {base_week!r}")
+    start_s, end_s, ym_label = _month_bounds(year_month)
+    start_dt = pd.to_datetime(start_s)
+    end_dt = pd.to_datetime(end_s) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)  # end of day
+
+    raw_path = data_root / "raw" / base_week
+    if not raw_path.is_dir():
+        raise FileNotFoundError(f"Raw data folder not found: {raw_path}")
+
+    all_data = load_all_raw_data(raw_path)
+    agg = _aggregate_veronika_online_period(all_data, data_root, base_week, start_s, end_s)
+    if agg.get("error") == "no_qlik_data":
+        logger.warning("Monthly Veronika: no Qlik rows for month %s", ym_label)
+        return _empty_payload(ym_label, base_week, start_s, end_s, note="No Qlik data for this date range in the selected export.")
+    if agg.get("error") == "no_online_rows":
+        return _empty_payload(ym_label, base_week, start_s, end_s, note="No online rows for this month.")
+
+    gross = agg["gross"]
+    net = agg["net"]
+    new_customers = agg["new_customers"]
+    returning_customers = agg["returning_customers"]
+    new_net = agg["new_net"]
+    returning_net = agg["returning_net"]
+    marketing = agg["marketing"]
+    sessions = agg["sessions"]
+    unique_orders = agg["unique_orders"]
+    conversion_rate = agg["conversion_rate"]
+    cac = agg["cac"]
+    cos_pct = agg["cos_pct"]
+    amer = agg["amer"]
+    repeat_purchase_rate_pct = agg["repeat_purchase_rate_pct"]
+    full_price_share_pct = agg["full_price_share_pct"]
+    full_price_share_method = agg["full_price_share_method"]
+    discounts_fp = agg["discounts_fp"]
+    qlik_fallback_discount_col = agg["qlik_fallback_discount_col"]
+    ltv_proxy_ttm = agg["ltv_proxy_ttm"]
+    ltv_cac_ratio = agg["ltv_cac_ratio"]
+    ttm_note = agg["ttm_note"]
+
     payload = {
         "year_month": ym_label,
         "base_week": base_week,
@@ -496,7 +575,13 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
             "ltv_proxy_ttm": "Mean online net revenue per distinct customer over trailing 12 months ending last day of month (export coverage).",
             "ltv_cac_ratio": "ltv_proxy_ttm ÷ monthly nCAC (marketing ÷ new customers in month).",
             "conversion_rate_pct": "Unique online orders ÷ Shopify sessions summed over the month.",
-            "full_price_share_pct": "Share of ecom net revenue at full price. Uses Shopify order export in data/raw/{week}/discounts/ (compare-at price > 0 = sale). Qlik has no discount columns in typical exports.",
+            "full_price_share_pct": (
+                "Full-price share of net sales for the calendar month. "
+                "Primary source: Shopify app revenue-over-time export (Settings → Shopify order lines / Full price vs Sale) — "
+                "sum(Full Price) ÷ sum(Total) over all days in the month (revenue-weighted, not an average of weekly %). "
+                "Same metric as Products → Full price vs Sale (month view). Amounts are converted to SEK when the export is in USD. "
+                "Falls back to legacy order-line export (compare-at price > 0 = sale) or Qlik discount column if the app export is missing."
+            ),
             "new_customer_acquisition_cost": "Total marketing spend in month ÷ distinct new online customers in month.",
             "returning_customer_revenue": "Sum of online net revenue where New/Returning = returning.",
             "cos_pct": "Marketing spend ÷ online gross revenue × 100 (month, all markets).",
@@ -526,35 +611,38 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
         },
         "notes": [n for n in [ttm_note] if n],
     }
-    shop_diag = _shopify_full_price_diagnostics(all_data.get("shopify", pd.DataFrame()), start_dt, end_dt)
-    payload["notes"].append(
-        "full_price_diag:"
-        f" shop_rows={shop_diag.get('rows_in_range', 0)}"
-        f", shop_net_col={shop_diag.get('net_col')}"
-        f", shop_class_col={shop_diag.get('class_col')}"
-        f", shop_is_full_col={shop_diag.get('is_full_col')}"
-        f", shop_is_discounted_col={shop_diag.get('is_discounted_col')}"
-        f", shop_discount_col={shop_diag.get('discount_col')}"
-        f", qlik_discount_col={qlik_fallback_discount_col}"
-        f", source={full_price_share_method}"
-    )
-    payload["notes"].append(
-        "full_price_diag_cols:"
-        f" shop_candidates={_candidate_cols(all_data.get('shopify', pd.DataFrame()), ('net', 'sales', 'discount', 'rabatt', 'price', 'full'))}"
-        f", qlik_candidates={_candidate_cols(online, ('discount', 'rabatt', 'price', 'net', 'gross', 'return'))}"
-    )
-    if full_price_share_method:
-        payload["notes"].append(f"full_price_share_source={full_price_share_method}")
+    fp_net_amt = agg.get("full_price_net")
+    disc_net_amt = agg.get("discounted_net")
+    if full_price_share_pct is not None and discounts_fp.get("source") == "revenue_over_time":
+        fx_note = (
+            " (USD→SEK via ECB daily rates)"
+            if discounts_fp.get("fx_applied")
+            else ""
+        )
+        payload["notes"].append(
+            f"Full-price share: {full_price_share_pct:.2f}% (mix from Shopify app export{fx_note}). "
+            f"E-com amounts: {fp_net_amt:,.0f} full + {disc_net_amt:,.0f} discounted = "
+            f"{net:,.0f} SEK online net (Qlik, Sales channel = online)."
+        )
+        if discounts_fp.get("filename"):
+            payload["notes"].append(f"Source file: {discounts_fp.get('filename')}")
+    elif full_price_share_pct is not None and full_price_share_method:
+        payload["notes"].append(f"Full-price share source: {full_price_share_method}")
     elif discounts_fp.get("error") == "no_discounts_file":
         payload["notes"].append(
-            f"full_price_share_missing: upload Shopify order-line export to data/raw/{base_week}/discounts/ "
-            "(Settings → Discounts / sales export; needs Date, Net sales, and compare-at / Ordinarie pris). "
-            "Current shopify/ folder is sessions-only; Qlik export has no discount column."
+            "Full-price share unavailable: upload the Shopify app revenue-over-time CSV under "
+            f"Settings → Shopify order lines (full price / sale) for week {base_week}. "
+            "Needs columns Date, Full Price, and Total."
         )
     elif discounts_fp.get("error"):
         payload["notes"].append(
-            f"full_price_share_missing: discounts file issue ({discounts_fp.get('error')}); "
+            f"Full-price share unavailable ({discounts_fp.get('error')}); "
             f"file={discounts_fp.get('filename')}"
+        )
+        shop_diag = _shopify_full_price_diagnostics(all_data.get("shopify", pd.DataFrame()), start_dt, end_dt)
+        payload["notes"].append(
+            "Diagnostics: shopify/ folder is sessions-only; Qlik has no discount column. "
+            f"Legacy order-line columns not found in discounts file."
         )
     _attach_budget_corridor_from_file(payload, year_month, base_week)
     return payload

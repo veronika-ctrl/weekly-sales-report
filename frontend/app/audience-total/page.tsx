@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
+import { AudienceSlideView } from '@/components/audience/AudienceSlideView'
 import { getMonthlyAmerPlanFromBudget, resolveAudienceBudgetForWeek } from '@/lib/audienceBudgetSeries'
 import { getAudienceBudgetSeries, type BudgetGeneralResponse } from '@/lib/api'
 
@@ -82,6 +83,7 @@ export default function AudienceTotalPage() {
     useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
+  const [slideView, setSlideView] = useState(false)
   const [serverAudienceBudgetByWeek, setServerAudienceBudgetByWeek] = useState<Record<
     string,
     Record<string, number> | null
@@ -206,16 +208,28 @@ export default function AudienceTotalPage() {
       )}
       {hasData && (
         <>
-          <h2 className="text-lg font-semibold text-gray-900">Audience Total</h2>
-          <p className="text-sm text-muted-foreground mb-2">
-            Charts read left-to-right, top-to-bottom: total customers, total orders, total AOV, returning customers,
-            return rate (returning), new customers, return rate (new), COS, then aMER (online new-customer net revenue ÷
-            DEMA marketing spend — same as summary slide). Below the divider: returning and new AOV (same definition as
-            Online KPIs), then customer share, blended return rate, and CAC.
-            Comparison to last year uses the same ISO week (matching weekdays). Hover a point for this year and last
-            year values.
-          </p>
-          <p className="text-xs text-muted-foreground mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-gray-900">Audience Total</h2>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setSlideView(true)}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Slide view
+            </Button>
+          </div>
+          <details className="text-sm text-muted-foreground mb-2">
+            <summary className="cursor-pointer text-xs font-medium text-gray-700">How to read these charts</summary>
+            <p className="mt-2 text-xs">
+              Charts read left-to-right, top-to-bottom: total customers, total orders, total AOV, returning customers,
+              return rate (returning), new customers, return rate (new), COS, then aMER. Below the divider: returning and
+              new AOV, customer share, blended return rate, and CAC. Comparison to last year uses the same ISO week.
+            </p>
+          </details>
+          <p className="text-xs text-muted-foreground mb-3">
             By market:{' '}
             {['sweden', 'uk', 'usa', 'germany', 'france', 'canada', 'australia', 'row'].map((m) => (
               <Link key={m} href={`/audience/${m}`} className="text-primary hover:underline mr-2">
@@ -223,7 +237,10 @@ export default function AudienceTotalPage() {
               </Link>
             ))}
           </p>
-          <AudienceMetricsChartGrid series={metrics} isAnimationActive={isAnimationActive} />
+          <AudienceMetricsChartGrid series={metrics} isAnimationActive={isAnimationActive} compact />
+          <AudienceSlideView title="Audience Total" open={slideView} onClose={() => setSlideView(false)}>
+            <AudienceMetricsChartGrid series={metrics} isAnimationActive={false} compact />
+          </AudienceSlideView>
         </>
       )}
     </div>

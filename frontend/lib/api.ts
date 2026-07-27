@@ -1249,6 +1249,20 @@ export async function getFullPriceVsSaleMonthly(
   return response.json()
 }
 
+/** Direct API URL to download Full Price vs Sale Excel (YTD + monthly + weekly). */
+export function getFullPriceVsSaleExcelUrl(
+  baseWeek: string,
+  months: number = 13,
+  numWeeks: number = 8
+): string {
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    months: String(months),
+    num_weeks: String(numWeeks),
+  })
+  return `${API_BASE_URL}/api/discounts/full-price-vs-sale/excel?${params.toString()}`
+}
+
 export interface DiscountsHistoryInfo {
   files: { name: string; week: string; uploaded_at: string }[]
   count: number
@@ -1647,4 +1661,67 @@ export async function getMonthlyVeronikaKpis(
 /** Direct API URL to download the one-page Veronika monthly PDF. */
 export function getMonthlyVeronikaPdfUrl(yearMonth: string, baseWeek: string): string {
   return `${API_BASE_URL}/api/monthly-veronika-kpis/pdf?year_month=${encodeURIComponent(yearMonth)}&base_week=${encodeURIComponent(baseWeek)}`
+}
+
+export interface QuarterlyBoardMetric {
+  key: string
+  label: string
+  value: number | null
+  last_year: number | null
+  yoy_pct: number | null
+  yoy_pp: number | null
+  format: 'integer' | 'currency' | 'pct' | 'ratio'
+}
+
+export interface QuarterlyVeronikaBoardResponse {
+  year_quarter: string
+  base_week: string
+  date_range: { start: string; end: string; quarter_end: string; is_partial: boolean }
+  last_year_date_range: { start: string; end: string }
+  definitions: Record<string, string>
+  metrics: QuarterlyBoardMetric[]
+  full_price: {
+    share_pct?: number | null
+    share_pct_last_year?: number | null
+    share_pp_delta?: number | null
+    full_price_net?: number | null
+    discounted_net?: number | null
+    total_net?: number | null
+    full_price_net_last_year?: number | null
+    discounted_net_last_year?: number | null
+    yoy_full_price_net_pct?: number | null
+    yoy_discounted_net_pct?: number | null
+  }
+  supporting: Record<string, number | null | undefined>
+  notes: string[]
+}
+
+export async function getQuarterlyVeronikaBoard(
+  yearQuarter: string,
+  baseWeek: string
+): Promise<QuarterlyVeronikaBoardResponse> {
+  const timeoutMs = 300_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/quarterly-veronika-board?year_quarter=${encodeURIComponent(yearQuarter)}&base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 5 minutes. Confirm Uvicorn is running and the API URL in frontend/.env.local is correct.'
+      )
+    }
+    throw e
+  }
 }

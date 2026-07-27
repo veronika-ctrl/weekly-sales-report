@@ -1,16 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { FileDown, Loader2 } from 'lucide-react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
 import {
   getFullPriceVsSale,
+  getFullPriceVsSaleExcelUrl,
   getFullPriceVsSaleMonthly,
   type FullPriceVsSaleResponse,
   type FullPriceVsSaleMonthlyResponse,
 } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
 
@@ -157,7 +159,13 @@ export default function FullPriceVsSalePage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild variant="outline" disabled={!baseWeek}>
+            <a href={baseWeek ? getFullPriceVsSaleExcelUrl(baseWeek, 13, 8) : '#'} download>
+              <FileDown className="h-4 w-4 mr-2" />
+              Download Excel
+            </a>
+          </Button>
           <span className="text-sm text-gray-600">View:</span>
           <div className="inline-flex rounded-md border bg-white p-0.5">
             {(['week', 'month'] as View[]).map((v) => (
@@ -245,6 +253,10 @@ export default function FullPriceVsSalePage() {
               <li>
                 <strong>Weighted disc %</strong> = discount depth on discounted sales only. <strong>LY weighted disc
                 %</strong> compares the same metric to last year.
+              </li>
+              <li>
+                <strong>Download Excel</strong> exports fiscal YTD summary, monthly detail (last 13 months), and weekly
+                detail (last 8 weeks) with full SEK amounts for CFO analysis.
               </li>
             </ul>
           </div>

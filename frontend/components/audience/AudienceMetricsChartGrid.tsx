@@ -184,42 +184,54 @@ function AudienceChartCard({
   card,
   series,
   isAnimationActive,
+  compact = false,
 }: {
   card: AudienceCardDef
   series: AudienceSeriesRow[]
   isAnimationActive: boolean
+  compact?: boolean
 }) {
   const { key, label, format, title: titleAttr } = card
   const chartData = series.map((m) => chartPointsForKey(m, key))
 
   return (
-    <Card key={key}>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium" title={titleAttr}>
+    <Card key={key} className={compact ? 'shadow-none overflow-visible' : 'overflow-visible'}>
+      <CardHeader className={compact ? 'py-1 px-2' : undefined}>
+        <CardTitle className={compact ? 'text-[10px] font-medium leading-tight' : 'text-sm font-medium'} title={titleAttr}>
           {label}
         </CardTitle>
       </CardHeader>
-      <CardContent className="overflow-visible">
-        <ChartContainer config={chartConfig} className="h-[260px] w-full min-w-0 overflow-visible">
+      <CardContent className={compact ? 'overflow-visible p-1 pt-0 pr-2' : 'overflow-visible'}>
+        <ChartContainer
+          config={chartConfig}
+          className={
+            compact
+              ? 'h-[118px] w-full min-w-0 overflow-visible [&_.recharts-wrapper]:overflow-visible [&_svg]:overflow-visible'
+              : 'h-[260px] w-full min-w-0 overflow-visible'
+          }
+        >
           <LineChart
             data={chartData}
-            margin={{ top: 44, right: 12, left: 12, bottom: 22 }}
+            margin={
+              compact ? { top: 30, right: 28, left: 2, bottom: 4 } : { top: 44, right: 24, left: 12, bottom: 22 }
+            }
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="week"
               type="category"
               interval={0}
-              tick={{ fontSize: 9, fill: '#6b7280' }}
-              tickMargin={6}
-              height={34}
+              padding={compact ? { left: 8, right: 28 } : { left: 12, right: 20 }}
+              tick={{ fontSize: compact ? 7 : 9, fill: '#6b7280' }}
+              tickMargin={compact ? 2 : 6}
+              height={compact ? 16 : 34}
               tickLine={false}
               axisLine={{ stroke: '#e5e7eb' }}
             />
             <YAxis
               yAxisId="left"
-              tick={{ fontSize: 11 }}
-              width={40}
+              tick={{ fontSize: compact ? 8 : 11 }}
+              width={compact ? 28 : 40}
               tickFormatter={(v) =>
                 (key === 'total_customers' ||
                   key === 'total_orders' ||
@@ -246,16 +258,16 @@ function AudienceChartCard({
               type="monotone"
               dataKey="value"
               stroke="var(--color-value)"
-              strokeWidth={2}
-              dot={{ r: 3 }}
+              strokeWidth={compact ? 1.5 : 2}
+              dot={{ r: compact ? 2 : 3 }}
               isAnimationActive={isAnimationActive}
               name="This year"
             >
               <LabelList
                 position="top"
-                offset={8}
+                offset={compact ? 4 : 8}
                 fill="#374151"
-                fontSize={9}
+                fontSize={compact ? 7 : 9}
                 formatter={(val: unknown) => format(Number(val ?? 0))}
               />
             </Line>
@@ -264,9 +276,9 @@ function AudienceChartCard({
               type="monotone"
               dataKey="lastYear"
               stroke="var(--color-lastYear)"
-              strokeWidth={2}
+              strokeWidth={compact ? 1.5 : 2}
               strokeDasharray="4 4"
-              dot={{ r: 3 }}
+              dot={{ r: compact ? 2 : 3 }}
               connectNulls
               isAnimationActive={isAnimationActive}
               name="Last year (same week)"
@@ -281,28 +293,49 @@ function AudienceChartCard({
 export function AudienceMetricsChartGrid({
   series,
   isAnimationActive,
+  compact = false,
 }: {
   series: AudienceSeriesRow[]
   isAnimationActive: boolean
+  compact?: boolean
 }) {
   return (
-    <div className="space-y-10">
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <div className={compact ? 'space-y-3' : 'space-y-10'}>
+      <div className={`grid grid-cols-1 ${compact ? 'gap-1 sm:grid-cols-3 lg:grid-cols-4' : 'gap-6 sm:grid-cols-2 lg:grid-cols-3'}`}>
         {AUDIENCE_PRIMARY_CARDS.map((card) => (
-          <AudienceChartCard key={card.key} card={card} series={series} isAnimationActive={isAnimationActive} />
+          <AudienceChartCard
+            key={card.key}
+            card={card}
+            series={series}
+            isAnimationActive={isAnimationActive}
+            compact={compact}
+          />
         ))}
       </div>
 
-      <div className="border-t border-gray-200 pt-10">
-        <h3 className="mb-4 text-base font-semibold text-gray-900">AOV by customer type, mix, return rate &amp; CAC</h3>
-        <p className="mb-6 text-sm text-muted-foreground">
-          Returning and new AOV use the same net-revenue-per-unique-customer definition as Online KPIs. Below that:
-          new vs returning share of customers, blended return rate (all customers), and new-customer CAC. Main KPIs
-          and segment return rates are in the section above.
-        </p>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={compact ? 'border-t border-gray-200 pt-2' : 'border-t border-gray-200 pt-10'}>
+        {!compact && (
+          <>
+            <h3 className="mb-4 text-base font-semibold text-gray-900">AOV by customer type, mix, return rate &amp; CAC</h3>
+            <p className="mb-6 text-sm text-muted-foreground">
+              Returning and new AOV use the same net-revenue-per-unique-customer definition as Online KPIs. Below that:
+              new vs returning share of customers, blended return rate (all customers), and new-customer CAC. Main KPIs
+              and segment return rates are in the section above.
+            </p>
+          </>
+        )}
+        {compact && (
+          <p className="mb-1.5 text-[10px] font-medium text-gray-700">AOV, mix, return rate &amp; CAC</p>
+        )}
+        <div className={`grid grid-cols-1 ${compact ? 'gap-1 sm:grid-cols-3 lg:grid-cols-4' : 'gap-6 sm:grid-cols-2 lg:grid-cols-3'}`}>
           {AUDIENCE_SECONDARY_CARDS.map((card) => (
-            <AudienceChartCard key={card.key} card={card} series={series} isAnimationActive={isAnimationActive} />
+            <AudienceChartCard
+              key={card.key}
+              card={card}
+              series={series}
+              isAnimationActive={isAnimationActive}
+              compact={compact}
+            />
           ))}
         </div>
       </div>
