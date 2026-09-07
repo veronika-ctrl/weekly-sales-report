@@ -40,6 +40,7 @@ start_backend () {
   (
     cd "$ROOT_DIR"
     "$ROOT_DIR/venv/bin/python" -m uvicorn weekly_report.api.routes:app --reload \
+      --reload-dir weekly_report \
       > "$LOG_DIR/backend.log" 2>&1 &
     echo $! > "$PID_DIR/backend.pid"
   )

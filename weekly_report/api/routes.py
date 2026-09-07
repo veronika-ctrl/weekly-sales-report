@@ -502,8 +502,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure logging to file
-log_file = Path("backend.log")
+# Keep the log file out of the process cwd so ``uvicorn --reload`` (which watches
+# cwd by default) does not restart the API on every log line or Qlik upload.
+_log_dir = Path(".devserver") / "logs"
+_log_dir.mkdir(parents=True, exist_ok=True)
+log_file = _log_dir / "api.log"
 logger.add(
     str(log_file),
     rotation="10 MB",
@@ -513,7 +516,7 @@ logger.add(
     backtrace=True,
     diagnose=True
 )
-logger.info("Backend logging configured. Logs will be written to backend.log")
+logger.info(f"Backend logging configured. Logs will be written to {log_file}")
 
 
 def _supabase_enabled() -> bool:

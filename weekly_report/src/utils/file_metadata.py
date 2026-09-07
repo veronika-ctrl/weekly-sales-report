@@ -5,6 +5,22 @@ from typing import Dict, Any
 from loguru import logger
 
 
+def _count_xlsx_data_rows(file_path: Path) -> int:
+    """Count data rows without loading the workbook into pandas.
+
+    Qlik Excel exports can be hundreds of MB. ``pd.read_excel`` of the full
+    file often OOMs or takes so long the client sees a dropped connection.
+    """
+    from openpyxl import load_workbook
+
+    wb = load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        return max(0, sum(1 for _ in ws.iter_rows(min_row=2, values_only=True)))
+    finally:
+        wb.close()
+
+
 def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
     """
     Extract first date, last date, and row count from data file.
@@ -68,9 +84,7 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
         # Get full row count (not just sample) - use optimized counting
         logger.info(f"Counting rows in {file_path.name}")
         if file_path.suffix.lower() == '.xlsx':
-            # For Excel files, we need to read the full file
-            full_df = pd.read_excel(file_path)
-            row_count = len(full_df)
+            row_count = _count_xlsx_data_rows(file_path)
         else:
             # For CSV files, count lines directly without loading into memory
             # This is much faster for large files
