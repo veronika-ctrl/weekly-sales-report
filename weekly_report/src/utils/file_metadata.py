@@ -22,6 +22,13 @@ _DATE_COLUMN_MAP = {
     "discounts": "Date",
 }
 
+# Qlik / Dema / Shopify exports mix Date, Day, and Days.
+_DATE_NAME_ALIASES = {
+    "date": ("date", "day", "days"),
+    "day": ("day", "days", "date"),
+    "days": ("days", "day", "date"),
+}
+
 _DIMENSION_RE = re.compile(
     rb'dimension[^>]*ref="(?:[A-Z]+)(\d+):(?:[A-Z]+)(\d+)"', re.IGNORECASE
 )
@@ -126,6 +133,47 @@ def _shared_strings_prefix(zf: zipfile.ZipFile, limit: int = 256) -> List[str]:
     return strings
 
 
+def _date_name_aliases(expected: Optional[str]) -> Tuple[str, ...]:
+    if not expected:
+        return ()
+    return _DATE_NAME_ALIASES.get(expected.lower(), (expected.lower(),))
+
+
+def _match_header_date_column(
+    headers: Dict[str, str], expected: Optional[str]
+) -> Tuple[Optional[str], Optional[str]]:
+    wanted = set(_date_name_aliases(expected))
+    if wanted:
+        for letter, name in headers.items():
+            if name.lower() in wanted:
+                return letter, name
+    for letter, name in headers.items():
+        if name.lower() in {"date", "day", "days"}:
+            return letter, name
+    return None, None
+
+
+def _match_csv_date_column(columns: List[str], expected: Optional[str]) -> Optional[str]:
+    wanted = set(_date_name_aliases(expected))
+    if not wanted:
+        return None
+    for col in columns:
+        if str(col).strip().strip('"').strip("'").lower() in wanted:
+            return col
+    return None
+
+
+def xlsx_header_names(file_path: Path) -> List[str]:
+    """Header row from xlsx zip XML. Does not load the workbook into pandas."""
+    with zipfile.ZipFile(file_path) as zf:
+        sheet_name = _first_worksheet_xml_name(zf)
+        shared_strings = _shared_strings_prefix(zf)
+        with zf.open(sheet_name) as handle:
+            first = handle.read(64 * 1024)
+    headers = _header_columns(first, shared_strings)
+    return [headers[letter] for letter in sorted(headers, key=lambda item: (len(item), item))]
+
+
 def _header_columns(first_chunk: bytes, shared_strings: List[str]) -> Dict[str, str]:
     """Map Excel column letter -> header name for row 1."""
     headers: Dict[str, str] = {}
@@ -170,21 +218,7 @@ def _xlsx_bounds(file_path: Path, expected_date_col: Optional[str]) -> Dict[str,
         row_count = max(0, max_row - 1)
 
     headers = _header_columns(first, shared_strings)
-    date_letter = None
-    date_column_name = None
-    if expected_date_col:
-        wanted = expected_date_col.lower()
-        for letter, name in headers.items():
-            if name.lower() == wanted:
-                date_letter = letter
-                date_column_name = name
-                break
-    if date_letter is None:
-        for letter, name in headers.items():
-            if name.lower() in {"date", "day", "days"}:
-                date_letter = letter
-                date_column_name = name
-                break
+    date_letter, date_column_name = _match_header_date_column(headers, expected_date_col)
     if date_letter is None:
         date_letter = "A"
 
@@ -278,8 +312,8 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
         if not expected_date_col:
             return {"row_count": row_count}
 
-        matching_cols = [col for col in df.columns if col.lower() == expected_date_col.lower()]
-        if not matching_cols:
+        date_col = _match_csv_date_column(list(df.columns), expected_date_col)
+        if not date_col:
             logger.warning(
                 f"Column '{expected_date_col}' not found in {file_path.name}. "
                 f"Available columns: {df.columns.tolist()}"
@@ -288,8 +322,6 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
                 "error": f"Expected date column '{expected_date_col}' not found",
                 "row_count": row_count,
             }
-
-        date_col = matching_cols[0]
         date_idx = list(df.columns).index(date_col)
 
         sample = _read_csv_sample(file_path, nrows=10000)

@@ -69,7 +69,7 @@ from weekly_report.src.compute.budget_table1_month import (
     budget_table1_for_calendar_month as _budget_table1_for_calendar_month,
     derive_emer_from_budget_components as _derive_emer_from_budget_components,
 )
-from weekly_report.src.utils.file_metadata import extract_file_metadata
+from weekly_report.src.utils.file_metadata import extract_file_metadata, xlsx_header_names
 
 
 # Pydantic models
@@ -3851,7 +3851,7 @@ async def get_batch_all_metrics(
 
 
 @app.post("/api/upload-file")
-async def upload_file(
+def upload_file(
     file: UploadFile = File(...),
     week: str = Form(...),
     file_type: str = Form(..., description="qlik, dema_spend, dema_gm2, shopify, discounts, or budget")
@@ -3882,28 +3882,29 @@ async def upload_file(
         target_dir = config.raw_data_path / file_type
         target_dir.mkdir(parents=True, exist_ok=True)
         
-        # Delete existing files in the directory (except .DS_Store).
-        # Exception: 'discounts' (Full price vs Sale) accumulates history across
-        # multiple uploads — we keep prior files and merge by date at read time,
-        # so a user can upload this year and last year (or successive weeks)
-        # one-by-one into the same slot without losing earlier data.
-        if file_type != "discounts":
-            for existing_file in target_dir.glob("*.*"):
-                if not existing_file.name.startswith('.'):
-                    existing_file.unlink()
-                    logger.info(f"Deleted old file: {existing_file}")
-        
-        # Save file
+        # Save to a temp name first, then replace. Deleting the previous file before
+        # the new bytes are on disk meant a dropped connection / retry could wipe Qlik.
         target_path = target_dir / file.filename
-        # For accumulating slots, avoid overwriting when a prior upload used the
-        # same filename (the read-side dedupes overlapping dates, newest wins).
         if file_type == "discounts" and target_path.exists():
             import time as _time
             stem = Path(file.filename).stem
             suffix = Path(file.filename).suffix
             target_path = target_dir / f"{stem}-{int(_time.time())}{suffix}"
-        with target_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        tmp_path = target_dir / f".{target_path.name}.uploading"
+        try:
+            with tmp_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            tmp_path.replace(target_path)
+            if file_type != "discounts":
+                for existing_file in target_dir.glob("*.*"):
+                    if existing_file.name.startswith(".") or existing_file == target_path:
+                        continue
+                    existing_file.unlink()
+                    logger.info(f"Deleted old file: {existing_file}")
+        except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
         
         logger.info(f"File uploaded: {target_path}")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")
@@ -4070,11 +4071,11 @@ def validate_file_dimensions(file_path: Path, file_type: str) -> Dict[str, Any]:
                 except:
                     df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
                 df.columns = df.columns.str.strip().str.replace('"', '')
+                result["columns"] = df.columns.tolist()
             else:
-                df = pd.read_excel(file_path, nrows=1)
+                result["columns"] = xlsx_header_names(file_path)
             
-            result["columns"] = df.columns.tolist()
-            result["has_country"] = any("country" in col.lower() for col in df.columns)
+            result["has_country"] = any("country" in col.lower() for col in result["columns"])
         
         elif file_type == "budget":
             # Budget files don't need country dimension - they use Market instead
@@ -4204,8 +4205,8 @@ async def get_file_dimensions(week: str = Query(...)):
 
 
 @app.get("/api/file-metadata")
-async def get_file_metadata(week: str = Query(...)):
-    """Get metadata for all data files in a specific week - only check if files exist."""
+def get_file_metadata(week: str = Query(...)):
+    """Get metadata for all data files in a specific week."""
     try:
         if not validate_iso_week(week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
@@ -4219,16 +4220,27 @@ async def get_file_metadata(week: str = Query(...)):
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))
-                # Filter out hidden files (.DS_Store, etc.)
+                # Filter out hidden files (.DS_Store, in-progress uploads, etc.)
                 files = [f for f in files if not f.name.startswith('.')]
                 if files:
                     # Get the most recently modified file
                     latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                    # Only return basic file info - don't read the entire file
-                    metadata[file_type] = {
+                    info: Dict[str, Any] = {
                         "filename": latest_file.name,
                         "uploaded_at": datetime.fromtimestamp(latest_file.stat().st_mtime).isoformat()
                     }
+                    try:
+                        extracted = extract_file_metadata(latest_file, file_type)
+                        for key in ("first_date", "last_date", "row_count", "date_column"):
+                            if extracted.get(key) is not None:
+                                info[key] = extracted[key]
+                        if extracted.get("error"):
+                            info["error"] = extracted["error"]
+                    except Exception as meta_error:
+                        logger.warning(
+                            f"Failed to extract metadata for {latest_file}: {meta_error}"
+                        )
+                    metadata[file_type] = info
                     # Add file hash for ETag
                     file_hashes.append(f"{file_type}:{latest_file.name}:{latest_file.stat().st_mtime}")
         
@@ -4241,7 +4253,7 @@ async def get_file_metadata(week: str = Query(...)):
             content=json.dumps(metadata),
             media_type="application/json",
             headers={
-                "Cache-Control": "public, max-age=600",  # Cache for 10 minutes
+                "Cache-Control": "public, max-age=30",
                 "ETag": etag
             }
         )

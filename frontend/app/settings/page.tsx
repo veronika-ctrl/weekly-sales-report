@@ -86,7 +86,7 @@ export default function Settings() {
     let timeoutId: NodeJS.Timeout | null = null
     try {
       const controller = new AbortController()
-      timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      timeoutId = setTimeout(() => controller.abort(), 25000)
       const response = await fetch(`${getApiBaseUrl()}/api/file-metadata?week=${selectedWeek}`, {
         signal: controller.signal
       })
@@ -118,7 +118,7 @@ export default function Settings() {
       
       if (errorName === 'AbortError' || errorName === 'TimeoutError') {
         setMetadata({
-          error: `Request timed out after 10s while contacting ${getApiBaseUrl()}. If the API is still starting, click Retry. Otherwise start it from the project root: venv/bin/python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000`,
+          error: `Request timed out after 25s while contacting ${getApiBaseUrl()}. If the API is still starting, click Retry. Otherwise start it from the project root: venv/bin/python -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000`,
         })
         return
       } else if (

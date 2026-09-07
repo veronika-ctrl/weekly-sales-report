@@ -91,3 +91,30 @@ def test_xlsx_missing_date_column_still_returns_row_count(tmp_path):
     meta = extract_file_metadata(path, "qlik")
     assert meta["row_count"] == 2
     assert "error" in meta
+
+
+def test_xlsx_header_names_does_not_use_pandas(tmp_path, monkeypatch):
+    from weekly_report.src.utils.file_metadata import xlsx_header_names
+
+    path = tmp_path / "qlik.xlsx"
+    pd.DataFrame({"Date": ["2025-01-06"], "Country": ["SE"]}).to_excel(path, index=False)
+    monkeypatch.setattr(
+        pd,
+        "read_excel",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("xlsx headers must not call pandas.read_excel")
+        ),
+    )
+    assert xlsx_header_names(path) == ["Date", "Country"]
+
+
+def test_csv_accepts_day_alias_for_dema_spend(tmp_path):
+    path = tmp_path / "spend.csv"
+    path.write_text(
+        "Channel;Country;Day;Marketing spend\nPaid;SE;2025-01-06;10\n",
+        encoding="utf-8",
+    )
+    meta = extract_file_metadata(path, "dema_spend")
+    assert meta.get("error") is None
+    assert meta["first_date"] == "2025-01-06"
+    assert meta["date_column"] == "Day"
