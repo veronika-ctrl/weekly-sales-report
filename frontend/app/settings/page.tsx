@@ -242,8 +242,10 @@ export default function Settings() {
     { type: 'shopify', label: 'Shopify Sessions Data', formats: '.csv' },
     {
       type: 'discounts',
-      label: 'Shopify order lines (full price / sale)',
+      label: 'Full price vs Sale (Shopify daily export)',
       formats: '.csv',
+      hint:
+        'Not Sessions. Export the daily Full price vs Sale CSV from the Shopify app (columns Date, Full Price, Total). A one-week file only fills this week. For LY / YoY, set the app date range to include last year (e.g. 1 Apr last year → today) and upload that CSV here — dates merge; this year is kept.',
     },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
@@ -509,7 +511,9 @@ export default function Settings() {
                     <h4 className="text-sm font-medium">Full price vs Sale — accumulated history</h4>
                     <p className="text-xs text-muted-foreground mt-1 max-w-xl">
                       These uploads merge by date across all weeks (newest wins), so one big export or several
-                      small ones build the same history. This is separate from the per-week file list above.
+                      small ones build the same history. This is separate from Shopify Sessions. A one-week Full
+                      price vs Sale file only covers that week — last year must be in the Date column (or a second
+                      export) or YoY stays 0.
                     </p>
                   </div>
                   <Button
@@ -539,6 +543,16 @@ export default function Settings() {
                             <strong>{discountsHistory.range.end}</strong>
                           </span>
                         )}
+                        {discountsHistory.range &&
+                          selectedWeek &&
+                          discountsHistory.range.start.slice(0, 4) === selectedWeek.slice(0, 4) && (
+                            <p className="w-full text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-2 mt-1">
+                              This range is {selectedWeek.slice(0, 4)} only. Full price vs Sale YoY needs last year in
+                              the Date column. Re-export from the Shopify app with{' '}
+                              <strong>1 Apr {Number(selectedWeek.slice(0, 4)) - 1} → today</strong> and upload it
+                              above — it merges with these days.
+                            </p>
+                          )}
                         {discountsHistory.fx?.applied && (
                           <span>
                             Display currency: <strong>{discountsHistory.currency ?? 'SEK'}</strong> (converted from{' '}

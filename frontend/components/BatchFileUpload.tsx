@@ -17,6 +17,7 @@ interface FileType {
   type: string
   label: string
   formats: string
+  hint?: string
 }
 
 interface UploadStatus {
@@ -322,6 +323,9 @@ export default function BatchFileUpload({
               <Label htmlFor={`file-${ft.type}`} className="text-sm font-medium">
                 {ft.label}
               </Label>
+              {ft.hint && (
+                <p className="text-xs text-muted-foreground leading-relaxed">{ft.hint}</p>
+              )}
               <div className="flex gap-2 items-center">
                 <Input
                   id={`file-${ft.type}`}

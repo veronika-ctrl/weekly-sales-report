@@ -577,7 +577,7 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
             "conversion_rate_pct": "Unique online orders ÷ Shopify sessions summed over the month.",
             "full_price_share_pct": (
                 "Full-price share of net sales for the calendar month. "
-                "Primary source: Shopify app revenue-over-time export (Settings → Shopify order lines / Full price vs Sale) — "
+                "Primary source: Shopify app revenue-over-time export (Settings → Full price vs Sale daily export) — "
                 "sum(Full Price) ÷ sum(Total) over all days in the month (revenue-weighted, not an average of weekly %). "
                 "Same metric as Products → Full price vs Sale (month view). Amounts are converted to SEK when the export is in USD. "
                 "Falls back to legacy order-line export (compare-at price > 0 = sale) or Qlik discount column if the app export is missing."
@@ -631,7 +631,7 @@ def calculate_monthly_veronika_kpis(year_month: str, base_week: str, data_root: 
     elif discounts_fp.get("error") == "no_discounts_file":
         payload["notes"].append(
             "Full-price share unavailable: upload the Shopify app revenue-over-time CSV under "
-            f"Settings → Shopify order lines (full price / sale) for week {base_week}. "
+            f"Settings → Full price vs Sale (Shopify daily export) for week {base_week}. "
             "Needs columns Date, Full Price, and Total."
         )
     elif discounts_fp.get("error"):

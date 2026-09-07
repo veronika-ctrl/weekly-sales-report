@@ -202,9 +202,29 @@ export default function FullPriceVsSalePage() {
       {!loading && !error && data && hasRows && (
         <>
           {!data.has_last_year && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              No last-year data in history yet, so year-over-year shows 0. Upload last year&apos;s export once and it
-              will fill in automatically.
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p className="font-medium">Last year is missing from Full price vs Sale history, so LY / YoY shows 0.</p>
+              <p>
+                This page does <strong>not</strong> use Shopify Sessions. It only reads the daily{' '}
+                <strong>Full price vs Sale</strong> CSV (columns Date, Full Price, Total).
+                {data.history_range ? (
+                  <>
+                    {' '}
+                    What is loaded now: <strong>{data.history_range.start}</strong> →{' '}
+                    <strong>{data.history_range.end}</strong>
+                    {data.files_used?.length ? ` (${data.files_used.length} file${data.files_used.length === 1 ? '' : 's'})` : ''}
+                    {data.history_range.start.slice(0, 4) === data.history_range.end.slice(0, 4)
+                      ? `. That range is ${data.history_range.start.slice(0, 4)} only.`
+                      : '. Last year’s matching weeks/months are still empty in that history.'}
+                  </>
+                ) : null}
+              </p>
+              <p>
+                In the Shopify app, run the same Full price vs Sale export again with a date range that includes last
+                year (for fiscal YTD: <strong>1 Apr last year → today</strong>, or at least the same weeks last year).
+                Upload that CSV in Settings under <strong>Full price vs Sale (Shopify daily export)</strong>. Dates
+                merge in; this year&apos;s days stay.
+              </p>
             </div>
           )}
 
