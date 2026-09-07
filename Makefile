@@ -43,9 +43,10 @@ format: ## Format code
 	black src/ tests/
 	isort src/ tests/
 
-# Start backend from project root (required so weekly_report.src.compute resolves)
+# Start backend from project root (required so weekly_report.src.compute resolves).
+# Watch only Python sources — uploading Qlik/CSV into data/ must not restart the API mid-request.
 run-backend: ## Start API server on port 8000 (must run from project root)
-	$(PYTHON) -m uvicorn weekly_report.api.routes:app --reload --host 0.0.0.0 --port 8000
+	$(PYTHON) -m uvicorn weekly_report.api.routes:app --reload --reload-dir weekly_report --host 0.0.0.0 --port 8000
 
 # Start frontend dev server
 run-frontend: ## Start Next.js dev server on port 3000

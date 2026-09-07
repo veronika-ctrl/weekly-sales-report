@@ -40,6 +40,33 @@ function computeUploadTimeoutMs(fileSizeMB: number): number {
   return Math.min(15 * 60 * 1000, baseMs + extraOver10Mb)
 }
 
+function isNetworkFetchError(error: { name?: string; message?: string } | undefined): boolean {
+  const message = error?.message || ''
+  return (
+    message.includes('Failed to fetch') ||
+    message.includes('NetworkError') ||
+    message.includes('Load failed') ||
+    message.includes('Network request failed')
+  )
+}
+
+function formatUploadNetworkError(apiBase: string, fileName: string, fileSizeMB: number): string {
+  const sizeHint = fileSizeMB >= 1 ? ` (${fileSizeMB.toFixed(1)} MB)` : ''
+  const isLocal = /localhost|127\.0\.0\.1/.test(apiBase)
+  if (isLocal) {
+    return (
+      `Network error: the connection to ${apiBase} dropped while uploading "${fileName}"${sizeHint}. ` +
+      'Qlik/Excel files are often large; the API may have restarted while saving the file. ' +
+      'Confirm the backend is still running, then retry this file.'
+    )
+  }
+  return (
+    `Network error: API unreachable at ${apiBase} while uploading "${fileName}"${sizeHint}. ` +
+    'The host may be waking up—wait about a minute and retry, or open the API /docs page once. ' +
+    'If it keeps failing, check NEXT_PUBLIC_API_URL (and FRONTEND_URL / CORS on the API).'
+  )
+}
+
 export default function BatchFileUpload({
   fileTypes,
   currentWeek,
@@ -95,22 +122,13 @@ export default function BatchFileUpload({
     
     // Simulera progress eftersom fetch inte har inbyggd progress support
     // Vi uppdaterar status baserat på tiden för att ge användaren feedback
-    const startTime = Date.now()
     const fileSize = file.size
     let progressInterval: NodeJS.Timeout | null = null
     let timeoutId: NodeJS.Timeout | null = null
     
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('week', currentWeek)
-      formData.append('file_type', fileType)
-
-      // Använd fetch med timeout - längre timeout för större filer (QLIK kan vara stora)
-      const controller = new AbortController()
       const fileSizeMB = file.size / (1024 * 1024)
       const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
-      timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
       // Start progress simulation - uppdatera progress under uppladdning och processing
       if (onProgress) {
@@ -141,15 +159,48 @@ export default function BatchFileUpload({
         }, 200) // Uppdatera var 200ms
       }
 
-      const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal
-      })
+      const apiBase = getApiBaseUrl()
+      const maxAttempts = 2
+      let response: Response | null = null
+      let lastError: unknown = null
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('week', currentWeek)
+        formData.append('file_type', fileType)
+
+        const attemptController = new AbortController()
+        if (timeoutId) clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => attemptController.abort(), timeoutMs)
+        try {
+          response = await fetch(`${apiBase}/api/upload-file`, {
+            method: 'POST',
+            body: formData,
+            signal: attemptController.signal
+          })
+          lastError = null
+          break
+        } catch (error: any) {
+          lastError = error
+          if (isNetworkFetchError(error) && attempt < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1500))
+            continue
+          }
+          throw error
+        }
+      }
 
       if (timeoutId) clearTimeout(timeoutId)
       if (progressInterval) clearInterval(progressInterval)
       if (onProgress) onProgress(100)
+
+      if (lastError) {
+        throw lastError
+      }
+      if (!response) {
+        throw new Error('Upload failed')
+      }
 
       if (!response.ok) {
         const error = await response.json()
@@ -171,10 +222,8 @@ export default function BatchFileUpload({
         const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
         const timeoutMinutes = Math.round(timeoutMs / 60000)
         errorMessage = `Upload timeout: The file "${file.name}" (${fileSizeMB.toFixed(1)} MB) took too long to upload (over ${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}). The file may be too large or the server may be slow. Please try again.`
-      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        errorMessage =
-          'Network error: API unreachable. Free hosts often sleep—wait ~1 min and retry, or open https://…/docs once to wake the server. ' +
-          'Verify NEXT_PUBLIC_API_URL and FRONTEND_URL on Render.'
+      } else if (isNetworkFetchError(error)) {
+        errorMessage = formatUploadNetworkError(getApiBaseUrl(), file.name, fileSizeMB)
       } else if (error.message?.includes('signal is aborted') || error.message?.includes('aborted without reason')) {
         errorMessage = `Upload was cancelled or timed out. Please try again.`
       }
