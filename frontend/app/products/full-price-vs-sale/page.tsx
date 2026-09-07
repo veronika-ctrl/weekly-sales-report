@@ -134,6 +134,10 @@ export default function FullPriceVsSalePage() {
       })),
     [monthsAsc]
   )
+  const monthsMissingLy = useMemo(
+    () => monthsAsc.filter((m) => (m.total || 0) > 0 && !(m.last_year?.total > 0)),
+    [monthsAsc]
+  )
 
   const data = view === 'week' ? weekly : monthly
   const hasRows = view === 'week' ? (weekly?.weeks?.length || 0) > 0 : (monthly?.months_data?.length || 0) > 0
@@ -228,6 +232,31 @@ export default function FullPriceVsSalePage() {
             </div>
           )}
 
+          {view === 'month' && data.has_last_year && monthsMissingLy.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p className="font-medium">
+                {monthsMissingLy.map((m) => monthLabel(m.month)).join(', ')} have no LY / YoY.
+              </p>
+              <p>
+                Those columns compare to the <strong>same calendar month one year earlier</strong>. History currently
+                starts at <strong>{monthly?.history_range?.start ?? 'the first uploaded day'}</strong>, so{' '}
+                {monthsMissingLy.map((m) => monthLabel(m.month)).join(', ')} have nothing to compare with.
+                Later months (this year) are complete because they use 2025 as last year.
+              </p>
+              <p>
+                To fill the dashes, export the same Shopify daily Full price vs Sale file from{' '}
+                <strong>
+                  {monthsMissingLy[0]
+                    ? `${Number(monthsMissingLy[0].month.slice(0, 4)) - 1}-${monthsMissingLy[0].month.slice(5)}-01`
+                    : '1 Sep 2024'}{' '}
+                  → today
+                </strong>{' '}
+                (or at least the months that show “—” plus their prior year). Upload it in Settings. Do{' '}
+                <strong>not</strong> reset history — dates merge, and 2025–2026 stay.
+              </p>
+            </div>
+          )}
+
           {data.fx?.applied ? (
             <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-950">
               <p className="font-medium">Currency (fixed)</p>
@@ -263,7 +292,8 @@ export default function FullPriceVsSalePage() {
               </li>
               <li>
                 <strong>Month view</strong> — last 13 calendar months. The current month is month-to-date (cut off at your
-                selected week&apos;s end date). Good for board / KPI reporting.
+                selected week&apos;s end date). Earlier 2025 months still feed LY for 2026 even when they are not listed
+                as their own rows. Good for board / KPI reporting.
               </li>
               <li>
                 <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change vs LY.
