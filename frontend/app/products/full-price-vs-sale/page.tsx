@@ -134,6 +134,10 @@ export default function FullPriceVsSalePage() {
       })),
     [monthsAsc]
   )
+  const monthsMissingLy = useMemo(
+    () => monthsAsc.filter((m) => (m.total || 0) > 0 && !(m.last_year?.total > 0)),
+    [monthsAsc]
+  )
 
   const data = view === 'week' ? weekly : monthly
   const hasRows = view === 'week' ? (weekly?.weeks?.length || 0) > 0 : (monthly?.months_data?.length || 0) > 0
@@ -202,9 +206,54 @@ export default function FullPriceVsSalePage() {
       {!loading && !error && data && hasRows && (
         <>
           {!data.has_last_year && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              No last-year data in history yet, so year-over-year shows 0. Upload last year&apos;s export once and it
-              will fill in automatically.
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p className="font-medium">Last year is missing from Full price vs Sale history, so LY / YoY shows 0.</p>
+              <p>
+                This page does <strong>not</strong> use Shopify Sessions. It only reads the daily{' '}
+                <strong>Full price vs Sale</strong> CSV (columns Date, Full Price, Total).
+                {data.history_range ? (
+                  <>
+                    {' '}
+                    What is loaded now: <strong>{data.history_range.start}</strong> →{' '}
+                    <strong>{data.history_range.end}</strong>
+                    {data.files_used?.length ? ` (${data.files_used.length} file${data.files_used.length === 1 ? '' : 's'})` : ''}
+                    {data.history_range.start.slice(0, 4) === data.history_range.end.slice(0, 4)
+                      ? `. That range is ${data.history_range.start.slice(0, 4)} only.`
+                      : '. Last year’s matching weeks/months are still empty in that history.'}
+                  </>
+                ) : null}
+              </p>
+              <p>
+                In the Shopify app, run the same Full price vs Sale export again with a date range that includes last
+                year (for fiscal YTD: <strong>1 Apr last year → today</strong>, or at least the same weeks last year).
+                Upload that CSV in Settings under <strong>Full price vs Sale (Shopify daily export)</strong>. Dates
+                merge in; this year&apos;s days stay.
+              </p>
+            </div>
+          )}
+
+          {view === 'month' && data.has_last_year && monthsMissingLy.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+              <p className="font-medium">
+                {monthsMissingLy.map((m) => monthLabel(m.month)).join(', ')} have no LY / YoY.
+              </p>
+              <p>
+                Those columns compare to the <strong>same calendar month one year earlier</strong>. History currently
+                starts at <strong>{monthly?.history_range?.start ?? 'the first uploaded day'}</strong>, so{' '}
+                {monthsMissingLy.map((m) => monthLabel(m.month)).join(', ')} have nothing to compare with.
+                Later months (this year) are complete because they use 2025 as last year.
+              </p>
+              <p>
+                To fill the dashes, export the same Shopify daily Full price vs Sale file from{' '}
+                <strong>
+                  {monthsMissingLy[0]
+                    ? `${Number(monthsMissingLy[0].month.slice(0, 4)) - 1}-${monthsMissingLy[0].month.slice(5)}-01`
+                    : '1 Sep 2024'}{' '}
+                  → today
+                </strong>{' '}
+                (or at least the months that show “—” plus their prior year). Upload it in Settings. Do{' '}
+                <strong>not</strong> reset history — dates merge, and 2025–2026 stay.
+              </p>
             </div>
           )}
 
@@ -243,7 +292,8 @@ export default function FullPriceVsSalePage() {
               </li>
               <li>
                 <strong>Month view</strong> — last 13 calendar months. The current month is month-to-date (cut off at your
-                selected week&apos;s end date). Good for board / KPI reporting.
+                selected week&apos;s end date). Earlier 2025 months still feed LY for 2026 even when they are not listed
+                as their own rows. Good for board / KPI reporting.
               </li>
               <li>
                 <strong>LY</strong> = same period last year. <strong>Δ pp</strong> = percentage-point change vs LY.

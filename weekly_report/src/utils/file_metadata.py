@@ -36,7 +36,8 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
             "qlik": "Date",
             "dema_spend": "Days",
             "dema_gm2": "Days",
-            "shopify": "Day"
+            "shopify": "Day",
+            "discounts": "Date",
         }
         date_col = date_column_map.get(file_type)
         
