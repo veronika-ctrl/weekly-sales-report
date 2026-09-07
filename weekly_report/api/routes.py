@@ -4004,9 +4004,14 @@ async def upload_file(
         except Exception as invalidation_error:
             logger.warning(f"Failed to invalidate Supabase cache (non-blocking): {invalidation_error}")
         
-        # Extract metadata (date range)
-        metadata = extract_file_metadata(target_path, file_type)
-        
+        # Extract metadata (date range). The file is already saved — never fail
+        # the upload if counting rows in a large Qlik workbook is slow or errors.
+        try:
+            metadata = extract_file_metadata(target_path, file_type)
+        except Exception as meta_error:
+            logger.error(f"Metadata extraction failed after saving {target_path}: {meta_error}")
+            metadata = {"error": str(meta_error), "row_count": None}
+
         return {
             "success": True,
             "file_path": str(target_path),
