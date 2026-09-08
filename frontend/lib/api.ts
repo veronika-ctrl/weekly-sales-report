@@ -5,6 +5,7 @@ const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000'
 export function getApiBaseUrl(): string {
   if (typeof process === 'undefined') return DEFAULT_LOCAL_API
   const explicit = String(process.env.NEXT_PUBLIC_API_URL || '').trim()
+  if (explicit === 'same-origin' || explicit === '/') return ''
   return explicit || DEFAULT_LOCAL_API
 }
 
