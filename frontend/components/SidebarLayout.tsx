@@ -68,6 +68,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/monthly-veronika': { title: 'Monthly Veronika KPIs', subtitle: 'Calendar month scorecard (dashboard)' },
       '/monthly-veronika/print': { title: 'Monthly Veronika — Print', subtitle: 'Print-friendly view and PDF link' },
       '/quarterly-veronika': { title: 'Quarterly Board KPIs', subtitle: 'CFO quarterly scorecard with YoY (board reporting)' },
+      '/adjusted-amer': { title: 'Adjusted aMER', subtitle: 'Paid vs organic efficiency from the Dema agent trio' },
     }
     
     if (pathname?.startsWith('/audience/') && pathname !== '/audience-total') {
@@ -125,7 +126,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/countries/germany') || isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') || isActive('/countries/uae') ||
                     isActive('/countries/row') ||                     isActive('/audience-total') || pathname?.startsWith('/audience/') ||
-                    pathname?.startsWith('/monthly-veronika')
+                    pathname?.startsWith('/monthly-veronika') || isActive('/adjusted-amer')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -324,6 +325,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/monthly-veronika') ||
                     pathname?.startsWith('/monthly-veronika') ||
                     isActive('/quarterly-veronika') ||
+                    isActive('/adjusted-amer') ||
                     isActive('/contribution') ||
                     isActive('/category-sales') ||
                     isActive('/products-new')
@@ -377,6 +379,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconFileChart className="h-4 w-4" />
                       {!isCollapsed && <span>Quarterly Board</span>}
+                    </Link>
+                    <Link
+                      href="/adjusted-amer"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/adjusted-amer')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconTrendingUp className="h-4 w-4" />
+                      {!isCollapsed && <span>Adjusted aMER</span>}
                     </Link>
                     <Link
                       href="/contribution"

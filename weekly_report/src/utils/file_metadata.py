@@ -36,12 +36,23 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
             "qlik": "Date",
             "dema_spend": "Days",
             "dema_gm2": "Days",
-            "shopify": "Day"
+            "shopify": "Day",
+            "amer_revenue": "Day",
+            "amer_spend": "Day",
+            "amer_gm2": "Day",
+            "shopify_customers": "Day",
         }
         date_col = date_column_map.get(file_type)
         
         # Case-insensitive search for date column
-        matching_cols = [col for col in df.columns if col.lower() == date_col.lower()]
+        matching_cols = []
+        if date_col:
+            matching_cols = [col for col in df.columns if col.lower() == date_col.lower()]
+        if not matching_cols:
+            matching_cols = [
+                col for col in df.columns
+                if str(col).strip().lower() in ("day", "days", "date", "created at", "order date")
+            ]
         if not matching_cols:
             logger.warning(f"Column '{date_col}' not found in {file_path.name}. Available columns: {df.columns.tolist()}")
             return {

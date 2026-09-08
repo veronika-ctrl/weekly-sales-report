@@ -248,6 +248,31 @@ export default function Settings() {
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
 
+  const amerFileTypes = [
+    {
+      type: 'amer_revenue',
+      label: 'Adjusted aMER — Revenue by channel (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'amer_spend',
+      label: 'Adjusted aMER — Marketing spend (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'amer_gm2',
+      label: 'Adjusted aMER — Net GM2 (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'shopify_customers',
+      label: 'Adjusted aMER — Shopify customer orders (optional)',
+      formats: '.csv',
+    },
+  ]
+
+  const allStatusFileTypes = [...fileTypes, ...amerFileTypes]
+
   return (
     <div className="space-y-8">
       <Card>
@@ -436,6 +461,33 @@ export default function Settings() {
             />
             )}
 
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Adjusted aMER — Dema agent files</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload the scheduled
+                    agent trio keyed on Channel;ChannelGroup;Country;Day
+                    (Revenue_by_channel_W##, Marketing_spend_W##, Net_GM2_W##). Optional Shopify customer
+                    orders (customer id + order date) power recruited vs dropped. If a Monday has no file,
+                    the report warns instead of using a stale week.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={amerFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
             {/* File Metadata Display */}
             <div className="space-y-4 mt-6">
               <h4 className="text-sm font-medium">Current Files</h4>
@@ -461,7 +513,7 @@ export default function Settings() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {fileTypes.map((ft) => (
+                  {allStatusFileTypes.map((ft) => (
                     <div key={ft.type} className="space-y-2">
                       <div className="text-sm font-medium text-gray-700">{ft.label}</div>
                       {metadata && metadata[ft.type] ? (

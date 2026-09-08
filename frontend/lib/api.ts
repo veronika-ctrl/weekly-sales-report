@@ -1725,3 +1725,100 @@ export async function getQuarterlyVeronikaBoard(
     throw e
   }
 }
+
+export interface AdjustedAmerWarning {
+  code: string
+  message: string
+}
+
+export interface AdjustedAmerHeadline {
+  paidRevenue: number
+  organicRevenue: number
+  unattributedRevenue: number
+  otherRevenue: number
+  totalRevenue: number
+  newCustomerPaidRevenue: number
+  paidSpend: number
+  blendedMER: number | null
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  organicRevShare: number | null
+  paidRevShare: number | null
+  unattributedShare: number | null
+  otherRevShare: number | null
+  netGM2: number | null
+  netGrossProfit2: number
+  netSales: number
+  provisional: boolean
+  as_of: string
+  period_end: string
+  year_month?: string
+}
+
+export interface AdjustedAmerChannelMonth {
+  year_month: string
+  channel: string
+  channel_group: string
+  bucket: string
+  revenue_cfa: number
+  revenue_new_mta: number
+  paidSpend: number
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  provisional: boolean
+  as_of: string
+}
+
+export interface AdjustedAmerResponse {
+  base_week: string
+  week_range: { start: string; end: string; display: string }
+  as_of: string
+  warnings: AdjustedAmerWarning[]
+  missing_files: Record<string, boolean>
+  files: Record<string, { filename: string; uploaded_at: string } | null>
+  taxonomy: {
+    paid_groups: string[]
+    organic_groups: string[]
+    unattributed_groups: string[]
+    observed_groups: Array<{ group: string; bucket: string; channels: string[] }>
+    notes: string
+  }
+  week: AdjustedAmerHeadline | null
+  monthly: AdjustedAmerHeadline[]
+  monthly_by_channel: AdjustedAmerChannelMonth[]
+  recruited_vs_dropped: {
+    available: boolean
+    message: string | null
+    months: Array<{ year_month: string; recruited: number; dropped: number; net: number }>
+    order_count?: number
+    customer_count?: number
+  }
+  footnotes: string[]
+}
+
+export async function getAdjustedAmer(baseWeek: string): Promise<AdjustedAmerResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/adjusted-amer?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
