@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: [
+    '127.0.0.1',
+    'localhost',
+    '*.trycloudflare.com',
+    'perceived-structures-visiting-championship.trycloudflare.com',
+  ],
   experimental: {
     optimizePackageImports: ['recharts', '@tabler/icons-react'],
   },

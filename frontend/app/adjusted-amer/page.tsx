@@ -139,24 +139,25 @@ function ShareBar({ week }: { week: AdjustedAmerHeadline }) {
 
 export default function AdjustedAmerPage() {
   const { baseWeek } = useDataCache()
+  const weekToLoad = baseWeek || '2026-36'
   const chartAnimationsEnabled = useChartAnimations()
   const [data, setData] = useState<AdjustedAmerResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!baseWeek || !hasBackend) return
+    if (!hasBackend) return
     setLoading(true)
     setErr(null)
     try {
-      setData(await getAdjustedAmer(baseWeek))
+      setData(await getAdjustedAmer(weekToLoad))
     } catch (e: unknown) {
       setData(null)
       setErr(e instanceof Error ? e.message : 'Failed to load Adjusted aMER')
     } finally {
       setLoading(false)
     }
-  }, [baseWeek])
+  }, [weekToLoad])
 
   useEffect(() => {
     void load()
