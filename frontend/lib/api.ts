@@ -1822,6 +1822,8 @@ export interface AdjustedAmerResponse {
     months: Array<{ year_month: string; recruited: number; dropped: number; net: number }>
     order_count?: number
     customer_count?: number
+    as_of?: string | null
+    files?: Array<{ filename: string; uploaded_at: string }>
   }
   footnotes: string[]
 }

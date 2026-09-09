@@ -406,7 +406,7 @@ def test_recruited_vs_dropped_months():
             ),
         }
     )
-    rows = {r["year_month"]: r for r in recruited_vs_dropped(orders)}
+    rows = {r["year_month"]: r for r in recruited_vs_dropped(orders, as_of=date(2026, 9, 9))}
     assert rows["2025-03"]["recruited"] == 1  # a
     assert rows["2025-09"]["recruited"] == 1  # b
     assert rows["2026-09"]["recruited"] == 1  # c
@@ -414,6 +414,13 @@ def test_recruited_vs_dropped_months():
     assert rows["2026-09"]["dropped"] == 1
     # a ordered again in 2026-03 so not dropped 12 months after 2025-03
     assert rows["2026-03"]["dropped"] == 0
+    # last purchase in 2026-09 must not invent a 2027-09 drop
+    assert "2027-03" not in rows
+    assert "2027-09" not in rows
+
+    before_sep = {r["year_month"]: r for r in recruited_vs_dropped(orders, as_of=date(2026, 8, 31))}
+    assert "2026-09" not in before_sep
+    assert "2026-03" in before_sep
 
 
 def test_shopify_customers_empty_state(tmp_path: Path):
@@ -441,6 +448,8 @@ def test_shopify_customers_upload_computes_cohorts(tmp_path: Path):
     by_m = {r["year_month"]: r for r in rvd["months"]}
     assert by_m["2026-09"]["recruited"] == 1
     assert by_m["2026-09"]["dropped"] == 1
+    assert rvd["as_of"] == "2026-09-01"
+    assert not any(m["year_month"].startswith("2027") for m in rvd["months"])
 
 
 def test_shopify_native_report_uses_second_and_drops_orders_zero(tmp_path: Path):

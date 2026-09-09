@@ -859,16 +859,22 @@ def load_shopify_customer_orders(data_root: Path) -> pd.DataFrame:
     return out[out["order_date"] >= cutoff].drop_duplicates(["customer_id", "order_date"])
 
 
-def recruited_vs_dropped(orders: pd.DataFrame) -> List[Dict[str, Any]]:
+def recruited_vs_dropped(orders: pd.DataFrame, as_of: Optional[date] = None) -> List[Dict[str, Any]]:
     """
     Recruited in month M = earliest order since 2022-01-01 falls in M.
     Dropped in month M = most recent order was in the calendar month exactly 12
     months before M, with no order since (implied by last-order month).
     Recomputed independently for each month (forward).
+    Orders after as_of are ignored. Months after as_of are omitted so a last
+    purchase in 2026-09 does not plot a 2027-09 drop before that month exists.
     """
     if orders is None or orders.empty:
         return []
+    cap_date = as_of or date.today()
     work = orders.copy()
+    work = work[work["order_date"] <= pd.Timestamp(cap_date)]
+    if work.empty:
+        return []
     work["order_month"] = work["order_date"].dt.to_period("M")
     first = work.groupby("customer_id")["order_month"].min().rename("first_month")
     last = work.groupby("customer_id")["order_month"].max().rename("last_month")
@@ -879,6 +885,8 @@ def recruited_vs_dropped(orders: pd.DataFrame) -> List[Dict[str, Any]]:
     for p in span["last_month"].dropna().unique():
         extra.append(str(p + 12))
     all_months = sorted(set(months) | set(extra))
+    cap = pd.Period(cap_date, freq="M")
+    all_months = [m for m in all_months if pd.Period(m, freq="M") <= cap]
 
     recruited_counts = first.value_counts()
     rows: List[Dict[str, Any]] = []
@@ -1044,6 +1052,15 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
     by_channel = monthly_channel_rows(joined, as_of_d) if not joined.empty else []
     by_group = monthly_group_rows(joined, as_of_d) if not joined.empty else []
 
+    def _file_payload(paths: List[Path]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "filename": p.name,
+                "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)),
+            }
+            for p in paths
+        ]
+
     customer_files = _scan_customer_files(data_root)
     customer_orders = load_shopify_customer_orders(data_root) if customer_files else pd.DataFrame()
     if not customer_files:
@@ -1056,22 +1073,19 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
             "months": [],
         }
     else:
+        last_order = (
+            customer_orders["order_date"].max() if not customer_orders.empty else pd.NaT
+        )
+        rvd_as_of = last_order.date() if pd.notna(last_order) else as_of_d
         recruited = {
             "available": True,
             "message": None,
-            "months": recruited_vs_dropped(customer_orders),
+            "months": recruited_vs_dropped(customer_orders, rvd_as_of),
             "order_count": int(len(customer_orders)),
             "customer_count": int(customer_orders["customer_id"].nunique()) if not customer_orders.empty else 0,
+            "as_of": rvd_as_of.isoformat(),
+            "files": _file_payload(customer_files),
         }
-
-    def _file_payload(paths: List[Path]) -> List[Dict[str, Any]]:
-        return [
-            {
-                "filename": p.name,
-                "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)),
-            }
-            for p in paths
-        ]
 
     return {
         "base_week": base_week,

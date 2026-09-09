@@ -486,6 +486,9 @@ export default function AdjustedAmerPage() {
             Recruited = earliest order since 2022-01-01 in the month. Dropped = last order exactly 12 months earlier,
             with no order since. Native Shopify reports: Customer ID + Second, filtered to Orders = 1
             (Orders = 0 is a later return/refund/edit). Dema / Sessions / Qlik are not used.
+            {rvd?.available && rvd.as_of
+              ? ` ${Number(rvd.customer_count ?? 0).toLocaleString()} customers · ${Number(rvd.order_count ?? 0).toLocaleString()} order-days through ${rvd.as_of}. The last month is month-to-date.`
+              : null}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -503,7 +506,17 @@ export default function AdjustedAmerPage() {
             >
               <BarChart data={rvd.months} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="year_month" tickLine={false} axisLine={false} tickMargin={8} />
+                <XAxis
+                  dataKey="year_month"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={2}
+                  angle={-40}
+                  textAnchor="end"
+                  height={64}
+                  tick={{ fontSize: 11 }}
+                />
                 <YAxis tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
