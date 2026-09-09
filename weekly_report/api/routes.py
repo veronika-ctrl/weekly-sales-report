@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException, Query, File, UploadFile, Form, Respo
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 import json
+import re
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import tempfile
@@ -3921,8 +3922,11 @@ async def upload_file(
                     existing_file.unlink()
                     logger.info(f"Deleted old file: {existing_file}")
         
-        # Save file
-        target_path = target_dir / file.filename
+        # Save file (sanitize so em dashes / spaces in Shopify report names are safe)
+        raw_name = Path(file.filename or "upload.csv").name
+        safe_stem = re.sub(r"[^\w.\-]+", "_", Path(raw_name).stem, flags=re.UNICODE).strip("._") or "upload"
+        safe_suffix = Path(raw_name).suffix.lower() or ".csv"
+        target_path = target_dir / f"{safe_stem}{safe_suffix}"
         # For accumulating slots, avoid overwriting when a prior upload used the
         # same filename (the read-side dedupes overlapping dates, newest wins).
         if file_type in accumulating_types and target_path.exists():

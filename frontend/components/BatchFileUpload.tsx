@@ -152,8 +152,19 @@ export default function BatchFileUpload({
       if (onProgress) onProgress(100)
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || 'Upload failed')
+        const raw = await response.text()
+        let detail = raw.slice(0, 300)
+        try {
+          const parsed = JSON.parse(raw)
+          const d = parsed.detail ?? parsed.message ?? parsed.error
+          detail = typeof d === 'string' ? d : raw.slice(0, 300)
+        } catch {
+          if (/internal server error/i.test(raw) || response.status >= 500) {
+            detail =
+              `Upload failed (${response.status}). Large CSVs can hit the preview proxy size limit — retry; if it fails again the file may still be too large.`
+          }
+        }
+        throw new Error(detail || 'Upload failed')
       }
 
       setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'success' } }))
