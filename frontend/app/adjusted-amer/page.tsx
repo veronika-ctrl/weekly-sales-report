@@ -484,7 +484,8 @@ export default function AdjustedAmerPage() {
           <CardTitle>Recruited vs dropped (Shopify customer orders)</CardTitle>
           <CardDescription>
             Recruited = earliest order since 2022-01-01 in the month. Dropped = last order exactly 12 months earlier,
-            with no order since. This does not use Dema files.
+            with no order since. Native Shopify reports: Customer ID + Second, filtered to Orders = 1
+            (Orders = 0 is a later return/refund/edit). Dema / Sessions / Qlik are not used.
           </CardDescription>
         </CardHeader>
         <CardContent>

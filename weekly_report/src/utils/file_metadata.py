@@ -40,7 +40,7 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
             "amer_revenue": "Day",
             "amer_spend": "Day",
             "amer_gm2": "Day",
-            "shopify_customers": "Day",
+            "shopify_customers": "Second",
         }
         date_col = date_column_map.get(file_type)
         
@@ -51,7 +51,7 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
         if not matching_cols:
             matching_cols = [
                 col for col in df.columns
-                if str(col).strip().lower() in ("day", "days", "date", "created at", "order date")
+                if str(col).strip().lower() in ("day", "days", "date", "created at", "order date", "second")
             ]
         if not matching_cols:
             logger.warning(f"Column '{date_col}' not found in {file_path.name}. Available columns: {df.columns.tolist()}")

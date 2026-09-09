@@ -775,6 +775,31 @@ def _scan_customer_files(data_root: Path) -> List[Path]:
     return files
 
 
+def _filter_shopify_real_orders(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep Orders = 1. Orders = 0 is a later return/refund/edit on the same Order ID."""
+    orders_col = _pick_column(df, ["Orders"])
+    if not orders_col:
+        return df
+    flag = _to_number(df[orders_col])
+    return df.loc[flag.fillna(0).eq(1)].copy()
+
+
+def _parse_order_timestamp(series: pd.Series) -> pd.Series:
+    """Parse Shopify report timestamps: datetime strings, or unix seconds in 'Second'."""
+    parsed = _parse_day(series)
+    if parsed.notna().mean() >= 0.5:
+        return parsed
+    nums = _to_number(series)
+    if nums.notna().mean() < 0.5:
+        return parsed
+    median = float(nums.dropna().median()) if nums.notna().any() else 0.0
+    if median > 1e12:
+        return pd.to_datetime(nums, unit="ms", errors="coerce")
+    if median > 1e9:
+        return pd.to_datetime(nums, unit="s", errors="coerce")
+    return parsed
+
+
 def load_shopify_customer_orders(data_root: Path) -> pd.DataFrame:
     """Load accumulated Shopify customer-order history (customer id + order date)."""
     frames: List[pd.DataFrame] = []
@@ -784,21 +809,19 @@ def load_shopify_customer_orders(data_root: Path) -> pd.DataFrame:
         except Exception as exc:
             logger.warning(f"Skipping Shopify customer file {path}: {exc}")
             continue
+        df = _filter_shopify_real_orders(df)
         cust = _pick_column(
             df,
             [
                 "Customer ID",
                 "customer_id",
                 "Customer id",
-                "Customer",
-                "Email",
-                "Customer Email",
-                "customer_email",
             ],
         )
         day = _pick_column(
             df,
             [
+                "Second",
                 "Created at",
                 "Order Date",
                 "Order date",
@@ -816,12 +839,17 @@ def load_shopify_customer_orders(data_root: Path) -> pd.DataFrame:
         part = pd.DataFrame(
             {
                 "customer_id": df[cust].astype(str).str.strip(),
-                "order_date": _parse_day(df[day]),
+                "order_date": _parse_order_timestamp(df[day]),
             }
         )
+        order_id = _pick_column(df, ["Order ID", "order_id"])
+        if order_id:
+            part["order_id"] = df[order_id].astype(str).str.strip()
+            part = part[part["order_id"].ne("") & part["order_id"].ne("nan")]
+            part = part.drop_duplicates("order_id")
         part = part[part["customer_id"].ne("") & part["customer_id"].ne("nan")]
         part = part.dropna(subset=["order_date"])
-        frames.append(part)
+        frames.append(part[["customer_id", "order_date"]])
     if not frames:
         return pd.DataFrame(columns=["customer_id", "order_date"])
     out = pd.concat(frames, ignore_index=True)

@@ -443,6 +443,32 @@ def test_shopify_customers_upload_computes_cohorts(tmp_path: Path):
     assert by_m["2026-09"]["dropped"] == 1
 
 
+def test_shopify_native_report_uses_second_and_drops_orders_zero(tmp_path: Path):
+    """Orders=0 is a later return/refund/edit on the same Order ID — ignore it."""
+    write_w36_style_fixtures(tmp_path)
+    _write_csv(
+        tmp_path / "raw" / WEEK / SHOPIFY_CUSTOMERS_TYPE / "shopify-native-orders.csv",
+        "Order ID;Customer ID;Order name;Second;Orders",
+        [
+            "100;a;#100;2025-03-10 10:00:00;1",
+            "100;a;#100;2026-03-05 10:00:00;0",
+            "101;a;#101;2026-03-05 12:00:00;1",
+            "200;b;#200;2025-09-15 09:00:00;1",
+            "200;b;#200;2026-09-01 09:00:00;0",
+            "300;c;#300;2026-09-01 11:00:00;1",
+        ],
+    )
+    payload = calculate_adjusted_amer(WEEK, tmp_path)
+    rvd = payload["recruited_vs_dropped"]
+    assert rvd["available"] is True
+    assert rvd["customer_count"] == 3
+    assert rvd["order_count"] == 4  # a has two real orders; Orders=0 rows excluded
+    by_m = {r["year_month"]: r for r in rvd["months"]}
+    assert by_m["2026-09"]["recruited"] == 1  # c
+    assert by_m["2026-09"]["dropped"] == 1  # b last real order 2025-09
+    assert by_m["2026-03"]["dropped"] == 0  # a ordered again in 2026-03
+
+
 def test_european_decimal_spend_parses(tmp_path: Path):
     base = _amer_week_dir(tmp_path)
     _write_csv(

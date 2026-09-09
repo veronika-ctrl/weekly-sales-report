@@ -266,7 +266,7 @@ export default function Settings() {
     },
     {
       type: 'shopify_customers',
-      label: 'Adjusted aMER — Shopify customer orders (optional)',
+      label: 'Adjusted aMER — Shopify customer orders (Orders = 1)',
       formats: '.csv',
     },
   ]
@@ -470,9 +470,10 @@ export default function Settings() {
                     both the ISO-week trio and the calendar-month trio (August + W36 can
                     sit in the same week). Keyed on Channel;ChannelGroup;Country;Day with
                     production groups: sem, social_ppc, affiliate. Ratios are ChannelGroup
-                    grain only. Optional Shopify customer orders (customer id + order date)
-                    power recruited vs dropped — CSV export is enough; no Shopify API yet.
-                    If a Monday has no week file, the report warns instead of using a stale week.
+                    grain only. Shopify native customer-order export (Customer ID + Second
+                    timestamp; keep Orders = 1 only) powers recruited vs dropped — CSV is
+                    enough, no Shopify API. If a Monday has no week file, the report warns
+                    instead of using a stale week.
                   </p>
                 </div>
                 <BatchFileUpload
