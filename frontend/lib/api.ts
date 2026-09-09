@@ -1770,13 +1770,40 @@ export interface AdjustedAmerChannelMonth {
   as_of: string
 }
 
+export interface AdjustedAmerGroupMonth {
+  year_month: string
+  channel_group: string
+  bucket: string
+  channels: string[]
+  revenue_cfa: number
+  revenue_new_mta: number
+  paidSpend: number
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  provisional: boolean
+  as_of: string
+}
+
+export interface AdjustedAmerReconciliation {
+  kind: string
+  key: string
+  label: string
+  net_sales: number | null
+  marketing_spend: number | null
+  expected_net_sales: number | null
+  expected_marketing_spend: number | null
+  match: boolean
+  files: string[]
+}
+
 export interface AdjustedAmerResponse {
   base_week: string
   week_range: { start: string; end: string; display: string }
   as_of: string
   warnings: AdjustedAmerWarning[]
   missing_files: Record<string, boolean>
-  files: Record<string, { filename: string; uploaded_at: string } | null>
+  files: Record<string, Array<{ filename: string; uploaded_at: string }>>
+  ratio_grain?: string
   taxonomy: {
     paid_groups: string[]
     organic_groups: string[]
@@ -1784,9 +1811,11 @@ export interface AdjustedAmerResponse {
     observed_groups: Array<{ group: string; bucket: string; channels: string[] }>
     notes: string
   }
+  reconciliation?: AdjustedAmerReconciliation[]
   week: AdjustedAmerHeadline | null
   monthly: AdjustedAmerHeadline[]
   monthly_by_channel: AdjustedAmerChannelMonth[]
+  monthly_by_group?: AdjustedAmerGroupMonth[]
   recruited_vs_dropped: {
     available: boolean
     message: string | null

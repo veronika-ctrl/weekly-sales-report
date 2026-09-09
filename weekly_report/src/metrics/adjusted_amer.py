@@ -1,13 +1,14 @@
 """
 Adjusted aMER reporting — a separate module from weekly Dema/Shopify/Qlik reports.
 
-Data source (scheduled Dema agent, semicolon CSV, one trio per ISO week):
+Data source (scheduled Dema agent, semicolon CSV). A week folder may hold both
+the ISO-week trio and a calendar-month trio:
 
-    Revenue_by_channel_W##.csv
+    Revenue_by_channel_*.csv
         Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA
-    Marketing_spend_W##.csv
+    Marketing_spend_*.csv
         Channel;ChannelGroup;Country;Day;Marketing spend
-    Net_GM2_W##.csv
+    Net_GM2_*.csv
         Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend
 
 Join is a mandatory FULL OUTER JOIN on Channel;ChannelGroup;Country;Day. Unmatched
@@ -18,6 +19,10 @@ Headline Adjusted aMER uses Revenue_CFA. New-customer Adjusted aMER uses
 Revenue_New_MTA because CFA is not split by new/returning. Those two ratios are
 not the same methodology.
 
+Every ratio that divides revenue by spend is computed at ChannelGroup grain.
+Meta spend is booked to Channel facebook while CFA splits across facebook +
+instagram; per-channel division is undefined. Channel rows are revenue totals only.
+
 Unattributed is never folded into organic. Unknown ChannelGroups land in a visible
 ``other`` bucket rather than being dropped.
 
@@ -25,26 +30,20 @@ Existing weekly ``dema_spend`` / ``dema_gm2`` / Shopify sessions uploads are a
 different grain (no ChannelGroup; GM2 W36 is country-level spend only) and are
 NOT reused here.
 
-Taxonomy (case-insensitive, spaces/hyphens → underscore)
-========================================================
-Live W36 ``dema_spend`` Channel values (no ChannelGroup in that file):
-    Facebook, TikTok, Google, CJ
-When the agent file omits ChannelGroup we infer from Channel using that live set.
+Production ChannelGroup taxonomy (case-insensitive, spaces/hyphens → underscore)
+================================================================================
+PAID (Adjusted aMER numerator/denominator):
+    sem            — Google
+    social_ppc     — Facebook + Instagram + TikTok + Pinterest
+    affiliate      — CJ + wordseed + klarna + goodonyou
+ORGANIC:
+    direct, organic, email, referral, social_organic
+UNATTRIBUTED:
+    backfilled, unknown
+Anything else → ``other`` (shown, not dropped, not folded into organic).
 
-PAID_GROUPS — paid media whose CFA revenue is the Adjusted aMER numerator
-    and whose spend is the denominator:
-        sem, google, google_ads, shopping, paid_search, pmax, performance_max
-        meta, meta_paid, facebook, instagram, paid_social
-        tiktok, tiktok_paid
-        affiliate, affiliates, cj
-        display
-ORGANIC_GROUPS (spec):
-        organic, email, social_organic, referral, direct
-        (+ seo, organic_search, organic_social as aliases)
-UNATTRIBUTED_GROUPS (spec):
-        backfilled, unknown
-        (+ unattributed as alias)
-Anything else → bucket ``other`` (shown, not dropped, not folded into organic).
+Known gaps (not bugs): no display ChannelGroup; TikTok is dormant (near-zero
+spend) so it is absent from most weeks; PMax/Shopping are not split out of sem.
 
 Shopify recruited vs dropped does NOT use Dema files. It needs a customer-order
 export (customer id + order date). Sessions/Qlik cannot substitute.
@@ -79,81 +78,52 @@ PROVISIONAL_DAYS = 42  # ~6 weeks; periods younger than this are restated, not l
 CUSTOMER_HISTORY_START = date(2022, 1, 1)
 
 # ---------------------------------------------------------------------------
-# ChannelGroup taxonomy
+# ChannelGroup taxonomy (production Dema groups — do not infer meta→paid)
 # ---------------------------------------------------------------------------
-# Matched after _norm_group(). Confirmed from live W36 Channel names (Facebook,
-# TikTok, Google, CJ) plus the spec placeholders for organic / unattributed.
-PAID_GROUPS = frozenset(
-    {
-        "sem",
-        "google",
-        "google_ads",
-        "shopping",
-        "paid_search",
-        "pmax",
-        "performance_max",
-        "meta",
-        "meta_paid",
-        "facebook",
-        "instagram",
-        "paid_social",
-        "tiktok",
-        "tiktok_paid",
-        "affiliate",
-        "affiliates",
-        "cj",
-        "display",
-    }
-)
-ORGANIC_GROUPS = frozenset(
-    {
-        "organic",
-        "email",
-        "social_organic",
-        "referral",
-        "direct",
-        "seo",
-        "organic_search",
-        "organic_social",
-    }
-)
-UNATTRIBUTED_GROUPS = frozenset(
-    {
-        "backfilled",
-        "unknown",
-        "unattributed",
-    }
-)
+PAID_GROUPS = frozenset({"sem", "social_ppc", "affiliate"})
+ORGANIC_GROUPS = frozenset({"direct", "organic", "email", "referral", "social_organic"})
+UNATTRIBUTED_GROUPS = frozenset({"backfilled", "unknown"})
 
-# Channel → ChannelGroup when the agent file has Channel but no ChannelGroup.
-# Keys are _norm_group() of Channel. Values are canonical group labels.
+# Channel → ChannelGroup only when the agent file leaves ChannelGroup blank.
 CHANNEL_TO_GROUP = {
-    "facebook": "meta",
-    "fb": "meta",
-    "instagram": "meta",
-    "ig": "meta",
-    "meta": "meta",
-    "tiktok": "tiktok",
-    "tt": "tiktok",
     "google": "sem",
     "google_ads": "sem",
     "adwords": "sem",
     "shopping": "sem",
     "pmax": "sem",
     "performance_max": "sem",
+    "facebook": "social_ppc",
+    "fb": "social_ppc",
+    "instagram": "social_ppc",
+    "ig": "social_ppc",
+    "tiktok": "social_ppc",
+    "tt": "social_ppc",
+    "pinterest": "social_ppc",
     "cj": "affiliate",
     "commission_junction": "affiliate",
-    "awin": "affiliate",
-    "affiliate": "affiliate",
+    "wordseed": "affiliate",
+    "klarna": "affiliate",
+    "goodonyou": "affiliate",
+    "good_on_you": "affiliate",
     "email": "email",
     "klaviyo": "email",
     "direct": "direct",
     "organic": "organic",
-    "seo": "organic",
     "referral": "referral",
+    "social_organic": "social_organic",
     "unknown": "unknown",
     "backfilled": "backfilled",
 }
+
+# Dema-validated file totals (SEK). Used for reconciliation, not as inputs.
+VALIDATED_TOTALS = {
+    ("week", "2026-36"): {"net_sales": 1_211_140.23, "marketing_spend": 144_583.25},
+    ("month", "2026-08"): {"net_sales": 6_748_620.98, "marketing_spend": 780_010.85},
+}
+W36_DAY_START = date(2026, 8, 31)
+W36_DAY_END = date(2026, 9, 6)
+AUGUST_2026_START = date(2026, 8, 1)
+AUGUST_2026_END = date(2026, 8, 31)
 
 JOIN_KEYS = ("Channel", "ChannelGroup", "Country", "Day")
 
@@ -182,7 +152,7 @@ def classify_channel_group(group: Any) -> str:
 
 
 def infer_channel_group(channel: Any, channel_group: Any = None) -> str:
-    """Prefer the file's ChannelGroup; if blank, map Channel from the live W36 set."""
+    """Prefer the file's ChannelGroup; if blank, map Channel onto production groups."""
     g = _norm_group(channel_group)
     if g:
         return g
@@ -284,16 +254,95 @@ def _latest_csv(folder: Path) -> Optional[Path]:
     return files[-1] if files else None
 
 
-def find_week_amer_files(raw_week_path: Path) -> Dict[str, Optional[Path]]:
+def find_week_amer_files(raw_week_path: Path) -> Dict[str, List[Path]]:
+    """All CSVs in the week folder (W36 + August can coexist)."""
     return {
-        AMER_REVENUE_TYPE: _latest_csv(raw_week_path / AMER_REVENUE_TYPE),
-        AMER_SPEND_TYPE: _latest_csv(raw_week_path / AMER_SPEND_TYPE),
-        AMER_GM2_TYPE: _latest_csv(raw_week_path / AMER_GM2_TYPE),
+        AMER_REVENUE_TYPE: _list_csv_files(raw_week_path / AMER_REVENUE_TYPE),
+        AMER_SPEND_TYPE: _list_csv_files(raw_week_path / AMER_SPEND_TYPE),
+        AMER_GM2_TYPE: _list_csv_files(raw_week_path / AMER_GM2_TYPE),
     }
 
 
-def missing_amer_types(files: Dict[str, Optional[Path]]) -> List[str]:
-    return [k for k, v in files.items() if v is None]
+def find_month_amer_files(data_root: Path) -> Dict[str, List[Path]]:
+    months_root = Path(data_root) / "raw" / "months"
+    found: Dict[str, List[Path]] = {k: [] for k in AMER_DEMA_FILE_TYPES}
+    if not months_root.exists():
+        return found
+    for month_dir in sorted(p for p in months_root.iterdir() if p.is_dir()):
+        for kind in AMER_DEMA_FILE_TYPES:
+            found[kind].extend(_list_csv_files(month_dir / kind))
+    return found
+
+
+def missing_amer_types(files: Dict[str, List[Path]]) -> List[str]:
+    return [k for k, v in files.items() if not v]
+
+
+def infer_source_period(path: Path, df: pd.DataFrame) -> Tuple[str, str]:
+    """Return (kind, key) e.g. ('week','2026-36') or ('month','2026-08')."""
+    name = _norm_group(path.stem)
+    parts = path.parts
+    if "months" in parts:
+        idx = parts.index("months")
+        if idx + 1 < len(parts):
+            return "month", str(parts[idx + 1])
+    if "w36" in name or "week36" in name or "week_36" in name:
+        return "week", "2026-36"
+    if "august" in name or "aug2026" in name or "2026_08" in name or "202608" in name:
+        return "month", "2026-08"
+    days = df["Day"].dropna() if "Day" in df.columns else pd.Series(dtype="datetime64[ns]")
+    if not days.empty:
+        dmin = pd.Timestamp(days.min()).date()
+        dmax = pd.Timestamp(days.max()).date()
+        if dmin >= AUGUST_2026_START and dmax <= AUGUST_2026_END:
+            return "month", "2026-08"
+        if dmin >= W36_DAY_START and dmax <= W36_DAY_END:
+            return "week", "2026-36"
+        if dmin.month == dmax.month and (dmax - dmin).days >= 27:
+            return "month", f"{dmin.year}-{dmin.month:02d}"
+    week_guess = path.parent.parent.name
+    if _YEAR_MONTH_RE.match(week_guess) is None and "-" in week_guess:
+        return "week", week_guess
+    return "week", week_guess
+
+
+def _dedup_join_keys(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    work = df.copy()
+    if "_source_mtime" in work.columns:
+        work = work.sort_values("_source_mtime")
+    return work.drop_duplicates(list(JOIN_KEYS), keep="last").reset_index(drop=True)
+
+
+def _load_metric_frames(
+    paths: Sequence[Path], loader
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+    frames: List[pd.DataFrame] = []
+    inventory: List[Dict[str, Any]] = []
+    for path in paths:
+        df = loader(path)
+        kind, key = infer_source_period(path, df)
+        df = df.copy()
+        df["_source_kind"] = kind
+        df["_source_key"] = key
+        frames.append(df)
+        inventory.append(
+            {
+                "filename": path.name,
+                "path": str(path),
+                "kind": kind,
+                "key": key,
+                "rows": int(len(df)),
+                "net_sales": float(df["net_sales"].sum()) if "net_sales" in df.columns else None,
+                "marketing_spend": float(df["marketing_spend"].sum())
+                if "marketing_spend" in df.columns
+                else None,
+            }
+        )
+    if not frames:
+        return pd.DataFrame(), inventory
+    return _dedup_join_keys(pd.concat(frames, ignore_index=True)), inventory
 
 
 def _load_one_csv(path: Path) -> pd.DataFrame:
@@ -586,7 +635,7 @@ def _with_provisional(
 
 
 def monthly_channel_rows(df: pd.DataFrame, as_of: date) -> List[Dict[str, Any]]:
-    """Calendar-month rollup, Channel and ChannelGroup broken out (weeks may straddle months)."""
+    """Calendar-month Channel revenue totals. Ratios are always null (group grain only)."""
     if df is None or df.empty:
         return []
     work = df.dropna(subset=["Day"]).copy()
@@ -611,13 +660,50 @@ def monthly_channel_rows(df: pd.DataFrame, as_of: date) -> List[Dict[str, Any]]:
                 "revenue_cfa": cfa,
                 "revenue_new_mta": new_mta,
                 "paidSpend": spend,
+                "adjustedAMER": None,
+                "newCustomerAdjustedAMER": None,
+                "provisional": is_provisional(period_end, as_of_d),
+                "as_of": _iso(as_of_dt) if as_of_dt else as_of_d.isoformat(),
+            }
+        )
+    rows.sort(key=lambda r: (r["year_month"], r["channel_group"], r["channel"]))
+    return rows
+
+
+def monthly_group_rows(df: pd.DataFrame, as_of: date) -> List[Dict[str, Any]]:
+    """Calendar-month ChannelGroup rollup — the only grain that carries aMER/MER ratios."""
+    if df is None or df.empty:
+        return []
+    work = df.dropna(subset=["Day"]).copy()
+    work["year_month"] = work["Day"].dt.strftime("%Y-%m")
+    grouped = work.groupby(["year_month", "ChannelGroup", "bucket"], dropna=False)
+    rows: List[Dict[str, Any]] = []
+    for (year_month, group, bucket), part in grouped:
+        y_str, m_str = str(year_month).split("-")
+        last = calendar.monthrange(int(y_str), int(m_str))[1]
+        period_end = date(int(y_str), int(m_str), last)
+        spend = float(part["marketing_spend"].sum())
+        cfa = float(part["revenue_cfa"].sum())
+        new_mta = float(part["revenue_new_mta"].sum())
+        as_of_dt = _period_as_of(part)
+        as_of_d = as_of_dt.date() if as_of_dt else as_of
+        channels = sorted({str(c) for c in part["Channel"].dropna().unique()})
+        rows.append(
+            {
+                "year_month": str(year_month),
+                "channel_group": str(group),
+                "bucket": str(bucket),
+                "channels": channels,
+                "revenue_cfa": cfa,
+                "revenue_new_mta": new_mta,
+                "paidSpend": spend,
                 "adjustedAMER": safe_ratio(cfa, spend),
                 "newCustomerAdjustedAMER": safe_ratio(new_mta, spend),
                 "provisional": is_provisional(period_end, as_of_d),
                 "as_of": _iso(as_of_dt) if as_of_dt else as_of_d.isoformat(),
             }
         )
-    rows.sort(key=lambda r: (r["year_month"], r["channel_group"], r["channel"]))
+    rows.sort(key=lambda r: (r["year_month"], r["bucket"], r["channel_group"]))
     return rows
 
 
@@ -664,11 +750,14 @@ def observed_taxonomy(df: pd.DataFrame) -> Dict[str, Any]:
         "unattributed_groups": sorted(UNATTRIBUTED_GROUPS),
         "observed_groups": groups,
         "notes": (
-            "PAID inferred from live W36 Channel values Facebook→meta, TikTok→tiktok, "
-            "Google→sem, CJ→affiliate, plus SEM/affiliate/display aliases. ORGANIC and "
-            "UNATTRIBUTED follow the spec. Unknown ChannelGroups are bucketed as other "
-            "and shown separately — they are not dropped and not folded into organic. "
-            "totalRevenue = paid + organic + unattributed (other is extra)."
+            "Production ChannelGroups: paid = sem (Google), social_ppc "
+            "(Facebook+Instagram+TikTok+Pinterest), affiliate (CJ+wordseed+klarna+goodonyou). "
+            "Organic = direct, organic, email, referral, social_organic. "
+            "Unattributed = backfilled, unknown. Anything else is other — shown, not folded "
+            "into organic. Ratios (Adjusted aMER, Blended MER, new-customer aMER) are "
+            "ChannelGroup grain only because Meta spend is booked to facebook while revenue "
+            "splits across facebook+instagram. Known gaps: no display group; TikTok dormant; "
+            "PMax/Shopping not split out of sem. totalRevenue = paid + organic + unattributed."
         ),
     }
 
@@ -781,6 +870,56 @@ def recruited_vs_dropped(orders: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def _money_match(actual: float, expected: float, tol: float = 0.005) -> bool:
+    return abs(round(float(actual), 2) - round(float(expected), 2)) <= tol
+
+
+def build_reconciliation(
+    spend_inventory: List[Dict[str, Any]],
+    gm2_inventory: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Compare source-file totals to Dema-validated SEK figures."""
+    spend_by: Dict[Tuple[str, str], float] = {}
+    gm2_by: Dict[Tuple[str, str], float] = {}
+    files_by: Dict[Tuple[str, str], List[str]] = {}
+    for row in spend_inventory:
+        key = (row["kind"], row["key"])
+        spend_by[key] = spend_by.get(key, 0.0) + float(row.get("marketing_spend") or 0.0)
+        files_by.setdefault(key, []).append(row["filename"])
+    for row in gm2_inventory:
+        key = (row["kind"], row["key"])
+        gm2_by[key] = gm2_by.get(key, 0.0) + float(row.get("net_sales") or 0.0)
+        files_by.setdefault(key, []).append(row["filename"])
+
+    keys = sorted(set(VALIDATED_TOTALS) | set(spend_by) | set(gm2_by))
+    out: List[Dict[str, Any]] = []
+    for kind, key in keys:
+        expected = VALIDATED_TOTALS.get((kind, key))
+        actual_sales = gm2_by.get((kind, key))
+        actual_spend = spend_by.get((kind, key))
+        match = False
+        if expected is not None and actual_sales is not None and actual_spend is not None:
+            match = _money_match(actual_sales, expected["net_sales"]) and _money_match(
+                actual_spend, expected["marketing_spend"]
+            )
+        out.append(
+            {
+                "kind": kind,
+                "key": key,
+                "label": f"W36" if (kind, key) == ("week", "2026-36") else (
+                    "August 2026" if (kind, key) == ("month", "2026-08") else f"{kind} {key}"
+                ),
+                "net_sales": actual_sales,
+                "marketing_spend": actual_spend,
+                "expected_net_sales": expected["net_sales"] if expected else None,
+                "expected_marketing_spend": expected["marketing_spend"] if expected else None,
+                "match": match,
+                "files": sorted(set(files_by.get((kind, key), []))),
+            }
+        )
+    return out
+
+
 def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
     """Build the Adjusted aMER payload for the report page and API."""
     if not validate_iso_week(base_week):
@@ -789,24 +928,33 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
     data_root = Path(data_root)
     week_range = get_week_date_range(base_week)
     week_path = data_root / "raw" / base_week
-    files = find_week_amer_files(week_path)
-    missing = missing_amer_types(files)
+    week_files = find_week_amer_files(week_path)
+    month_files = find_month_amer_files(data_root)
+    files = {
+        kind: list(week_files[kind]) + list(month_files.get(kind, []))
+        for kind in AMER_DEMA_FILE_TYPES
+    }
+    missing = missing_amer_types(week_files)
 
     warnings: List[Dict[str, str]] = []
     footnotes = [
-        "Headline Adjusted aMER = paid Revenue_CFA ÷ paid marketing spend.",
-        "New-customer Adjusted aMER = paid Revenue_New_MTA ÷ paid marketing spend. "
-        "CFA is not split by new/returning, so this ratio is MTA-based and is not the same methodology.",
+        "Headline Adjusted aMER = paid Revenue_CFA ÷ paid marketing spend at ChannelGroup grain.",
+        "New-customer Adjusted aMER = paid Revenue_New_MTA ÷ paid marketing spend (MTA). "
+        "CFA is not split by new/returning, so this ratio is not the same methodology.",
+        "Ratios are never computed per Channel. Meta spend is booked to facebook; "
+        "revenue splits across facebook + instagram.",
         "Unattributed revenue is kept separate and is never folded into organic.",
         "Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales) after aggregate — row-level margins are not averaged.",
         "Periods younger than ~6 weeks are provisional: newer agent pulls overwrite stored values.",
+        "Known gaps: no display ChannelGroup; TikTok is dormant so it is absent from most weeks; "
+        "PMax/Shopping are not split out of sem.",
     ]
 
     if missing:
         labels = {
-            AMER_REVENUE_TYPE: "Revenue_by_channel_W##.csv",
-            AMER_SPEND_TYPE: "Marketing_spend_W##.csv",
-            AMER_GM2_TYPE: "Net_GM2_W##.csv",
+            AMER_REVENUE_TYPE: "Revenue_by_channel_*.csv",
+            AMER_SPEND_TYPE: "Marketing_spend_*.csv",
+            AMER_GM2_TYPE: "Net_GM2_*.csv",
         }
         pretty = ", ".join(labels[m] for m in missing)
         warnings.append(
@@ -820,13 +968,37 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
             }
         )
 
-    revenue = load_revenue_frame(files[AMER_REVENUE_TYPE]) if files[AMER_REVENUE_TYPE] else pd.DataFrame()
-    spend = load_spend_frame(files[AMER_SPEND_TYPE]) if files[AMER_SPEND_TYPE] else pd.DataFrame()
-    gm2 = load_gm2_frame(files[AMER_GM2_TYPE]) if files[AMER_GM2_TYPE] else pd.DataFrame()
+    revenue, rev_inv = _load_metric_frames(files[AMER_REVENUE_TYPE], load_revenue_frame)
+    spend, spend_inv = _load_metric_frames(files[AMER_SPEND_TYPE], load_spend_frame)
+    gm2, gm2_inv = _load_metric_frames(files[AMER_GM2_TYPE], load_gm2_frame)
+    reconciliation = build_reconciliation(spend_inv, gm2_inv)
+    if reconciliation and not all(
+        row["match"] for row in reconciliation if (row["kind"], row["key"]) in VALIDATED_TOTALS
+    ):
+        unmatched = [
+            row["label"]
+            for row in reconciliation
+            if (row["kind"], row["key"]) in VALIDATED_TOTALS and not row["match"]
+        ]
+        if unmatched:
+            warnings.append(
+                {
+                    "code": "reconciliation_mismatch",
+                    "message": (
+                        "Source-file totals do not yet match Dema-validated figures for: "
+                        + ", ".join(unmatched)
+                        + "."
+                    ),
+                }
+            )
 
     joined = full_outer_join_amer(revenue, spend, gm2)
 
-    file_mtimes = [datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc) for p in files.values() if p]
+    file_mtimes = [
+        datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        for kind_paths in files.values()
+        for p in kind_paths
+    ]
     as_of_dt = max(file_mtimes) if file_mtimes else datetime.now(timezone.utc)
     as_of_d = as_of_dt.date()
 
@@ -842,6 +1014,7 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
 
     monthly = monthly_headline_rows(joined, as_of_d) if not joined.empty else []
     by_channel = monthly_channel_rows(joined, as_of_d) if not joined.empty else []
+    by_group = monthly_group_rows(joined, as_of_d) if not joined.empty else []
 
     customer_files = _scan_customer_files(data_root)
     customer_orders = load_shopify_customer_orders(data_root) if customer_files else pd.DataFrame()
@@ -863,22 +1036,29 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
             "customer_count": int(customer_orders["customer_id"].nunique()) if not customer_orders.empty else 0,
         }
 
+    def _file_payload(paths: List[Path]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "filename": p.name,
+                "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)),
+            }
+            for p in paths
+        ]
+
     return {
         "base_week": base_week,
         "week_range": week_range,
         "as_of": _iso(as_of_dt),
         "warnings": warnings,
-        "missing_files": {k: files[k] is None for k in AMER_DEMA_FILE_TYPES},
-        "files": {
-            k: {"filename": p.name, "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc))}
-            if p
-            else None
-            for k, p in files.items()
-        },
+        "missing_files": {k: len(week_files[k]) == 0 for k in AMER_DEMA_FILE_TYPES},
+        "files": {k: _file_payload(files[k]) for k in AMER_DEMA_FILE_TYPES},
+        "ratio_grain": "ChannelGroup",
         "taxonomy": observed_taxonomy(joined if not joined.empty else pd.DataFrame()),
+        "reconciliation": reconciliation,
         "week": week_metrics,
         "monthly": monthly,
         "monthly_by_channel": by_channel,
+        "monthly_by_group": by_group,
         "recruited_vs_dropped": recruited,
         "footnotes": footnotes,
     }

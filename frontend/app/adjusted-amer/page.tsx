@@ -8,7 +8,9 @@ import {
   getAdjustedAmer,
   hasBackend,
   type AdjustedAmerChannelMonth,
+  type AdjustedAmerGroupMonth,
   type AdjustedAmerHeadline,
+  type AdjustedAmerReconciliation,
   type AdjustedAmerResponse,
 } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -49,21 +51,26 @@ const SHARE_COLORS = {
 
 const CHANNEL_LINE_COLORS = ['#4B5563', '#F97316', '#2563EB', '#16A34A', '#DC2626', '#7C3AED', '#0891B2']
 
-function pivotChannelTrend(
-  rows: AdjustedAmerChannelMonth[],
+function pivotGroupTrend(
+  rows: AdjustedAmerGroupMonth[],
   valueKey: 'adjustedAMER' | 'newCustomerAdjustedAMER'
-): { months: string[]; channels: string[]; data: Array<Record<string, string | number | null>> } {
+): { months: string[]; groups: string[]; data: Array<Record<string, string | number | null>> } {
   const months = Array.from(new Set(rows.map((r) => r.year_month))).sort()
-  const channels = Array.from(new Set(rows.map((r) => r.channel))).sort()
+  const groups = Array.from(new Set(rows.filter((r) => r.bucket === 'paid').map((r) => r.channel_group))).sort()
   const data = months.map((ym) => {
     const point: Record<string, string | number | null> = { year_month: ym }
-    for (const ch of channels) {
-      const hit = rows.find((r) => r.year_month === ym && r.channel === ch)
-      point[ch] = hit ? hit[valueKey] : null
+    for (const g of groups) {
+      const hit = rows.find((r) => r.year_month === ym && r.channel_group === g)
+      point[g] = hit ? hit[valueKey] : null
     }
     return point
   })
-  return { months, channels, data }
+  return { months, groups, data }
+}
+
+function fmtSek(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  return `${Number(v).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SEK`
 }
 
 function KpiCard({
@@ -164,21 +171,21 @@ export default function AdjustedAmerPage() {
   }, [load])
 
   const amerTrend = useMemo(
-    () => pivotChannelTrend(data?.monthly_by_channel ?? [], 'adjustedAMER'),
+    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'adjustedAMER'),
     [data]
   )
   const newTrend = useMemo(
-    () => pivotChannelTrend(data?.monthly_by_channel ?? [], 'newCustomerAdjustedAMER'),
+    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'newCustomerAdjustedAMER'),
     [data]
   )
 
   const amerChartConfig = useMemo(() => {
     const cfg: ChartConfig = {}
-    amerTrend.channels.forEach((ch, i) => {
-      cfg[ch] = { label: ch, color: CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length] }
+    amerTrend.groups.forEach((g, i) => {
+      cfg[g] = { label: g, color: CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length] }
     })
     return cfg
-  }, [amerTrend.channels])
+  }, [amerTrend.groups])
 
   if (!hasBackend) {
     return (
@@ -213,7 +220,8 @@ export default function AdjustedAmerPage() {
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
           Separate from weekly Dema/Shopify/Qlik reports. Upload the scheduled Dema agent trio
           (Revenue by channel, Marketing spend, Net GM2) in Settings. Headline uses Revenue_CFA;
-          new-customer Adjusted aMER uses Revenue_New_MTA (MTA).
+          new-customer Adjusted aMER uses Revenue_New_MTA (MTA). Ratios are
+          ChannelGroup grain only (sem / social_ppc / affiliate) — never per Channel.
           {data?.week_range?.display ? ` Week ${data.base_week}: ${data.week_range.display}.` : null}
         </p>
       </div>
@@ -224,7 +232,9 @@ export default function AdjustedAmerPage() {
 
       {(data?.warnings ?? []).map((w) => (
         <div key={w.code} className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded p-3">
-          <div className="font-medium mb-0.5">Missing file / agent check</div>
+          <div className="font-medium mb-0.5">
+            {w.code === 'reconciliation_mismatch' ? 'Reconciliation' : 'Missing file / agent check'}
+          </div>
           {w.message}{' '}
           <Link href="/settings" className="underline font-medium">
             Open Settings
@@ -232,21 +242,62 @@ export default function AdjustedAmerPage() {
         </div>
       ))}
 
+      {(data?.reconciliation?.length ?? 0) > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Dema file reconciliation</CardTitle>
+            <CardDescription>
+              Source-file Net sales and Marketing spend vs the validated W36 and August 2026 totals.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-3">Period</th>
+                  <th className="py-2 pr-3 text-right">Net sales</th>
+                  <th className="py-2 pr-3 text-right">Expected sales</th>
+                  <th className="py-2 pr-3 text-right">Spend</th>
+                  <th className="py-2 pr-3 text-right">Expected spend</th>
+                  <th className="py-2">Match</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data!.reconciliation!.map((row: AdjustedAmerReconciliation) => (
+                  <tr key={`${row.kind}-${row.key}`} className="border-b last:border-0">
+                    <td className="py-2 pr-3">{row.label}</td>
+                    <td className="py-2 pr-3 text-right">{fmtSek(row.net_sales)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtSek(row.expected_net_sales)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtSek(row.marketing_spend)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtSek(row.expected_marketing_spend)}</td>
+                    <td className="py-2">
+                      <span className={row.match ? 'text-green-700 font-medium' : 'text-amber-800 font-medium'}>
+                        {row.match ? 'Match' : 'Not matched'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {week ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <KpiCard
             title="Adjusted aMER"
             value={fmtRatio(week.adjustedAMER)}
-            hint="Paid Revenue_CFA ÷ paid spend"
+            hint="Paid Revenue_CFA ÷ paid spend (ChannelGroup)"
             provisional={week.provisional}
           />
           <KpiCard
             title="New-customer Adjusted aMER"
             value={fmtRatio(week.newCustomerAdjustedAMER)}
-            hint="MTA-based — paid Revenue_New_MTA ÷ paid spend"
+            hint="MTA-based — paid Revenue_New_MTA ÷ paid spend (ChannelGroup)"
             provisional={week.provisional}
           />
-          <KpiCard title="Blended MER" value={fmtRatio(week.blendedMER)} hint="(Paid + organic + unattributed) CFA ÷ paid spend" />
+          <KpiCard title="Blended MER" value={fmtRatio(week.blendedMER)} hint="(Paid + organic + unattributed) CFA ÷ paid spend (ChannelGroup)" />
           <KpiCard title="Net GM2" value={fmtPct(week.netGM2)} hint="sum(Net gross profit 2) ÷ sum(Net sales)" />
         </div>
       ) : (
@@ -275,9 +326,10 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Adjusted aMER by channel</CardTitle>
+          <CardTitle>Monthly Adjusted aMER by ChannelGroup</CardTitle>
           <CardDescription>
-            Calendar month of Day (weeks can straddle months). Channel and ChannelGroup stay broken out.
+            Calendar month of Day. Ratios are sem / social_ppc / affiliate (never Channel).
+            Meta spend is on facebook; CFA splits across facebook + instagram.
             {data?.monthly?.some((m) => m.provisional) ? ' Periods younger than ~6 weeks are flagged provisional.' : ''}
           </CardDescription>
         </CardHeader>
@@ -292,10 +344,10 @@ export default function AdjustedAmerPage() {
                 <YAxis tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
-                {amerTrend.channels.map((ch, i) => (
+                {amerTrend.groups.map((g, i) => (
                   <Line
-                    key={ch}
-                    dataKey={ch}
+                    key={g}
+                    dataKey={g}
                     type="monotone"
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
                     strokeWidth={2}
@@ -312,9 +364,9 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly new-customer Adjusted aMER by channel (MTA-based)</CardTitle>
+          <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based)</CardTitle>
           <CardDescription>
-            Paid Revenue_New_MTA ÷ channel spend. Not the same methodology as headline Adjusted aMER (CFA).
+            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -328,10 +380,10 @@ export default function AdjustedAmerPage() {
                 <YAxis tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
-                {newTrend.channels.map((ch, i) => (
+                {newTrend.groups.map((g, i) => (
                   <Line
-                    key={ch}
-                    dataKey={ch}
+                    key={g}
+                    dataKey={g}
                     type="monotone"
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
                     strokeWidth={2}
@@ -346,10 +398,57 @@ export default function AdjustedAmerPage() {
         </CardContent>
       </Card>
 
+      {(data?.monthly_by_group?.length ?? 0) > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly ChannelGroup table (ratios)</CardTitle>
+            <CardDescription>Adjusted aMER and new-customer aMER live here. Channel rows below are revenue only.</CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-3">Month</th>
+                  <th className="py-2 pr-3">Group</th>
+                  <th className="py-2 pr-3">Bucket</th>
+                  <th className="py-2 pr-3">Channels</th>
+                  <th className="py-2 pr-3 text-right">Adj. aMER</th>
+                  <th className="py-2 pr-3 text-right">NC adj. aMER (MTA)</th>
+                  <th className="py-2 pr-3 text-right">CFA</th>
+                  <th className="py-2 text-right">Spend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data!.monthly_by_group!.map((row) => (
+                  <tr key={`${row.year_month}-${row.channel_group}`} className="border-b last:border-0">
+                    <td className="py-2 pr-3">
+                      {row.year_month}
+                      {row.provisional ? (
+                        <span className="ml-2 text-[10px] uppercase bg-amber-100 text-amber-800 px-1 rounded">prov.</span>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-3">{row.channel_group}</td>
+                    <td className="py-2 pr-3">{row.bucket}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{row.channels.join(', ')}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtMoney(row.revenue_cfa)}</td>
+                    <td className="py-2 text-right">{fmtMoney(row.paidSpend)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {(data?.monthly_by_channel?.length ?? 0) > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Monthly channel table</CardTitle>
+            <CardTitle>Monthly channel revenue (no ratios)</CardTitle>
+            <CardDescription>
+              Individual channels are shown for CFA and spend totals only. Instagram can have CFA with zero spend.
+            </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -359,26 +458,17 @@ export default function AdjustedAmerPage() {
                   <th className="py-2 pr-3">Channel</th>
                   <th className="py-2 pr-3">Group</th>
                   <th className="py-2 pr-3">Bucket</th>
-                  <th className="py-2 pr-3 text-right">Adj. aMER</th>
-                  <th className="py-2 pr-3 text-right">NC adj. aMER (MTA)</th>
                   <th className="py-2 pr-3 text-right">CFA</th>
                   <th className="py-2 text-right">Spend</th>
                 </tr>
               </thead>
               <tbody>
-                {data!.monthly_by_channel.map((row) => (
+                {data!.monthly_by_channel.map((row: AdjustedAmerChannelMonth) => (
                   <tr key={`${row.year_month}-${row.channel}-${row.channel_group}`} className="border-b last:border-0">
-                    <td className="py-2 pr-3">
-                      {row.year_month}
-                      {row.provisional ? (
-                        <span className="ml-2 text-[10px] uppercase bg-amber-100 text-amber-800 px-1 rounded">prov.</span>
-                      ) : null}
-                    </td>
+                    <td className="py-2 pr-3">{row.year_month}</td>
                     <td className="py-2 pr-3">{row.channel}</td>
                     <td className="py-2 pr-3">{row.channel_group}</td>
                     <td className="py-2 pr-3">{row.bucket}</td>
-                    <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
-                    <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtMoney(row.revenue_cfa)}</td>
                     <td className="py-2 text-right">{fmtMoney(row.paidSpend)}</td>
                   </tr>

@@ -466,11 +466,13 @@ export default function Settings() {
                 <div>
                   <h4 className="text-sm font-medium">Adjusted aMER — Dema agent files</h4>
                   <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload the scheduled
-                    agent trio keyed on Channel;ChannelGroup;Country;Day
-                    (Revenue_by_channel_W##, Marketing_spend_W##, Net_GM2_W##). Optional Shopify customer
-                    orders (customer id + order date) power recruited vs dropped. If a Monday has no file,
-                    the report warns instead of using a stale week.
+                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload
+                    both the ISO-week trio and the calendar-month trio (August + W36 can
+                    sit in the same week). Keyed on Channel;ChannelGroup;Country;Day with
+                    production groups: sem, social_ppc, affiliate. Ratios are ChannelGroup
+                    grain only. Optional Shopify customer orders (customer id + order date)
+                    power recruited vs dropped — CSV export is enough; no Shopify API yet.
+                    If a Monday has no week file, the report warns instead of using a stale week.
                   </p>
                 </div>
                 <BatchFileUpload

@@ -38,6 +38,7 @@ from weekly_report.src.metrics.online_kpis import calculate_online_kpis_for_week
 from weekly_report.src.metrics.monthly_veronika_kpis import calculate_monthly_veronika_kpis
 from weekly_report.src.metrics.adjusted_amer import (
     AMER_ALL_FILE_TYPES,
+    AMER_DEMA_FILE_TYPES,
     calculate_adjusted_amer,
 )
 from weekly_report.src.metrics.quarterly_veronika_board import calculate_quarterly_veronika_board_kpis
@@ -3913,7 +3914,7 @@ async def upload_file(
         # Exception: 'discounts' (Full price vs Sale) and 'shopify_customers'
         # accumulate history across uploads — we keep prior files and merge at
         # read time so successive weeks do not wipe earlier data.
-        accumulating_types = {"discounts", "shopify_customers"}
+        accumulating_types = {"discounts", "shopify_customers", *AMER_DEMA_FILE_TYPES}
         if file_type not in accumulating_types:
             for existing_file in target_dir.glob("*.*"):
                 if not existing_file.name.startswith('.'):

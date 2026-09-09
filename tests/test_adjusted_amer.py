@@ -1,28 +1,29 @@
 """Unit tests for the Adjusted aMER module.
 
-Fixtures match the Dema agent column names (semicolon CSV):
+Fixtures match production Dema ChannelGroups and spaced column headers:
     Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA
     Channel;ChannelGroup;Country;Day;Marketing spend
     Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend
 
 Manual recompute (fixture week 2026-36 = Mon 2026-08-31 .. Sun 2026-09-06):
 
-  Paid CFA (meta+tiktok+sem+affiliate) week days:
-    Facebook 100+50 (Aug 31 + Sep 1) + TikTok 40 (Sep 1) + Google 20 (Sep 2) + CJ 10 (Sep 3)
+  Paid CFA (social_ppc+sem+affiliate) week days:
+    Facebook 100 (Aug 31) + Instagram 50 (Sep 1) + TikTok 40 (Sep 1) + Google 20 (Sep 2) + CJ 10 (Sep 3)
     = 220
   Organic CFA: email 30 (Sep 1) + direct 15 (Sep 4) = 45
   Unattributed CFA: unknown 25 (Sep 5) = 25
   Other CFA: podcast 8 (Sep 6) = 8
   totalRevenue = 220+45+25 = 290  (other excluded)
   New MTA paid: 40+10+12+8+3 = 73
-  Paid spend: 50+20+30+25+15 = 140
+  Paid spend: Facebook 50+20 + TikTok 30 + Google 25 + CJ 15 = 140
+    (Instagram has revenue but no spend — Meta booked to facebook)
   adjustedAMER = 220/140 = 1.571428...
   blendedMER = 290/140 = 2.071428...
   newCustomerAdjustedAMER = 73/140 = 0.521428...
   Net GM2 = (80+40+20+10) / (200+90+50+30) = 150/370 ≈ 0.405405
 
-  Unmatched spend (TikTok SE 2026-09-01 spend 30, no revenue row) is kept via full outer join.
-  Unmatched revenue (direct SE 2026-09-04, no spend) spend = 0.
+  Unmatched spend (TikTok SE 2026-09-01 spend 30, no extra unmatched in this grain
+  beyond Instagram spend=0). Unmatched revenue (direct SE 2026-09-04, no spend) spend = 0.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from weekly_report.src.metrics.adjusted_amer import (
     load_revenue_frame,
     load_spend_frame,
     monthly_channel_rows,
+    monthly_group_rows,
     monthly_headline_rows,
     recruited_vs_dropped,
     safe_ratio,
@@ -68,49 +70,45 @@ def _amer_week_dir(tmp_path: Path, week: str = WEEK) -> Path:
 
 
 def write_w36_style_fixtures(tmp_path: Path, week: str = WEEK) -> Path:
-    """Small W36-style trio matching agent column names (not the live weekly dema_spend grain)."""
+    """Production ChannelGroups; Meta spend on facebook, CFA on facebook+instagram."""
     base = _amer_week_dir(tmp_path, week)
     _write_csv(
         base / AMER_REVENUE_TYPE / "Revenue_by_channel_W36.csv",
         "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
         [
-            # Week-straddle: Aug 31 is week 36 and calendar August
-            "Facebook;meta;Sweden;2026-08-31;90;100;40;60",
-            "Facebook;meta;Sweden;2026-09-01;55;50;10;40",
-            "TikTok;tiktok;Sweden;2026-09-01;44;40;12;28",
+            "Facebook;social_ppc;Sweden;2026-08-31;90;100;40;60",
+            "Instagram;social_ppc;Sweden;2026-09-01;55;50;10;40",
+            "TikTok;social_ppc;Sweden;2026-09-01;44;40;12;28",
             "Google;sem;Sweden;2026-09-02;22;20;8;12",
             "CJ;affiliate;Sweden;2026-09-03;11;10;3;7",
             "Klaviyo;email;Sweden;2026-09-01;30;30;30;0",
             "Direct;direct;Sweden;2026-09-04;15;15;0;15",
             "Unknown;unknown;Sweden;2026-09-05;25;25;0;25",
             "Podcast;podcast;Sweden;2026-09-06;8;8;0;8",
-            # Outside the week — used for monthly rollup
-            "Facebook;meta;Sweden;2026-07-15;200;180;70;110",
+            "Facebook;social_ppc;Sweden;2026-07-15;200;180;70;110",
         ],
     )
     _write_csv(
         base / AMER_SPEND_TYPE / "Marketing_spend_W36.csv",
         "Channel;ChannelGroup;Country;Day;Marketing spend",
         [
-            "Facebook;meta;Sweden;2026-08-31;50",
-            "Facebook;meta;Sweden;2026-09-01;20",
-            # Unmatched spend: no revenue row for this grain
-            "TikTok;tiktok;Sweden;2026-09-01;30",
+            "Facebook;social_ppc;Sweden;2026-08-31;50",
+            "Facebook;social_ppc;Sweden;2026-09-01;20",
+            "TikTok;social_ppc;Sweden;2026-09-01;30",
             "Google;sem;Sweden;2026-09-02;25",
             "CJ;affiliate;Sweden;2026-09-03;15",
-            "Facebook;meta;Sweden;2026-07-15;90",
+            "Facebook;social_ppc;Sweden;2026-07-15;90",
         ],
     )
     _write_csv(
         base / AMER_GM2_TYPE / "Net_GM2_W36.csv",
         "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
         [
-            "Facebook;meta;Sweden;2026-08-31;80;200;0.40;50",
-            "TikTok;tiktok;Sweden;2026-09-01;40;90;0.444;30",
+            "Facebook;social_ppc;Sweden;2026-08-31;80;200;0.40;50",
+            "TikTok;social_ppc;Sweden;2026-09-01;40;90;0.444;30",
             "Google;sem;Sweden;2026-09-02;20;50;0.40;25",
             "CJ;affiliate;Sweden;2026-09-03;10;30;0.333;15",
-            # Row-level margin 0.99 would dominate if someone averaged rows
-            "Facebook;meta;Sweden;2026-07-15;1;100;0.99;90",
+            "Facebook;social_ppc;Sweden;2026-07-15;1;100;0.99;90",
         ],
     )
     return tmp_path
@@ -120,15 +118,22 @@ def write_w36_style_fixtures(tmp_path: Path, week: str = WEEK) -> Path:
 # Taxonomy
 # ---------------------------------------------------------------------------
 
-def test_taxonomy_live_w36_channels():
-    assert infer_channel_group("Facebook", None) == "meta"
-    assert infer_channel_group("TikTok", None) == "tiktok"
+def test_taxonomy_production_channel_groups():
+    assert infer_channel_group("Facebook", None) == "social_ppc"
+    assert infer_channel_group("Instagram", None) == "social_ppc"
+    assert infer_channel_group("TikTok", None) == "social_ppc"
+    assert infer_channel_group("Pinterest", None) == "social_ppc"
     assert infer_channel_group("Google", None) == "sem"
     assert infer_channel_group("CJ", None) == "affiliate"
-    assert classify_channel_group("meta") == "paid"
-    assert classify_channel_group("tiktok") == "paid"
+    assert infer_channel_group("wordseed", None) == "affiliate"
+    assert infer_channel_group("klarna", None) == "affiliate"
+    assert infer_channel_group("goodonyou", None) == "affiliate"
+    assert classify_channel_group("social_ppc") == "paid"
     assert classify_channel_group("sem") == "paid"
     assert classify_channel_group("affiliate") == "paid"
+    assert classify_channel_group("meta") == "other"
+    assert classify_channel_group("tiktok") == "other"
+    assert classify_channel_group("facebook") == "other"
 
 
 def test_taxonomy_spec_organic_unattributed_other():
@@ -140,6 +145,7 @@ def test_taxonomy_spec_organic_unattributed_other():
     assert classify_channel_group("backfilled") == "unattributed"
     assert classify_channel_group("unknown") == "unattributed"
     assert classify_channel_group("podcast") == "other"
+    assert classify_channel_group("display") == "other"
     assert classify_channel_group("weird_new_network") == "other"
 
 
@@ -181,7 +187,7 @@ def test_full_outer_join_keeps_unmatched_spend_and_revenue(tmp_path: Path):
     extra_spend = pd.DataFrame(
         {
             "Channel": ["TikTok"],
-            "ChannelGroup": ["tiktok"],
+            "ChannelGroup": ["social_ppc"],
             "Country": ["Norway"],
             "Day": [pd.Timestamp("2026-09-01")],
             "bucket": ["paid"],
@@ -293,33 +299,51 @@ def test_gm2_is_sum_over_sum_not_row_average(tmp_path: Path):
     by_ch = [
         r
         for r in payload["monthly_by_channel"]
-        if r["year_month"] == "2026-09" and r["channel"] == "Facebook"
+        if r["year_month"] == "2026-09" and r["channel"] == "Instagram"
     ]
     assert len(by_ch) == 1
-    assert by_ch[0]["adjustedAMER"] == pytest.approx(50.0 / 20.0)
-    assert by_ch[0]["newCustomerAdjustedAMER"] == pytest.approx(10.0 / 20.0)
+    assert by_ch[0]["adjustedAMER"] is None
+    assert by_ch[0]["newCustomerAdjustedAMER"] is None
+    assert by_ch[0]["revenue_cfa"] == pytest.approx(50.0)
+
+    by_g = [
+        r
+        for r in payload["monthly_by_group"]
+        if r["year_month"] == "2026-09" and r["channel_group"] == "social_ppc"
+    ]
+    assert len(by_g) == 1
+    # Instagram 50 + TikTok 40 CFA; Facebook 20 + TikTok 30 spend
+    assert by_g[0]["adjustedAMER"] == pytest.approx(90.0 / 50.0)
+    assert by_g[0]["newCustomerAdjustedAMER"] == pytest.approx(22.0 / 50.0)
 
 
-def test_monthly_channel_keeps_channel_and_group():
+def test_monthly_channel_keeps_channel_and_group_without_ratios():
     df = pd.DataFrame(
         {
-            "Channel": ["Facebook", "Facebook"],
-            "ChannelGroup": ["meta", "meta"],
+            "Channel": ["Facebook", "Instagram"],
+            "ChannelGroup": ["social_ppc", "social_ppc"],
             "bucket": ["paid", "paid"],
             "Day": pd.to_datetime(["2026-01-10", "2026-01-20"]),
             "revenue_cfa": [100.0, 50.0],
             "revenue_new_mta": [40.0, 10.0],
-            "marketing_spend": [20.0, 30.0],
+            "marketing_spend": [50.0, 0.0],
             "net_gross_profit_2": [0.0, 0.0],
             "net_sales": [0.0, 0.0],
             "_as_of": pd.to_datetime(["2026-09-01", "2026-09-01"], utc=True),
         }
     )
-    rows = monthly_channel_rows(df, date(2026, 9, 1))
-    assert len(rows) == 1
-    assert rows[0]["channel"] == "Facebook"
-    assert rows[0]["channel_group"] == "meta"
-    assert rows[0]["adjustedAMER"] == pytest.approx(150.0 / 50.0)
+    channels = monthly_channel_rows(df, date(2026, 9, 1))
+    assert len(channels) == 2
+    insta = next(r for r in channels if r["channel"] == "Instagram")
+    assert insta["adjustedAMER"] is None
+    assert insta["revenue_cfa"] == pytest.approx(50.0)
+
+    groups = monthly_group_rows(df, date(2026, 9, 1))
+    assert len(groups) == 1
+    assert groups[0]["channel_group"] == "social_ppc"
+    assert groups[0]["adjustedAMER"] == pytest.approx(150.0 / 50.0)
+    assert groups[0]["newCustomerAdjustedAMER"] == pytest.approx(50.0 / 50.0)
+    assert set(groups[0]["channels"]) == {"Facebook", "Instagram"}
 
 
 # ---------------------------------------------------------------------------
@@ -423,19 +447,91 @@ def test_european_decimal_spend_parses(tmp_path: Path):
     _write_csv(
         base / AMER_REVENUE_TYPE / "rev.csv",
         "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
-        ["Facebook;meta;Sweden;2026-09-01;10;10;4;6"],
+        ["Facebook;social_ppc;Sweden;2026-09-01;10;10;4;6"],
     )
     _write_csv(
         base / AMER_SPEND_TYPE / "spend.csv",
         "Channel;ChannelGroup;Country;Day;Marketing spend",
-        ["Facebook;meta;Sweden;2026-09-01;12,5"],
+        ["Facebook;social_ppc;Sweden;2026-09-01;12,5"],
     )
     _write_csv(
         base / AMER_GM2_TYPE / "gm2.csv",
         "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
-        ["Facebook;meta;Sweden;2026-09-01;5;10;0,5;12,5"],
+        ["Facebook;social_ppc;Sweden;2026-09-01;5;10;0,5;12,5"],
     )
     payload = calculate_adjusted_amer(WEEK, tmp_path)
     assert payload["week"]["paidSpend"] == pytest.approx(12.5)
     assert payload["week"]["adjustedAMER"] == pytest.approx(10 / 12.5)
     assert payload["week"]["netGM2"] == pytest.approx(0.5)
+
+
+def test_spaced_column_headers_match_production_names(tmp_path: Path):
+    """Parser must accept 'Marketing spend', 'Net gross profit 2', 'Net sales', 'Net gross margin 2'."""
+    base = _amer_week_dir(tmp_path)
+    _write_csv(
+        base / AMER_REVENUE_TYPE / "Revenue_by_channel_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
+        ["Facebook;social_ppc;Sweden;2026-09-01;10;20;4;16"],
+    )
+    _write_csv(
+        base / AMER_SPEND_TYPE / "Marketing_spend_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-01;8"],
+    )
+    _write_csv(
+        base / AMER_GM2_TYPE / "Net_GM2_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-01;3;10;0.3;8"],
+    )
+    spend = load_spend_frame(base / AMER_SPEND_TYPE / "Marketing_spend_W36.csv")
+    gm2 = load_gm2_frame(base / AMER_GM2_TYPE / "Net_GM2_W36.csv")
+    assert float(spend["marketing_spend"].iloc[0]) == 8.0
+    assert float(gm2["net_gross_profit_2"].iloc[0]) == 3.0
+    assert float(gm2["net_sales"].iloc[0]) == 10.0
+    payload = calculate_adjusted_amer(WEEK, tmp_path)
+    assert payload["week"]["netSales"] == pytest.approx(10.0)
+    assert payload["week"]["adjustedAMER"] == pytest.approx(20.0 / 8.0)
+    assert payload["ratio_grain"] == "ChannelGroup"
+
+
+def test_reconciliation_matches_dema_validated_totals(tmp_path: Path):
+    base = _amer_week_dir(tmp_path)
+    _write_csv(
+        base / AMER_REVENUE_TYPE / "Revenue_by_channel_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
+        ["Facebook;social_ppc;Sweden;2026-09-01;1;1;0;1"],
+    )
+    _write_csv(
+        base / AMER_SPEND_TYPE / "Marketing_spend_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-01;144583.25"],
+    )
+    _write_csv(
+        base / AMER_GM2_TYPE / "Net_GM2_W36.csv",
+        "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-01;100;1211140.23;0.08;144583.25"],
+    )
+    _write_csv(
+        base / AMER_REVENUE_TYPE / "Revenue_by_channel_August_2026.csv",
+        "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
+        ["Facebook;social_ppc;Sweden;2026-08-15;1;1;0;1"],
+    )
+    _write_csv(
+        base / AMER_SPEND_TYPE / "Marketing_spend_August_2026.csv",
+        "Channel;ChannelGroup;Country;Day;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-08-15;780010.85"],
+    )
+    _write_csv(
+        base / AMER_GM2_TYPE / "Net_GM2_August_2026.csv",
+        "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-08-15;400;6748620.98;0.06;780010.85"],
+    )
+    payload = calculate_adjusted_amer(WEEK, tmp_path)
+    by = {(row["kind"], row["key"]): row for row in payload["reconciliation"]}
+    assert by[("week", "2026-36")]["match"] is True
+    assert by[("month", "2026-08")]["match"] is True
+    assert by[("week", "2026-36")]["net_sales"] == pytest.approx(1_211_140.23)
+    assert by[("week", "2026-36")]["marketing_spend"] == pytest.approx(144_583.25)
+    assert by[("month", "2026-08")]["net_sales"] == pytest.approx(6_748_620.98)
+    assert by[("month", "2026-08")]["marketing_spend"] == pytest.approx(780_010.85)
+    assert not any(w["code"] == "reconciliation_mismatch" for w in payload["warnings"])
