@@ -43,30 +43,57 @@ function fmtMoney(v: number | null | undefined): string {
   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
-const TREND_CAPTION =
-  'Last 24 calendar months. Months without a Dema agent file are blank — upload calendar-month trios in Settings to fill the series.'
 const EMPTY_MONTHS: string[] = []
+const LINE_CHART_MARGIN = { top: 16, right: 28, left: 12, bottom: 8 }
+
+function loadedMonthsCaption(months: string[]): string {
+  if (!months.length) return 'No Dema months loaded yet.'
+  if (months.length >= 24) return 'Last 24 calendar months with Dema files.'
+  if (months.length === 1) {
+    return `Showing ${months[0]} (1 of last 24 months with a Dema file). Upload more calendar-month trios in Settings to extend.`
+  }
+  return `Showing ${months[0]}–${months[months.length - 1]} (${months.length} of last 24 months with Dema files). Upload more calendar-month trios in Settings to extend.`
+}
 
 function monthTickProps(count: number) {
+  const few = count <= 8
   return {
     tickLine: false as const,
     axisLine: false as const,
-    tickMargin: 8,
-    interval: count > 12 ? 1 : 0,
-    angle: -40,
-    textAnchor: 'end' as const,
-    height: 64,
-    tick: { fontSize: 11 },
+    tickMargin: few ? 10 : 8,
+    interval: 0 as const,
+    minTickGap: few ? 8 : 0,
+    angle: few ? 0 : -35,
+    textAnchor: few ? ('middle' as const) : ('end' as const),
+    height: few ? 36 : 56,
+    tick: { fontSize: few ? 12 : 11 },
+    padding: few ? { left: 48, right: 48 } : { left: 12, right: 12 },
   }
+}
+
+function trendDotRadius(count: number): number {
+  return count <= 6 ? 5 : count <= 12 ? 3 : 2
+}
+
+function monthsWithData(rows: Array<{ year_month?: string }>, window: string[]): string[] {
+  const allowed = new Set(window)
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const ym = row.year_month
+    if (!ym) continue
+    if (window.length && !allowed.has(ym)) continue
+    seen.add(ym)
+  }
+  return Array.from(seen).sort()
 }
 
 function pivotGroupTrend(
   rows: AdjustedAmerGroupMonth[],
   valueKey: 'adjustedAMER' | 'newCustomerAdjustedAMER',
-  months: string[]
+  window: string[]
 ): { months: string[]; groups: string[]; data: Array<Record<string, string | number | null>> } {
   const groups = Array.from(new Set(rows.filter((r) => r.bucket === 'paid').map((r) => r.channel_group))).sort()
-  const axis = months.length ? months : Array.from(new Set(rows.map((r) => r.year_month))).sort()
+  const axis = monthsWithData(rows.filter((r) => r.bucket === 'paid'), window)
   const data = axis.map((ym) => {
     const point: Record<string, string | number | null> = { year_month: ym }
     for (const g of groups) {
@@ -205,19 +232,25 @@ export default function AdjustedAmerPage() {
     [data, trendMonths]
   )
   const headlineTrend = useMemo(() => {
-    const by = new Map((data?.monthly ?? []).map((row) => [row.year_month, row]))
-    return trendMonths.map((ym) => {
-      const row = by.get(ym)
-      return {
-        year_month: ym,
-        adjustedAMER: row?.adjustedAMER ?? null,
-        blendedMER: row?.blendedMER ?? null,
-        newCustomerAdjustedAMER: row?.newCustomerAdjustedAMER ?? null,
-        netGM2: row?.netGM2 ?? null,
-        gp3: row?.gp3 ?? null,
-      }
-    })
+    const rows = inWindow(
+      (data?.monthly ?? []).filter((row) => Boolean(row.year_month)) as Array<
+        AdjustedAmerHeadline & { year_month: string }
+      >,
+      trendMonths
+    )
+    return rows
+      .slice()
+      .sort((a, b) => a.year_month.localeCompare(b.year_month))
+      .map((row) => ({
+        year_month: row.year_month,
+        adjustedAMER: row.adjustedAMER ?? null,
+        blendedMER: row.blendedMER ?? null,
+        newCustomerAdjustedAMER: row.newCustomerAdjustedAMER ?? null,
+        netGM2: row.netGM2 ?? null,
+        gp3: row.gp3 ?? null,
+      }))
   }, [data, trendMonths])
+  const demaMonthCaption = loadedMonthsCaption(headlineTrend.map((row) => row.year_month))
   const headlineTableRows = useMemo(
     () => inWindow((data?.monthly ?? []).filter((row) => Boolean(row.year_month)) as Array<AdjustedAmerHeadline & { year_month: string }>, trendMonths),
     [data, trendMonths]
@@ -387,20 +420,20 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Adjusted aMER (last 24 months)</CardTitle>
+          <CardTitle>Monthly Adjusted aMER</CardTitle>
           <CardDescription>
-            Company headline: paid Revenue_CFA ÷ paid spend. {TREND_CAPTION}
+            Company headline: paid Revenue_CFA ÷ paid spend. {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {headlineTrend.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
-            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className="h-[280px] w-full">
-              <LineChart data={headlineTrend} isAnimationActive={chartAnimationsEnabled}>
+            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className="h-[320px] w-full !aspect-auto">
+              <LineChart data={headlineTrend} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
-                <YAxis tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} width={48} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
                 <Line
@@ -408,8 +441,9 @@ export default function AdjustedAmerPage() {
                   name="Adjusted aMER"
                   type="monotone"
                   stroke="#111827"
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
+                  strokeWidth={2.5}
+                  dot={{ r: trendDotRadius(headlineTrend.length) }}
+                  activeDot={{ r: trendDotRadius(headlineTrend.length) + 2 }}
                   connectNulls={false}
                   isAnimationActive={chartAnimationsEnabled}
                 />
@@ -421,23 +455,23 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Adjusted aMER by ChannelGroup (last 24 months)</CardTitle>
+          <CardTitle>Monthly Adjusted aMER by ChannelGroup</CardTitle>
           <CardDescription>
             Calendar month of Day. Ratios are sem / social_ppc / affiliate (never Channel).
             Meta spend is on facebook; CFA splits across facebook + instagram.
             {data?.monthly?.some((m) => m.provisional) ? ' Periods younger than ~6 weeks are flagged provisional. ' : ' '}
-            {TREND_CAPTION}
+            {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {amerTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
-            <ChartContainer config={amerChartConfig} className="h-[280px] w-full">
-              <LineChart data={amerTrend.data} isAnimationActive={chartAnimationsEnabled}>
+            <ChartContainer config={amerChartConfig} className="h-[320px] w-full !aspect-auto">
+              <LineChart data={amerTrend.data} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(amerTrend.data.length)} />
-                <YAxis tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} width={48} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
                 {amerTrend.groups.map((g, i) => (
@@ -446,8 +480,9 @@ export default function AdjustedAmerPage() {
                     dataKey={g}
                     type="monotone"
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
+                    strokeWidth={2.5}
+                    dot={{ r: trendDotRadius(amerTrend.data.length) }}
+                    activeDot={{ r: trendDotRadius(amerTrend.data.length) + 2 }}
                     connectNulls={false}
                     isAnimationActive={chartAnimationsEnabled}
                   />
@@ -460,20 +495,20 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based, last 24 months)</CardTitle>
+          <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based)</CardTitle>
           <CardDescription>
-            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA). {TREND_CAPTION}
+            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA). {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {newTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet.</p>
           ) : (
-            <ChartContainer config={amerChartConfig} className="h-[280px] w-full">
-              <LineChart data={newTrend.data} isAnimationActive={chartAnimationsEnabled}>
+            <ChartContainer config={amerChartConfig} className="h-[320px] w-full !aspect-auto">
+              <LineChart data={newTrend.data} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(newTrend.data.length)} />
-                <YAxis tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} width={48} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
                 {newTrend.groups.map((g, i) => (
@@ -482,8 +517,9 @@ export default function AdjustedAmerPage() {
                     dataKey={g}
                     type="monotone"
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
+                    strokeWidth={2.5}
+                    dot={{ r: trendDotRadius(newTrend.data.length) }}
+                    activeDot={{ r: trendDotRadius(newTrend.data.length) + 2 }}
                     connectNulls={false}
                     isAnimationActive={chartAnimationsEnabled}
                   />
@@ -496,9 +532,9 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Net GM2 and GP3 (last 24 months)</CardTitle>
+          <CardTitle>Monthly Net GM2 and GP3</CardTitle>
           <CardDescription>
-            Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales). GP3 = Net gross profit 2 − Marketing spend (KR). {TREND_CAPTION}
+            Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales). GP3 = Net gross profit 2 − Marketing spend (KR). {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -507,18 +543,19 @@ export default function AdjustedAmerPage() {
           ) : (
             <ChartContainer
               config={{ netGM2: { label: 'Net GM2', color: '#7C3AED' }, gp3: { label: 'GP3', color: '#0891B2' } }}
-              className="h-[280px] w-full"
+              className="h-[320px] w-full !aspect-auto"
             >
-              <ComposedChart data={headlineTrend} isAnimationActive={chartAnimationsEnabled}>
+              <ComposedChart data={headlineTrend} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
                 <YAxis
                   yAxisId="gm2"
                   tickLine={false}
                   axisLine={false}
+                  width={48}
                   tickFormatter={(v: number) => `${(Number(v) * 100).toFixed(0)}%`}
                 />
-                <YAxis yAxisId="gp3" orientation="right" tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtMoney(v)} />
+                <YAxis yAxisId="gp3" orientation="right" width={64} tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtMoney(v)} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
                 <Line
@@ -527,8 +564,9 @@ export default function AdjustedAmerPage() {
                   name="Net GM2"
                   type="monotone"
                   stroke="#7C3AED"
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
+                  strokeWidth={2.5}
+                  dot={{ r: trendDotRadius(headlineTrend.length) }}
+                  activeDot={{ r: trendDotRadius(headlineTrend.length) + 2 }}
                   connectNulls={false}
                   isAnimationActive={chartAnimationsEnabled}
                 />
@@ -538,8 +576,9 @@ export default function AdjustedAmerPage() {
                   name="GP3"
                   type="monotone"
                   stroke="#0891B2"
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
+                  strokeWidth={2.5}
+                  dot={{ r: trendDotRadius(headlineTrend.length) }}
+                  activeDot={{ r: trendDotRadius(headlineTrend.length) + 2 }}
                   connectNulls={false}
                   isAnimationActive={chartAnimationsEnabled}
                 />
@@ -552,9 +591,9 @@ export default function AdjustedAmerPage() {
       {headlineTableRows.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Monthly headline table (last 24 months)</CardTitle>
+            <CardTitle>Monthly headline table</CardTitle>
             <CardDescription>
-              Company-level ratios plus Net GM2 and GP3. Charts above keep a 24-month axis; this table lists months that have a Dema agent file.
+              Company-level ratios plus Net GM2 and GP3 for months with a Dema agent file. {demaMonthCaption}
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">

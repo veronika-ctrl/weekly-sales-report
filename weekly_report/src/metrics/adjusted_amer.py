@@ -1018,7 +1018,7 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
         "Unattributed revenue is kept separate and is never folded into organic.",
         "Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales) after aggregate — row-level margins are not averaged.",
         "GP3 = Net gross profit 2 − Marketing spend (KR). Shown next to Net GM2 on monthly tables.",
-        "Monthly trend views show the last 24 calendar months. Months without a Dema agent file are blank.",
+        "Monthly Dema charts plot months that have an agent file, capped at the last 24 calendar months.",
         "Periods younger than ~6 weeks are provisional: newer agent pulls overwrite stored values.",
         "Known gaps: no display ChannelGroup; TikTok is dormant so it is absent from most weeks; "
         "PMax/Shopping are not split out of sem.",
