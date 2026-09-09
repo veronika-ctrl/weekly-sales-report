@@ -82,7 +82,7 @@ CUSTOMER_HISTORY_START = date(2022, 1, 1)
 # ---------------------------------------------------------------------------
 PAID_GROUPS = frozenset({"sem", "social_ppc", "affiliate"})
 ORGANIC_GROUPS = frozenset({"direct", "organic", "email", "referral", "social_organic"})
-UNATTRIBUTED_GROUPS = frozenset({"backfilled", "unknown"})
+UNATTRIBUTED_GROUPS = frozenset({"backfilled", "unknown", "unattributed"})
 
 # Channel → ChannelGroup only when the agent file leaves ChannelGroup blank.
 CHANNEL_TO_GROUP = {

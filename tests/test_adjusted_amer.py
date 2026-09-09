@@ -144,6 +144,7 @@ def test_taxonomy_spec_organic_unattributed_other():
     assert classify_channel_group("direct") == "organic"
     assert classify_channel_group("backfilled") == "unattributed"
     assert classify_channel_group("unknown") == "unattributed"
+    assert classify_channel_group("unattributed") == "unattributed"
     assert classify_channel_group("podcast") == "other"
     assert classify_channel_group("display") == "other"
     assert classify_channel_group("weird_new_network") == "other"
