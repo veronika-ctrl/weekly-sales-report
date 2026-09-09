@@ -39,8 +39,10 @@ from weekly_report.src.metrics.adjusted_amer import (
     AMER_REVENUE_TYPE,
     AMER_SPEND_TYPE,
     SHOPIFY_CUSTOMERS_TYPE,
+    TREND_MONTHS,
     aggregate_amer_metrics,
     calculate_adjusted_amer,
+    calendar_month_window,
     classify_channel_group,
     full_outer_join_amer,
     infer_channel_group,
@@ -226,6 +228,7 @@ def test_weekly_aggregates_match_manual_recompute(tmp_path: Path):
     assert week["organicRevShare"] == pytest.approx(45.0 / 290.0)
     assert week["unattributedShare"] == pytest.approx(25.0 / 290.0)
     assert week["netGM2"] == pytest.approx(150.0 / 370.0)
+    assert week["gp3"] == pytest.approx(150.0 - 140.0)
     # CFA headline ≠ MTA new-customer ratio
     assert week["adjustedAMER"] != pytest.approx(week["newCustomerAdjustedAMER"])
 
@@ -270,6 +273,7 @@ def test_zero_paid_spend_ratios_are_null():
     assert m["blendedMER"] is None
     assert m["newCustomerAdjustedAMER"] is None
     assert m["netGM2"] is None
+    assert m["gp3"] == pytest.approx(10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +300,7 @@ def test_gm2_is_sum_over_sum_not_row_average(tmp_path: Path):
     # One July GM2 row: 1 / 100 = 0.01. Averaging the 0.99 row-level margin would be wrong.
     assert july["netGM2"] == pytest.approx(1.0 / 100.0)
     assert july["netGM2"] != pytest.approx(0.99)
+    assert july["gp3"] == pytest.approx(1.0 - 90.0)
 
     by_ch = [
         r
@@ -316,6 +321,9 @@ def test_gm2_is_sum_over_sum_not_row_average(tmp_path: Path):
     # Instagram 50 + TikTok 40 CFA; Facebook 20 + TikTok 30 spend
     assert by_g[0]["adjustedAMER"] == pytest.approx(90.0 / 50.0)
     assert by_g[0]["newCustomerAdjustedAMER"] == pytest.approx(22.0 / 50.0)
+    # TikTok GM2 40; Instagram has no GM2 row; spend Facebook 20 + TikTok 30
+    assert by_g[0]["gp3"] == pytest.approx(40.0 - 50.0)
+    assert by_g[0]["netGM2"] == pytest.approx(40.0 / 90.0)
 
 
 def test_monthly_channel_keeps_channel_and_group_without_ratios():
@@ -345,6 +353,8 @@ def test_monthly_channel_keeps_channel_and_group_without_ratios():
     assert groups[0]["adjustedAMER"] == pytest.approx(150.0 / 50.0)
     assert groups[0]["newCustomerAdjustedAMER"] == pytest.approx(50.0 / 50.0)
     assert set(groups[0]["channels"]) == {"Facebook", "Instagram"}
+    assert groups[0]["gp3"] == pytest.approx(0.0 - 50.0)
+    assert groups[0]["netGM2"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +401,17 @@ def test_payload_includes_as_of_and_provisional(tmp_path: Path):
     assert payload["week"]["provisional"] is True
     july = next(r for r in payload["monthly"] if r["year_month"] == "2026-07")
     assert "as_of" in july
+    window = payload["trend_months"]
+    assert len(window) == TREND_MONTHS
+    assert window[-1] >= "2026-09"
+    assert window[0] == calendar_month_window(date.fromisoformat(window[-1] + "-01"))[0]
+
+
+def test_calendar_month_window_is_last_24_months():
+    window = calendar_month_window(date(2026, 9, 9))
+    assert len(window) == 24
+    assert window[0] == "2024-10"
+    assert window[-1] == "2026-09"
 
 
 # ---------------------------------------------------------------------------

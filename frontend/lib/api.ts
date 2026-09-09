@@ -1750,6 +1750,7 @@ export interface AdjustedAmerHeadline {
   netGM2: number | null
   netGrossProfit2: number
   netSales: number
+  gp3: number
   provisional: boolean
   as_of: string
   period_end: string
@@ -1780,6 +1781,8 @@ export interface AdjustedAmerGroupMonth {
   paidSpend: number
   adjustedAMER: number | null
   newCustomerAdjustedAMER: number | null
+  netGM2?: number | null
+  gp3?: number
   provisional: boolean
   as_of: string
 }
@@ -1800,6 +1803,7 @@ export interface AdjustedAmerResponse {
   base_week: string
   week_range: { start: string; end: string; display: string }
   as_of: string
+  trend_months?: string[]
   warnings: AdjustedAmerWarning[]
   missing_files: Record<string, boolean>
   files: Record<string, Array<{ filename: string; uploaded_at: string }>>

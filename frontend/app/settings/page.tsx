@@ -467,10 +467,11 @@ export default function Settings() {
                   <h4 className="text-sm font-medium">Adjusted aMER — Dema agent files</h4>
                   <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
                     Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload
-                    both the ISO-week trio and the calendar-month trio (August + W36 can
-                    sit in the same week). Keyed on Channel;ChannelGroup;Country;Day with
+                    both the ISO-week trio and calendar-month trios (upload extra months to
+                    fill the last-24-months charts). Keyed on Channel;ChannelGroup;Country;Day with
                     production groups: sem, social_ppc, affiliate. Ratios are ChannelGroup
-                    grain only. Shopify native customer-order export (Customer ID + Second
+                    grain only. GP3 = Net gross profit 2 − Marketing spend. Shopify native
+                    customer-order export (Customer ID + Second
                     timestamp; keep Orders = 1 only) powers recruited vs dropped — CSV is
                     enough, no Shopify API. If a Monday has no week file, the report warns
                     instead of using a stale week.

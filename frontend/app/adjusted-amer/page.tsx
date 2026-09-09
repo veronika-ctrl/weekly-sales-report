@@ -17,11 +17,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   XAxis,
   YAxis,
 } from '@/lib/recharts'
@@ -42,6 +43,47 @@ function fmtMoney(v: number | null | undefined): string {
   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
+const TREND_CAPTION =
+  'Last 24 calendar months. Months without a Dema agent file are blank — upload calendar-month trios in Settings to fill the series.'
+const EMPTY_MONTHS: string[] = []
+
+function monthTickProps(count: number) {
+  return {
+    tickLine: false as const,
+    axisLine: false as const,
+    tickMargin: 8,
+    interval: count > 12 ? 1 : 0,
+    angle: -40,
+    textAnchor: 'end' as const,
+    height: 64,
+    tick: { fontSize: 11 },
+  }
+}
+
+function pivotGroupTrend(
+  rows: AdjustedAmerGroupMonth[],
+  valueKey: 'adjustedAMER' | 'newCustomerAdjustedAMER',
+  months: string[]
+): { months: string[]; groups: string[]; data: Array<Record<string, string | number | null>> } {
+  const groups = Array.from(new Set(rows.filter((r) => r.bucket === 'paid').map((r) => r.channel_group))).sort()
+  const axis = months.length ? months : Array.from(new Set(rows.map((r) => r.year_month))).sort()
+  const data = axis.map((ym) => {
+    const point: Record<string, string | number | null> = { year_month: ym }
+    for (const g of groups) {
+      const hit = rows.find((r) => r.year_month === ym && r.channel_group === g)
+      point[g] = hit ? hit[valueKey] : null
+    }
+    return point
+  })
+  return { months: axis, groups, data }
+}
+
+function inWindow<T extends { year_month: string }>(rows: T[], months: string[]): T[] {
+  if (!months.length) return rows
+  const allowed = new Set(months)
+  return rows.filter((r) => allowed.has(r.year_month))
+}
+
 const SHARE_COLORS = {
   paid: '#4B5563',
   organic: '#F97316',
@@ -50,23 +92,6 @@ const SHARE_COLORS = {
 }
 
 const CHANNEL_LINE_COLORS = ['#4B5563', '#F97316', '#2563EB', '#16A34A', '#DC2626', '#7C3AED', '#0891B2']
-
-function pivotGroupTrend(
-  rows: AdjustedAmerGroupMonth[],
-  valueKey: 'adjustedAMER' | 'newCustomerAdjustedAMER'
-): { months: string[]; groups: string[]; data: Array<Record<string, string | number | null>> } {
-  const months = Array.from(new Set(rows.map((r) => r.year_month))).sort()
-  const groups = Array.from(new Set(rows.filter((r) => r.bucket === 'paid').map((r) => r.channel_group))).sort()
-  const data = months.map((ym) => {
-    const point: Record<string, string | number | null> = { year_month: ym }
-    for (const g of groups) {
-      const hit = rows.find((r) => r.year_month === ym && r.channel_group === g)
-      point[g] = hit ? hit[valueKey] : null
-    }
-    return point
-  })
-  return { months, groups, data }
-}
 
 function fmtSek(v: number | null | undefined): string {
   if (v == null || Number.isNaN(Number(v))) return '—'
@@ -170,14 +195,45 @@ export default function AdjustedAmerPage() {
     void load()
   }, [load])
 
+  const trendMonths = data?.trend_months ?? EMPTY_MONTHS
   const amerTrend = useMemo(
-    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'adjustedAMER'),
-    [data]
+    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'adjustedAMER', trendMonths),
+    [data, trendMonths]
   )
   const newTrend = useMemo(
-    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'newCustomerAdjustedAMER'),
-    [data]
+    () => pivotGroupTrend(data?.monthly_by_group ?? [], 'newCustomerAdjustedAMER', trendMonths),
+    [data, trendMonths]
   )
+  const headlineTrend = useMemo(() => {
+    const by = new Map((data?.monthly ?? []).map((row) => [row.year_month, row]))
+    return trendMonths.map((ym) => {
+      const row = by.get(ym)
+      return {
+        year_month: ym,
+        adjustedAMER: row?.adjustedAMER ?? null,
+        blendedMER: row?.blendedMER ?? null,
+        newCustomerAdjustedAMER: row?.newCustomerAdjustedAMER ?? null,
+        netGM2: row?.netGM2 ?? null,
+        gp3: row?.gp3 ?? null,
+      }
+    })
+  }, [data, trendMonths])
+  const groupRows = useMemo(
+    () => inWindow(data?.monthly_by_group ?? [], trendMonths),
+    [data, trendMonths]
+  )
+  const channelRows = useMemo(
+    () => inWindow(data?.monthly_by_channel ?? [], trendMonths),
+    [data, trendMonths]
+  )
+  const churnMonths = useMemo(() => {
+    const rows = data?.recruited_vs_dropped?.months ?? []
+    if (!trendMonths.length) return rows
+    const by = new Map(rows.map((r) => [r.year_month, r]))
+    return trendMonths.map(
+      (ym) => by.get(ym) ?? { year_month: ym, recruited: 0, dropped: 0, net: 0 }
+    )
+  }, [data, trendMonths])
 
   const amerChartConfig = useMemo(() => {
     const cfg: ChartConfig = {}
@@ -284,7 +340,7 @@ export default function AdjustedAmerPage() {
       ) : null}
 
       {week ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <KpiCard
             title="Adjusted aMER"
             value={fmtRatio(week.adjustedAMER)}
@@ -299,6 +355,7 @@ export default function AdjustedAmerPage() {
           />
           <KpiCard title="Blended MER" value={fmtRatio(week.blendedMER)} hint="(Paid + organic + unattributed) CFA ÷ paid spend (ChannelGroup)" />
           <KpiCard title="Net GM2" value={fmtPct(week.netGM2)} hint="sum(Net gross profit 2) ÷ sum(Net sales)" />
+          <KpiCard title="GP3" value={fmtMoney(week.gp3)} hint="Net gross profit 2 − Marketing spend (KR)" />
         </div>
       ) : (
         <Card>
@@ -326,21 +383,56 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Adjusted aMER by ChannelGroup</CardTitle>
+          <CardTitle>Monthly Adjusted aMER (last 24 months)</CardTitle>
           <CardDescription>
-            Calendar month of Day. Ratios are sem / social_ppc / affiliate (never Channel).
-            Meta spend is on facebook; CFA splits across facebook + instagram.
-            {data?.monthly?.some((m) => m.provisional) ? ' Periods younger than ~6 weeks are flagged provisional.' : ''}
+            Company headline: paid Revenue_CFA ÷ paid spend. {TREND_CAPTION}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {amerTrend.data.length === 0 ? (
+          {headlineTrend.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
+          ) : (
+            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className="h-[280px] w-full">
+              <LineChart data={headlineTrend} isAnimationActive={chartAnimationsEnabled}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Legend />
+                <Line
+                  dataKey="adjustedAMER"
+                  name="Adjusted aMER"
+                  type="monotone"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  connectNulls={false}
+                  isAnimationActive={chartAnimationsEnabled}
+                />
+              </LineChart>
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Adjusted aMER by ChannelGroup (last 24 months)</CardTitle>
+          <CardDescription>
+            Calendar month of Day. Ratios are sem / social_ppc / affiliate (never Channel).
+            Meta spend is on facebook; CFA splits across facebook + instagram.
+            {data?.monthly?.some((m) => m.provisional) ? ' Periods younger than ~6 weeks are flagged provisional. ' : ' '}
+            {TREND_CAPTION}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {amerTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
             <ChartContainer config={amerChartConfig} className="h-[280px] w-full">
               <LineChart data={amerTrend.data} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="year_month" tickLine={false} axisLine={false} tickMargin={8} />
+                <XAxis dataKey="year_month" {...monthTickProps(amerTrend.data.length)} />
                 <YAxis tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
@@ -352,7 +444,7 @@ export default function AdjustedAmerPage() {
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
                     strokeWidth={2}
                     dot={{ r: 2 }}
-                    connectNulls
+                    connectNulls={false}
                     isAnimationActive={chartAnimationsEnabled}
                   />
                 ))}
@@ -364,19 +456,19 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based)</CardTitle>
+          <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based, last 24 months)</CardTitle>
           <CardDescription>
-            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA).
+            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA). {TREND_CAPTION}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {newTrend.data.length === 0 ? (
+          {newTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet.</p>
           ) : (
             <ChartContainer config={amerChartConfig} className="h-[280px] w-full">
               <LineChart data={newTrend.data} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="year_month" tickLine={false} axisLine={false} tickMargin={8} />
+                <XAxis dataKey="year_month" {...monthTickProps(newTrend.data.length)} />
                 <YAxis tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
@@ -388,7 +480,7 @@ export default function AdjustedAmerPage() {
                     stroke={CHANNEL_LINE_COLORS[i % CHANNEL_LINE_COLORS.length]}
                     strokeWidth={2}
                     dot={{ r: 2 }}
-                    connectNulls
+                    connectNulls={false}
                     isAnimationActive={chartAnimationsEnabled}
                   />
                 ))}
@@ -398,11 +490,106 @@ export default function AdjustedAmerPage() {
         </CardContent>
       </Card>
 
-      {(data?.monthly_by_group?.length ?? 0) > 0 ? (
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Net GM2 and GP3 (last 24 months)</CardTitle>
+          <CardDescription>
+            Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales). GP3 = Net gross profit 2 − Marketing spend (KR). {TREND_CAPTION}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {headlineTrend.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No monthly series yet.</p>
+          ) : (
+            <ChartContainer
+              config={{ netGM2: { label: 'Net GM2', color: '#7C3AED' }, gp3: { label: 'GP3', color: '#0891B2' } }}
+              className="h-[280px] w-full"
+            >
+              <ComposedChart data={headlineTrend} isAnimationActive={chartAnimationsEnabled}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
+                <YAxis
+                  yAxisId="gm2"
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => `${(Number(v) * 100).toFixed(0)}%`}
+                />
+                <YAxis yAxisId="gp3" orientation="right" tickLine={false} axisLine={false} tickFormatter={(v: number) => fmtMoney(v)} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Legend />
+                <Line
+                  yAxisId="gm2"
+                  dataKey="netGM2"
+                  name="Net GM2"
+                  type="monotone"
+                  stroke="#7C3AED"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  connectNulls={false}
+                  isAnimationActive={chartAnimationsEnabled}
+                />
+                <Line
+                  yAxisId="gp3"
+                  dataKey="gp3"
+                  name="GP3"
+                  type="monotone"
+                  stroke="#0891B2"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  connectNulls={false}
+                  isAnimationActive={chartAnimationsEnabled}
+                />
+              </ComposedChart>
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {headlineTrend.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Monthly ChannelGroup table (ratios)</CardTitle>
-            <CardDescription>Adjusted aMER and new-customer aMER live here. Channel rows below are revenue only.</CardDescription>
+            <CardTitle>Monthly headline table (last 24 months)</CardTitle>
+            <CardDescription>
+              Company-level ratios plus Net GM2 and GP3. {TREND_CAPTION}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-3">Month</th>
+                  <th className="py-2 pr-3 text-right">Adj. aMER</th>
+                  <th className="py-2 pr-3 text-right">NC adj. aMER (MTA)</th>
+                  <th className="py-2 pr-3 text-right">Blended MER</th>
+                  <th className="py-2 pr-3 text-right">Net GM2</th>
+                  <th className="py-2 text-right">GP3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {headlineTrend.map((row) => (
+                  <tr key={row.year_month} className="border-b last:border-0">
+                    <td className="py-2 pr-3">{row.year_month}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.blendedMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtPct(row.netGM2)}</td>
+                    <td className="py-2 text-right">{row.gp3 == null ? '—' : fmtMoney(row.gp3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {groupRows.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly ChannelGroup table (last 24 months)</CardTitle>
+            <CardDescription>
+              Adjusted aMER and new-customer aMER at ChannelGroup grain. Net GM2 and GP3 sit next to them.
+              Channel rows below are revenue only.
+            </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -414,12 +601,14 @@ export default function AdjustedAmerPage() {
                   <th className="py-2 pr-3">Channels</th>
                   <th className="py-2 pr-3 text-right">Adj. aMER</th>
                   <th className="py-2 pr-3 text-right">NC adj. aMER (MTA)</th>
+                  <th className="py-2 pr-3 text-right">Net GM2</th>
+                  <th className="py-2 pr-3 text-right">GP3</th>
                   <th className="py-2 pr-3 text-right">CFA</th>
                   <th className="py-2 text-right">Spend</th>
                 </tr>
               </thead>
               <tbody>
-                {data!.monthly_by_group!.map((row) => (
+                {groupRows.map((row) => (
                   <tr key={`${row.year_month}-${row.channel_group}`} className="border-b last:border-0">
                     <td className="py-2 pr-3">
                       {row.year_month}
@@ -432,6 +621,8 @@ export default function AdjustedAmerPage() {
                     <td className="py-2 pr-3 text-muted-foreground">{row.channels.join(', ')}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtPct(row.netGM2)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtMoney(row.gp3)}</td>
                     <td className="py-2 pr-3 text-right">{fmtMoney(row.revenue_cfa)}</td>
                     <td className="py-2 text-right">{fmtMoney(row.paidSpend)}</td>
                   </tr>
@@ -442,10 +633,10 @@ export default function AdjustedAmerPage() {
         </Card>
       ) : null}
 
-      {(data?.monthly_by_channel?.length ?? 0) > 0 ? (
+      {channelRows.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Monthly channel revenue (no ratios)</CardTitle>
+            <CardTitle>Monthly channel revenue (no ratios, last 24 months)</CardTitle>
             <CardDescription>
               Individual channels are shown for CFA and spend totals only. Instagram can have CFA with zero spend.
             </CardDescription>
@@ -463,7 +654,7 @@ export default function AdjustedAmerPage() {
                 </tr>
               </thead>
               <tbody>
-                {data!.monthly_by_channel.map((row: AdjustedAmerChannelMonth) => (
+                {channelRows.map((row: AdjustedAmerChannelMonth) => (
                   <tr key={`${row.year_month}-${row.channel}-${row.channel_group}`} className="border-b last:border-0">
                     <td className="py-2 pr-3">{row.year_month}</td>
                     <td className="py-2 pr-3">{row.channel}</td>
@@ -481,14 +672,16 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recruited vs dropped (Shopify customer orders)</CardTitle>
+          <CardTitle>Recruited vs dropped (Shopify customer orders, last 24 months)</CardTitle>
           <CardDescription>
             Recruited = earliest order since 2022-01-01 in the month. Dropped = last order exactly 12 months earlier,
-            with no order since. Native Shopify reports: Customer ID + Second, filtered to Orders = 1
+            with no order since. The net line is recruited − dropped each month.
+            Native Shopify reports: Customer ID + Second, filtered to Orders = 1
             (Orders = 0 is a later return/refund/edit). Dema / Sessions / Qlik are not used.
             {rvd?.available && rvd.as_of
               ? ` ${Number(rvd.customer_count ?? 0).toLocaleString()} customers · ${Number(rvd.order_count ?? 0).toLocaleString()} order-days through ${rvd.as_of}. The last month is month-to-date.`
-              : null}
+              : null}{' '}
+            Last 24 calendar months.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -501,28 +694,32 @@ export default function AdjustedAmerPage() {
             </div>
           ) : (
             <ChartContainer
-              config={{ recruited: { label: 'Recruited', color: '#16A34A' }, dropped: { label: 'Dropped', color: '#DC2626' } }}
-              className="h-[280px] w-full"
+              config={{
+                recruited: { label: 'Recruited', color: '#16A34A' },
+                dropped: { label: 'Dropped', color: '#DC2626' },
+                net: { label: 'Net', color: '#1D4ED8' },
+              }}
+              className="h-[320px] w-full"
             >
-              <BarChart data={rvd.months} isAnimationActive={chartAnimationsEnabled}>
+              <ComposedChart data={churnMonths} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="year_month"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  interval={2}
-                  angle={-40}
-                  textAnchor="end"
-                  height={64}
-                  tick={{ fontSize: 11 }}
-                />
+                <XAxis dataKey="year_month" {...monthTickProps(churnMonths.length)} />
                 <YAxis tickLine={false} axisLine={false} />
+                <ReferenceLine y={0} stroke="#9CA3AF" strokeDasharray="3 3" />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
-                <Bar dataKey="recruited" fill="#16A34A" radius={2} />
-                <Bar dataKey="dropped" fill="#DC2626" radius={2} />
-              </BarChart>
+                <Bar dataKey="recruited" name="Recruited" fill="#16A34A" radius={2} />
+                <Bar dataKey="dropped" name="Dropped" fill="#DC2626" radius={2} />
+                <Line
+                  dataKey="net"
+                  name="Net"
+                  type="monotone"
+                  stroke="#1D4ED8"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  isAnimationActive={chartAnimationsEnabled}
+                />
+              </ComposedChart>
             </ChartContainer>
           )}
         </CardContent>

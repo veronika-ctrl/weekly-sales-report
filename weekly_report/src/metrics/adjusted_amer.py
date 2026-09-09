@@ -75,6 +75,7 @@ AMER_DEMA_FILE_TYPES: Tuple[str, ...] = (AMER_REVENUE_TYPE, AMER_SPEND_TYPE, AME
 AMER_ALL_FILE_TYPES: Tuple[str, ...] = AMER_DEMA_FILE_TYPES + (SHOPIFY_CUSTOMERS_TYPE,)
 
 PROVISIONAL_DAYS = 42  # ~6 weeks; periods younger than this are restated, not locked.
+TREND_MONTHS = 24  # monthly charts/tables: last 24 calendar months through as_of
 CUSTOMER_HISTORY_START = date(2022, 1, 1)
 
 # ---------------------------------------------------------------------------
@@ -227,6 +228,12 @@ def is_provisional(period_end: date, as_of: date, days: int = PROVISIONAL_DAYS) 
     return (as_of - period_end).days < days
 
 
+def calendar_month_window(end: date, n: int = TREND_MONTHS) -> List[str]:
+    """Inclusive YYYY-MM list of the last n calendar months through end's month."""
+    last = pd.Period(end, freq="M")
+    return [str(last - i) for i in range(n - 1, -1, -1)]
+
+
 def _iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -272,6 +279,32 @@ def find_month_amer_files(data_root: Path) -> Dict[str, List[Path]]:
         for kind in AMER_DEMA_FILE_TYPES:
             found[kind].extend(_list_csv_files(month_dir / kind))
     return found
+
+
+def find_all_week_amer_files(data_root: Path) -> Dict[str, List[Path]]:
+    """Accumulate Dema agent CSVs from every ISO-week folder (not raw/months)."""
+    found: Dict[str, List[Path]] = {k: [] for k in AMER_DEMA_FILE_TYPES}
+    raw = Path(data_root) / "raw"
+    if not raw.exists():
+        return found
+    for week_dir in sorted(p for p in raw.iterdir() if p.is_dir() and p.name != "months"):
+        for kind in AMER_DEMA_FILE_TYPES:
+            found[kind].extend(_list_csv_files(week_dir / kind))
+    return found
+
+
+def _merge_amer_file_maps(*maps: Dict[str, List[Path]]) -> Dict[str, List[Path]]:
+    merged: Dict[str, List[Path]] = {k: [] for k in AMER_DEMA_FILE_TYPES}
+    seen = {k: set() for k in AMER_DEMA_FILE_TYPES}
+    for mapping in maps:
+        for kind in AMER_DEMA_FILE_TYPES:
+            for path in mapping.get(kind, []):
+                key = path.resolve()
+                if key in seen[kind]:
+                    continue
+                seen[kind].add(key)
+                merged[kind].append(path)
+    return merged
 
 
 def missing_amer_types(files: Dict[str, List[Path]]) -> List[str]:
@@ -571,6 +604,7 @@ def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
         "netGM2": None,
         "netGrossProfit2": 0.0,
         "netSales": 0.0,
+        "gp3": 0.0,
     }
     if df is None or df.empty:
         return empty
@@ -587,8 +621,9 @@ def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     total_revenue = paid_revenue + organic_revenue + unattr_revenue
     new_paid = float(df.loc[paid, "revenue_new_mta"].sum())
     paid_spend = float(df.loc[paid, "marketing_spend"].sum())
-    gp2 = float(df["net_gross_profit_2"].sum())
-    net_sales = float(df["net_sales"].sum())
+    gp2 = float(df["net_gross_profit_2"].sum()) if "net_gross_profit_2" in df.columns else 0.0
+    net_sales = float(df["net_sales"].sum()) if "net_sales" in df.columns else 0.0
+    all_spend = float(df["marketing_spend"].sum()) if "marketing_spend" in df.columns else 0.0
 
     total_cfa_all = total_revenue + other_revenue
     return {
@@ -609,6 +644,7 @@ def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
         "netGM2": safe_ratio(gp2, net_sales),
         "netGrossProfit2": gp2,
         "netSales": net_sales,
+        "gp3": gp2 - all_spend,
     }
 
 
@@ -685,6 +721,8 @@ def monthly_group_rows(df: pd.DataFrame, as_of: date) -> List[Dict[str, Any]]:
         spend = float(part["marketing_spend"].sum())
         cfa = float(part["revenue_cfa"].sum())
         new_mta = float(part["revenue_new_mta"].sum())
+        gp2 = float(part["net_gross_profit_2"].sum()) if "net_gross_profit_2" in part.columns else 0.0
+        net_sales = float(part["net_sales"].sum()) if "net_sales" in part.columns else 0.0
         as_of_dt = _period_as_of(part)
         as_of_d = as_of_dt.date() if as_of_dt else as_of
         channels = sorted({str(c) for c in part["Channel"].dropna().unique()})
@@ -699,6 +737,8 @@ def monthly_group_rows(df: pd.DataFrame, as_of: date) -> List[Dict[str, Any]]:
                 "paidSpend": spend,
                 "adjustedAMER": safe_ratio(cfa, spend),
                 "newCustomerAdjustedAMER": safe_ratio(new_mta, spend),
+                "netGM2": safe_ratio(gp2, net_sales),
+                "gp3": gp2 - spend,
                 "provisional": is_provisional(period_end, as_of_d),
                 "as_of": _iso(as_of_dt) if as_of_dt else as_of_d.isoformat(),
             }
@@ -965,11 +1005,7 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
     week_range = get_week_date_range(base_week)
     week_path = data_root / "raw" / base_week
     week_files = find_week_amer_files(week_path)
-    month_files = find_month_amer_files(data_root)
-    files = {
-        kind: list(week_files[kind]) + list(month_files.get(kind, []))
-        for kind in AMER_DEMA_FILE_TYPES
-    }
+    files = _merge_amer_file_maps(find_all_week_amer_files(data_root), find_month_amer_files(data_root))
     missing = missing_amer_types(week_files)
 
     warnings: List[Dict[str, str]] = []
@@ -981,6 +1017,8 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
         "revenue splits across facebook + instagram.",
         "Unattributed revenue is kept separate and is never folded into organic.",
         "Net GM2 = sum(Net gross profit 2) ÷ sum(Net sales) after aggregate — row-level margins are not averaged.",
+        "GP3 = Net gross profit 2 − Marketing spend (KR). Shown next to Net GM2 on monthly tables.",
+        "Monthly trend views show the last 24 calendar months. Months without a Dema agent file are blank.",
         "Periods younger than ~6 weeks are provisional: newer agent pulls overwrite stored values.",
         "Known gaps: no display ChannelGroup; TikTok is dormant so it is absent from most weeks; "
         "PMax/Shopping are not split out of sem.",
@@ -1087,10 +1125,20 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
             "files": _file_payload(customer_files),
         }
 
+    trend_end = as_of_d
+    if recruited.get("available") and recruited.get("as_of"):
+        try:
+            rvd_end = date.fromisoformat(str(recruited["as_of"])[:10])
+            if rvd_end > trend_end:
+                trend_end = rvd_end
+        except ValueError:
+            pass
+
     return {
         "base_week": base_week,
         "week_range": week_range,
         "as_of": _iso(as_of_dt),
+        "trend_months": calendar_month_window(trend_end),
         "warnings": warnings,
         "missing_files": {k: len(week_files[k]) == 0 for k in AMER_DEMA_FILE_TYPES},
         "files": {k: _file_payload(files[k]) for k in AMER_DEMA_FILE_TYPES},
