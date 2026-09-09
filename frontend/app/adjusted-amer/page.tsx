@@ -46,6 +46,11 @@ function fmtMoney(v: number | null | undefined): string {
 const EMPTY_MONTHS: string[] = []
 const LINE_CHART_MARGIN = { top: 16, right: 28, left: 12, bottom: 8 }
 
+function demaChartClass(count: number): string {
+  const width = count <= 4 ? 'max-w-xl' : count <= 12 ? 'max-w-3xl' : 'max-w-full'
+  return `h-[320px] w-full ${width} !aspect-auto`
+}
+
 function loadedMonthsCaption(months: string[]): string {
   if (!months.length) return 'No Dema months loaded yet.'
   if (months.length >= 24) return 'Last 24 calendar months with Dema files.'
@@ -429,7 +434,7 @@ export default function AdjustedAmerPage() {
           {headlineTrend.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
-            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className="h-[320px] w-full !aspect-auto">
+            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className={demaChartClass(headlineTrend.length)}>
               <LineChart data={headlineTrend} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
@@ -467,7 +472,7 @@ export default function AdjustedAmerPage() {
           {amerTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
-            <ChartContainer config={amerChartConfig} className="h-[320px] w-full !aspect-auto">
+            <ChartContainer config={amerChartConfig} className={demaChartClass(amerTrend.data.length)}>
               <LineChart data={amerTrend.data} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(amerTrend.data.length)} />
@@ -504,7 +509,7 @@ export default function AdjustedAmerPage() {
           {newTrend.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet.</p>
           ) : (
-            <ChartContainer config={amerChartConfig} className="h-[320px] w-full !aspect-auto">
+            <ChartContainer config={amerChartConfig} className={demaChartClass(newTrend.data.length)}>
               <LineChart data={newTrend.data} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(newTrend.data.length)} />
@@ -543,7 +548,7 @@ export default function AdjustedAmerPage() {
           ) : (
             <ChartContainer
               config={{ netGM2: { label: 'Net GM2', color: '#7C3AED' }, gp3: { label: 'GP3', color: '#0891B2' } }}
-              className="h-[320px] w-full !aspect-auto"
+              className={demaChartClass(headlineTrend.length)}
             >
               <ComposedChart data={headlineTrend} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
