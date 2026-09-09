@@ -218,6 +218,10 @@ export default function AdjustedAmerPage() {
       }
     })
   }, [data, trendMonths])
+  const headlineTableRows = useMemo(
+    () => inWindow((data?.monthly ?? []).filter((row) => Boolean(row.year_month)) as Array<AdjustedAmerHeadline & { year_month: string }>, trendMonths),
+    [data, trendMonths]
+  )
   const groupRows = useMemo(
     () => inWindow(data?.monthly_by_group ?? [], trendMonths),
     [data, trendMonths]
@@ -545,12 +549,12 @@ export default function AdjustedAmerPage() {
         </CardContent>
       </Card>
 
-      {headlineTrend.length > 0 ? (
+      {headlineTableRows.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Monthly headline table (last 24 months)</CardTitle>
             <CardDescription>
-              Company-level ratios plus Net GM2 and GP3. {TREND_CAPTION}
+              Company-level ratios plus Net GM2 and GP3. Charts above keep a 24-month axis; this table lists months that have a Dema agent file.
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -566,14 +570,14 @@ export default function AdjustedAmerPage() {
                 </tr>
               </thead>
               <tbody>
-                {headlineTrend.map((row) => (
+                {headlineTableRows.map((row) => (
                   <tr key={row.year_month} className="border-b last:border-0">
                     <td className="py-2 pr-3">{row.year_month}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.blendedMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtPct(row.netGM2)}</td>
-                    <td className="py-2 text-right">{row.gp3 == null ? '—' : fmtMoney(row.gp3)}</td>
+                    <td className="py-2 text-right">{fmtMoney(row.gp3)}</td>
                   </tr>
                 ))}
               </tbody>
