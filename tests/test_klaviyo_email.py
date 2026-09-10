@@ -18,6 +18,41 @@ Campaign,All newsletter campaigns (210 campaigns aggregated),1000,40,40,500
 """
 
 
+def test_metrics_list_omits_page_size(monkeypatch):
+    captured = {}
+
+    class DummyResp:
+        def read(self):
+            return b'{"data":[]}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=0):
+        captured["url"] = req.full_url
+        captured["method"] = req.get_method()
+        return DummyResp()
+
+    monkeypatch.setenv("KLAVIYO_PRIVATE_API_KEY", "pk_test_placeholder_not_real")
+    monkeypatch.setattr("weekly_report.src.klaviyo_client.urllib.request.urlopen", fake_urlopen)
+    from weekly_report.src.klaviyo_client import probe_connection, find_placed_order_metric_id
+
+    ok, err = probe_connection()
+    assert ok is True
+    assert err is None
+    assert "page[size]" not in captured["url"]
+    assert "page_size" not in captured["url"]
+    try:
+        find_placed_order_metric_id()
+    except RuntimeError:
+        pass
+    assert "page[size]" not in captured["url"]
+    assert "fields[metric]" in captured["url"]
+
+
 def test_empty(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("KLAVIYO_PRIVATE_API_KEY", raising=False)
     monkeypatch.setenv("DISABLE_FX_CONVERSION", "true")

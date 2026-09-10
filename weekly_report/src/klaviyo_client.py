@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -14,6 +15,11 @@ from loguru import logger
 
 KLAVIYO_BASE = "https://a.klaviyo.com"
 DEFAULT_REVISION = "2024-10-15"
+_KEY_RE = re.compile(r"pk_[A-Za-z0-9_]+")
+
+
+def _scrub(text: str) -> str:
+    return _KEY_RE.sub("pk_…", text)
 
 
 def klaviyo_api_key() -> Optional[str]:
@@ -40,9 +46,11 @@ def _request(
     key = klaviyo_api_key()
     if not key:
         raise RuntimeError("KLAVIYO_PRIVATE_API_KEY is not set")
-    url = f"{KLAVIYO_BASE}{path}"
+    # Klaviyo pagination "next" links are absolute.
+    url = path if path.startswith("http") else f"{KLAVIYO_BASE}{path}"
     if query:
-        url = f"{url}?{urllib.parse.urlencode(query)}"
+        # Keep JSON:API brackets; GET /api/metrics does not accept page[size].
+        url = f"{url}?{urllib.parse.urlencode(query, doseq=True, safe='[]')}"
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {
         "Authorization": f"Klaviyo-API-Key {key}",
@@ -66,7 +74,7 @@ def _request(
                 logger.warning(f"Klaviyo {exc.code} on {path}; retry in {wait}s")
                 time.sleep(wait)
                 continue
-            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            detail = _scrub(exc.read().decode("utf-8", errors="replace")[:500])
             raise RuntimeError(f"Klaviyo HTTP {exc.code}: {detail}") from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             last_err = exc
@@ -77,16 +85,26 @@ def _request(
     raise RuntimeError(f"Klaviyo request failed: {last_err}")
 
 
+def _paginate_collection(path: str, query: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    payload = _request("GET", path, query=query)
+    rows: List[Dict[str, Any]] = list(payload.get("data") or [])
+    for _ in range(10):
+        next_url = (payload.get("links") or {}).get("next")
+        if not next_url:
+            break
+        payload = _request("GET", str(next_url))
+        rows.extend(payload.get("data") or [])
+    return rows
+
+
 def find_placed_order_metric_id() -> str:
     override = (os.getenv("KLAVIYO_CONVERSION_METRIC_ID") or "").strip()
     if override:
         return override
-    payload = _request(
-        "GET",
+    rows = _paginate_collection(
         "/api/metrics",
-        query={"fields[metric]": "name,integration", "page[size]": "200"},
+        query={"fields[metric]": "name,integration"},
     )
-    rows = payload.get("data") or []
     placed = []
     for row in rows:
         attrs = row.get("attributes") or {}
@@ -133,7 +151,7 @@ def probe_connection() -> Tuple[bool, Optional[str]]:
     if not klaviyo_key_configured():
         return False, "KLAVIYO_PRIVATE_API_KEY is not set"
     try:
-        _request("GET", "/api/metrics", query={"page[size]": "1"})
+        _request("GET", "/api/metrics", query={"fields[metric]": "name"})
         return True, None
     except Exception as exc:
-        return False, str(exc)
+        return False, _scrub(str(exc))
