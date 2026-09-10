@@ -173,3 +173,40 @@ def test_api_429_falls_back_to_csv_without_json_warning(tmp_path: Path, monkeypa
     warn = payload["warnings"][0]["message"]
     assert "{" not in warn
     assert "429" in warn
+
+
+def test_live_api_payload_is_cached(tmp_path: Path, monkeypatch):
+    from weekly_report.src.metrics import klaviyo_email as ke
+
+    ke._LIVE_CACHE.clear()
+    monkeypatch.setenv("KLAVIYO_PRIVATE_API_KEY", "pk_test_placeholder_not_real")
+    monkeypatch.setenv("DISABLE_FX_CONVERSION", "true")
+    calls = {"n": 0}
+
+    def fake_from_api():
+        calls["n"] += 1
+        row = {
+            "kind": "flow",
+            "name": "Welcome",
+            "is_newsletter": False,
+            "campaign_count": None,
+            "recipients": 10,
+            "unique_converters": 1,
+            "conversions": 1,
+            "conversion_rate": 0.1,
+            "revenue_usd": 20.0,
+            "revenue_sek": None,
+        }
+        return [row], None
+
+    monkeypatch.setattr("weekly_report.src.metrics.klaviyo_email._from_api", fake_from_api)
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.klaviyo_email.get_latest_usd_sek_rate",
+        lambda _root: (None, {"applied": False, "error": None, "sample_rate": None, "provider": None, "rate_date": None}),
+    )
+    first = ke.calculate_klaviyo_email(tmp_path)
+    second = ke.calculate_klaviyo_email(tmp_path)
+    assert first["source"] == "klaviyo_api"
+    assert second["source"] == "klaviyo_api"
+    assert calls["n"] == 1
+    ke._LIVE_CACHE.clear()

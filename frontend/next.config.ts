@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
     // Rewrites clone the request body; default 10MB truncates Qlik/Shopify CSVs
     // and the proxy then returns "Internal Server Error" as HTML.
     proxyClientMaxBodySize: '200mb',
+    // Klaviyo reporting retries can wait on Retry-After (~45s); default 30s
+    // proxy timeout becomes a spurious Internal Server Error in the UI.
+    proxyTimeout: 300_000,
   },
   // Browser calls /api on this origin; Next proxies to the FastAPI process.
   async rewrites() {

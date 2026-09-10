@@ -38,6 +38,8 @@ HEADER_NOTE = (
 )
 
 STATS = ["recipients", "conversion_uniques", "conversions", "conversion_value"]
+_LIVE_CACHE: Dict[str, Any] = {}
+_LIVE_CACHE_TTL_S = 90.0
 
 
 def _iso(dt: datetime) -> str:
@@ -298,6 +300,11 @@ def _from_api() -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
 
 
 def calculate_klaviyo_email(data_root: Path) -> Dict[str, Any]:
+    cache_key = str(Path(data_root).resolve())
+    cached = _LIVE_CACHE.get(cache_key)
+    if cached and (time.monotonic() - float(cached["t"])) < _LIVE_CACHE_TTL_S:
+        return cached["payload"]
+
     files = _scan_files(data_root)
     rate, fx_meta = get_latest_usd_sek_rate(Path(data_root))
     warnings: List[Dict[str, str]] = []
@@ -371,7 +378,7 @@ def calculate_klaviyo_email(data_root: Path) -> Dict[str, Any]:
     fx_out["source_currency"] = "USD"
     fx_out["target_currency"] = "SEK"
 
-    return {
+    payload = {
         "available": True,
         "message": None,
         "source": source,
@@ -400,3 +407,6 @@ def calculate_klaviyo_email(data_root: Path) -> Dict[str, Any]:
         "warnings": warnings,
         "caveats": [],
     }
+    if source == "klaviyo_api":
+        _LIVE_CACHE[cache_key] = {"t": time.monotonic(), "payload": payload}
+    return payload
