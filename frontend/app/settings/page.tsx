@@ -279,7 +279,25 @@ export default function Settings() {
     },
   ]
 
-  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes]
+  const cacPaybackFileTypes = [
+    {
+      type: 'cac_payback_groups',
+      label: 'CAC payback — ChannelGroup (2025-03 to 2026-02)',
+      formats: '.csv',
+    },
+    {
+      type: 'cac_payback_segments',
+      label: 'CAC payback — campaign segments',
+      formats: '.csv',
+    },
+    {
+      type: 'cac_payback_horizon',
+      label: 'CAC payback — 180d vs 365d horizon',
+      formats: '.csv',
+    },
+  ]
+
+  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes, ...cacPaybackFileTypes]
 
   return (
     <div className="space-y-8">
@@ -525,6 +543,32 @@ export default function Settings() {
               </div>
             )}
 
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">CAC payback by channel — last-click</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Sibling of Retention by channel, not Adjusted aMER. Upload the three Dema CAC
+                    payback CSVs: ChannelGroup headline, campaign segments (prospecting/retargeting,
+                    branded/non-branded, editorial/coupon), and 180d vs 365d. Net GP2 is derived
+                    from channel margin rates; payback is an average, not a marginal return.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={cacPaybackFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
             {/* File Metadata Display */}
             <div className="space-y-4 mt-6">
               <h4 className="text-sm font-medium">Current Files</h4>
@@ -563,7 +607,7 @@ export default function Settings() {
                             rowCount={metadata[ft.type].row_count}
                           />
                           {/* Dimension validation status */}
-                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && (
+                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">

@@ -1865,6 +1865,97 @@ export interface RetentionByChannelResponse {
   warnings: Array<{ code: string; message: string }>
 }
 
+export interface CacPaybackChannelRow {
+  channel_group: string
+  spend: number | null
+  new_customers: number | null
+  cac: number | null
+  gp2_first_order: number | null
+  gp2_180d: number | null
+  payback_first_order: number | null
+  payback_180d: number | null
+  payback_low: number | null
+  payback_high: number | null
+}
+
+export interface CacPaybackSegmentRow {
+  channel_group: string
+  segment: string
+  segment_label: string
+  indicative: boolean
+  horizon: string
+  spend: number | null
+  new_customers: number | null
+  repeat_rate: number | null
+  cac: number | null
+  cac_newshare: number | null
+  gp2_per_customer: number | null
+  payback: number | null
+  payback_newshare: number | null
+}
+
+export interface CacPaybackHorizonRow {
+  channel_group: string
+  segment: string
+  segment_label: string
+  is_channel_total: boolean
+  new_customers_180: number | null
+  cac_180: number | null
+  gp2_180: number | null
+  gp2_365: number | null
+  gp2_uplift_pct: number | null
+  payback_180: number | null
+  payback_365: number | null
+}
+
+export interface CacPaybackResponse {
+  available: boolean
+  message: string | null
+  attribution: string
+  period_min: string | null
+  period_max: string | null
+  channels: CacPaybackChannelRow[]
+  segments: CacPaybackSegmentRow[]
+  horizon: CacPaybackHorizonRow[]
+  files: {
+    groups: Array<{ filename: string; uploaded_at: string }>
+    segments: Array<{ filename: string; uploaded_at: string }>
+    horizon: Array<{ filename: string; uploaded_at: string }>
+  }
+  missing_files: { groups: boolean; segments: boolean; horizon: boolean }
+  as_of: string | null
+  caveats: string[]
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export async function getCacPayback(baseWeek: string): Promise<CacPaybackResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/cac-payback?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
 export async function getRetentionByChannel(baseWeek: string): Promise<RetentionByChannelResponse> {
   const timeoutMs = 180_000
   const controller = new AbortController()
