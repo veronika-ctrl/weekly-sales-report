@@ -22,6 +22,33 @@ def _scrub(text: str) -> str:
     return _KEY_RE.sub("pk_…", text)
 
 
+def _retry_after_seconds(exc: urllib.error.HTTPError, body: str, attempt: int) -> float:
+    ra = exc.headers.get("Retry-After") if exc.headers else None
+    if ra:
+        try:
+            return min(max(float(ra), 1.0), 45.0)
+        except ValueError:
+            pass
+    match = re.search(r"available in (\d+) seconds", body, re.I)
+    if match:
+        return min(float(match.group(1)) + 1.0, 45.0)
+    return min(float(2 ** attempt), 20.0)
+
+
+def _public_http_error(code: int, body: str) -> str:
+    if code == 429 or "throttl" in body.lower():
+        return (
+            "Klaviyo rate-limited the request (HTTP 429). "
+            "Wait a moment and refresh, or use the uploaded CSV."
+        )
+    if code in (401, 403):
+        return (
+            f"Klaviyo HTTP {code}: key rejected or missing scopes "
+            "(need flows:read, campaigns:read, metrics:read)."
+        )
+    return f"Klaviyo HTTP {code}: {body[:240]}"
+
+
 def klaviyo_api_key() -> Optional[str]:
     raw = (os.getenv("KLAVIYO_PRIVATE_API_KEY") or os.getenv("KLAVIYO_API_KEY") or "").strip()
     return raw or None
@@ -61,7 +88,7 @@ def _request(
     if data is not None:
         headers["Content-Type"] = "application/json"
     last_err: Optional[Exception] = None
-    for attempt in range(4):
+    for attempt in range(6):
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -69,17 +96,17 @@ def _request(
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             last_err = exc
-            if exc.code in (429, 503) and attempt < 3:
-                wait = 2 ** attempt
-                logger.warning(f"Klaviyo {exc.code} on {path}; retry in {wait}s")
+            body = _scrub(exc.read().decode("utf-8", errors="replace")[:800])
+            if exc.code in (429, 503) and attempt < 5:
+                wait = _retry_after_seconds(exc, body, attempt)
+                logger.warning(f"Klaviyo {exc.code} on {path}; retry in {wait:.0f}s")
                 time.sleep(wait)
                 continue
-            detail = _scrub(exc.read().decode("utf-8", errors="replace")[:500])
-            raise RuntimeError(f"Klaviyo HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(_public_http_error(exc.code, body)) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             last_err = exc
-            if attempt < 3:
-                time.sleep(2 ** attempt)
+            if attempt < 5:
+                time.sleep(min(2 ** attempt, 16))
                 continue
             raise RuntimeError(f"Klaviyo network error: {exc}") from exc
     raise RuntimeError(f"Klaviyo request failed: {last_err}")

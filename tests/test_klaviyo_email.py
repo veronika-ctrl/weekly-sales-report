@@ -19,6 +19,24 @@ Campaign,All newsletter campaigns (210 campaigns aggregated),1000,40,40,500
 """
 
 
+def test_retry_after_uses_klaviyo_wait_hint():
+    from weekly_report.src.klaviyo_client import _retry_after_seconds
+
+    class FakeHeaders(dict):
+        def get(self, key, default=None):
+            return dict.get(self, key, default)
+
+    class FakeExc:
+        headers = FakeHeaders()
+
+    wait = _retry_after_seconds(FakeExc(), "Request was throttled. Expected available in 21 seconds.", 0)
+    assert 21 <= wait <= 22
+
+    FakeExc.headers = FakeHeaders({"Retry-After": "12"})
+    wait = _retry_after_seconds(FakeExc(), "", 0)
+    assert wait == 12.0
+
+
 def test_metrics_list_omits_page_size(monkeypatch):
     captured = {}
 
@@ -145,6 +163,7 @@ def test_api_429_falls_back_to_csv_without_json_warning(tmp_path: Path, monkeypa
     payload = calculate_klaviyo_email(tmp_path)
     assert payload["source"] == "csv"
     assert payload["available"] is True
+    assert payload["klaviyo"]["connected"] is True
     assert payload["total"]["recipients"] == 1170
     warn = payload["warnings"][0]["message"]
     assert "{" not in warn

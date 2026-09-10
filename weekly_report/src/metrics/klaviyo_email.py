@@ -11,6 +11,7 @@ the Klaviyo Reporting API and falls back to the CSV if the API call fails.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -245,6 +246,8 @@ def _from_api() -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         bucket["unique_converters"] += _num(s, "conversion_uniques")
         bucket["conversions"] += _num(s, "conversions")
         bucket["revenue_usd"] += _num(s, "conversion_value")
+    # Reporting API is tightly rate-limited; pause before the second report.
+    time.sleep(1.5)
     flows = [
         _row(
             kind="flow",
@@ -312,6 +315,10 @@ def calculate_klaviyo_email(data_root: Path) -> Dict[str, Any]:
             as_of = _iso(datetime.now(timezone.utc))
         except Exception as exc:
             logger.warning(f"Klaviyo API pull failed, falling back to CSV: {exc}")
+            text = str(exc).lower()
+            # 429 means the key is valid; don't tell the UI the key was rejected.
+            if "429" in text or "throttl" in text:
+                connected = True
             warnings.append(
                 {
                     "code": "klaviyo_api_failed",

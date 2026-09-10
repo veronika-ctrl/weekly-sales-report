@@ -148,9 +148,11 @@ export default function EmailPerformancePage() {
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
           Standalone from Adjusted aMER and Dema. {sourceLabel}.
           {data?.klaviyo?.key_configured
-            ? data.klaviyo.connected
+            ? data.source === 'klaviyo_api'
               ? ' Private API key is connected — this report refreshes from Klaviyo.'
-              : ' A private API key is set but Klaviyo did not accept it; showing CSV fallback if available.'
+              : data.klaviyo.connected
+                ? ' Private API key is connected, but this refresh used the uploaded CSV (see warning).'
+                : ' A private API key is set but Klaviyo did not accept it; showing CSV fallback if available.'
             : ' Add KLAVIYO_PRIVATE_API_KEY to the backend environment to switch this report to automatic pulls.'}
         </p>
       </div>
