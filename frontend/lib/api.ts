@@ -1956,6 +1956,93 @@ export async function getCacPayback(baseWeek: string): Promise<CacPaybackRespons
   }
 }
 
+export interface KlaviyoEmailRow {
+  kind: string
+  name: string
+  recipients: number
+  unique_converters: number
+  conversions: number | null
+  conversion_rate: number | null
+  revenue_usd: number
+  revenue_sek: number | null
+  campaign_count: number | null
+  is_newsletter: boolean
+}
+
+export interface KlaviyoEmailResponse {
+  available: boolean
+  message: string | null
+  source: string
+  header_note: string
+  timeframe: string
+  flows: KlaviyoEmailRow[]
+  newsletter: KlaviyoEmailRow | null
+  total: {
+    recipients: number
+    unique_converters: number
+    conversion_rate: number | null
+    revenue_usd: number
+    revenue_sek: number | null
+  } | null
+  fx: {
+    applied: boolean
+    source_currency?: string
+    target_currency?: string
+    provider?: string | null
+    sample_rate?: number | null
+    rate_date?: string | null
+    error?: string | null
+  }
+  klaviyo: { key_configured: boolean; connected: boolean }
+  files: Array<{ filename: string; uploaded_at: string }>
+  as_of: string | null
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export interface KlaviyoStatusResponse {
+  configured: boolean
+  connected: boolean
+  error: string | null
+  scopes_needed: string[]
+}
+
+export async function getKlaviyoEmail(baseWeek: string): Promise<KlaviyoEmailResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/klaviyo-email?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
+export async function getKlaviyoStatus(): Promise<KlaviyoStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/klaviyo-status`)
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(t || response.statusText)
+  }
+  return response.json()
+}
+
 export async function getRetentionByChannel(baseWeek: string): Promise<RetentionByChannelResponse> {
   const timeoutMs = 180_000
   const controller = new AbortController()

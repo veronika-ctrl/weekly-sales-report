@@ -16,7 +16,9 @@ import {
   getApiBaseUrl,
   getDiscountsHistoryInfo,
   resetDiscountsHistory,
+  getKlaviyoStatus,
   type DiscountsHistoryInfo,
+  type KlaviyoStatusResponse,
 } from '@/lib/api'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
@@ -37,12 +39,27 @@ export default function Settings() {
   const [discountsHistory, setDiscountsHistory] = useState<DiscountsHistoryInfo | null>(null)
   const [discountsHistoryLoading, setDiscountsHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
+  const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
 
   useEffect(() => {
     import('@/lib/supabase-queries')
       .then((m) => m.getWeeksWithDataFromSupabase())
       .then((weeks) => setWeeksWithData(new Set(weeks)))
+  }, [])
+
+  useEffect(() => {
+    if (!hasBackend) return
+    getKlaviyoStatus()
+      .then(setKlaviyoStatus)
+      .catch(() =>
+        setKlaviyoStatus({
+          configured: false,
+          connected: false,
+          error: 'Could not reach backend',
+          scopes_needed: ['flows:read', 'campaigns:read', 'metrics:read'],
+        })
+      )
   }, [])
 
   // Sync selectedWeek with baseWeek from context
@@ -297,7 +314,15 @@ export default function Settings() {
     },
   ]
 
-  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes, ...cacPaybackFileTypes]
+  const klaviyoFileTypes = [
+    {
+      type: 'klaviyo_email',
+      label: 'Email Performance — Klaviyo last-12-months CSV (fallback)',
+      formats: '.csv',
+    },
+  ]
+
+  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes, ...cacPaybackFileTypes, ...klaviyoFileTypes]
 
   return (
     <div className="space-y-8">
@@ -569,6 +594,46 @@ export default function Settings() {
               </div>
             )}
 
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Email Performance (Klaviyo)</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Standalone from Adjusted aMER. Recipient-based attribution — do not sum with
+                    last-click aMER totals. CSV is the fallback until a private API key is set on
+                    the <strong>backend</strong> as <code>KLAVIYO_PRIVATE_API_KEY</code> (never in
+                    this chat, never <code>NEXT_PUBLIC_*</code>). Scopes: flows:read, campaigns:read,
+                    metrics:read.
+                  </p>
+                  <p className="text-xs mt-2">
+                    {klaviyoStatus == null ? (
+                      <span className="text-muted-foreground">Checking Klaviyo connection…</span>
+                    ) : klaviyoStatus.connected ? (
+                      <span className="text-green-700 font-medium">Klaviyo API connected — report will pull last 12 months automatically.</span>
+                    ) : klaviyoStatus.configured ? (
+                      <span className="text-amber-800 font-medium">
+                        Key is set but Klaviyo rejected it{klaviyoStatus.error ? `: ${klaviyoStatus.error}` : ''}.
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">API key not configured — using uploaded CSV.</span>
+                    )}
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={klaviyoFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
             {/* File Metadata Display */}
             <div className="space-y-4 mt-6">
               <h4 className="text-sm font-medium">Current Files</h4>
@@ -607,7 +672,7 @@ export default function Settings() {
                             rowCount={metadata[ft.type].row_count}
                           />
                           {/* Dimension validation status */}
-                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && (
+                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">

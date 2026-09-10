@@ -71,6 +71,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/adjusted-amer': { title: 'Adjusted aMER', subtitle: 'Paid vs organic efficiency from the Dema agent trio' },
       '/retention-by-channel': { title: 'Retention by channel', subtitle: 'Last-click 180-day retention by acquisition channel' },
       '/cac-payback': { title: 'CAC payback', subtitle: 'Last-click CAC, 180-day GP2, and payback by channel' },
+      '/email-performance': { title: 'Email Performance (Klaviyo)', subtitle: 'Recipient-based email revenue, last 12 months' },
     }
     
     if (pathname?.startsWith('/audience/') && pathname !== '/audience-total') {
@@ -128,7 +129,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/countries/germany') || isActive('/countries/france') || isActive('/countries/canada') ||
                     isActive('/countries/australia') || isActive('/countries/switzerland') || isActive('/countries/uae') ||
                     isActive('/countries/row') ||                     isActive('/audience-total') || pathname?.startsWith('/audience/') ||
-                    pathname?.startsWith('/monthly-veronika') || isActive('/adjusted-amer') || isActive('/retention-by-channel') || isActive('/cac-payback')
+                    pathname?.startsWith('/monthly-veronika') || isActive('/adjusted-amer') || isActive('/retention-by-channel') || isActive('/cac-payback') || isActive('/email-performance')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -330,6 +331,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/adjusted-amer') ||
                     isActive('/retention-by-channel') ||
                     isActive('/cac-payback') ||
+                    isActive('/email-performance') ||
                     isActive('/contribution') ||
                     isActive('/category-sales') ||
                     isActive('/products-new')
@@ -419,6 +421,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconTrendingUp className="h-4 w-4" />
                       {!isCollapsed && <span>CAC payback</span>}
+                    </Link>
+                    <Link
+                      href="/email-performance"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/email-performance')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconTrendingUp className="h-4 w-4" />
+                      {!isCollapsed && <span>Email Performance</span>}
                     </Link>
                     <Link
                       href="/contribution"
