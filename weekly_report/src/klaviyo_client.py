@@ -23,15 +23,19 @@ def _scrub(text: str) -> str:
 
 
 def _retry_after_seconds(exc: urllib.error.HTTPError, body: str, attempt: int) -> float:
+    candidates: List[float] = []
     ra = exc.headers.get("Retry-After") if exc.headers else None
     if ra:
         try:
-            return min(max(float(ra), 1.0), 45.0)
+            candidates.append(max(float(ra), 1.0))
         except ValueError:
             pass
     match = re.search(r"available in (\d+) seconds", body, re.I)
     if match:
-        return min(float(match.group(1)) + 1.0, 45.0)
+        candidates.append(float(match.group(1)) + 1.0)
+    if candidates:
+        # Klaviyo often sends Retry-After: 1 while the body says "available in N seconds".
+        return min(max(candidates), 45.0)
     return min(float(2 ** attempt), 20.0)
 
 

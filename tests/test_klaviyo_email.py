@@ -36,6 +36,11 @@ def test_retry_after_uses_klaviyo_wait_hint():
     wait = _retry_after_seconds(FakeExc(), "", 0)
     assert wait == 12.0
 
+    # Header of 1s must not win over Klaviyo's "available in N seconds" body.
+    FakeExc.headers = FakeHeaders({"Retry-After": "1"})
+    wait = _retry_after_seconds(FakeExc(), "Request was throttled. Expected available in 21 seconds.", 0)
+    assert 21 <= wait <= 22
+
 
 def test_metrics_list_omits_page_size(monkeypatch):
     captured = {}

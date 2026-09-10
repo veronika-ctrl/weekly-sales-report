@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import {
@@ -94,18 +94,24 @@ export default function EmailPerformancePage() {
   const [data, setData] = useState<KlaviyoEmailResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const loadGen = useRef(0)
 
   const load = useCallback(async () => {
     if (!hasBackend) return
+    const gen = ++loadGen.current
     setLoading(true)
     setErr(null)
     try {
-      setData(await getKlaviyoEmail(weekToLoad))
+      const payload = await getKlaviyoEmail(weekToLoad)
+      if (gen !== loadGen.current) return
+      setData(payload)
+      setErr(null)
     } catch (e: unknown) {
+      if (gen !== loadGen.current) return
       setData(null)
       setErr(e instanceof Error ? e.message : 'Failed to load Klaviyo email performance')
     } finally {
-      setLoading(false)
+      if (gen === loadGen.current) setLoading(false)
     }
   }, [weekToLoad])
 

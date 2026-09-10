@@ -2858,7 +2858,7 @@ async def get_cac_payback(
 
 
 @app.get("/api/klaviyo-email")
-async def get_klaviyo_email(
+def get_klaviyo_email(
     base_week: str = Query(..., description="ISO week folder used for CSV upload location"),
 ):
     """Klaviyo email performance (recipient attribution). Standalone from Adjusted aMER."""
@@ -2878,7 +2878,7 @@ async def get_klaviyo_email(
 
 
 @app.get("/api/klaviyo-status")
-async def get_klaviyo_status():
+def get_klaviyo_status():
     """Whether a Klaviyo private key is configured (never returns the key)."""
     from weekly_report.src.klaviyo_client import klaviyo_key_configured, probe_connection
 
