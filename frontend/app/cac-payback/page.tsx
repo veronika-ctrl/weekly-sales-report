@@ -362,8 +362,8 @@ export default function CacPaybackPage() {
           <CardHeader>
             <CardTitle>180-day vs 365-day payback</CardTitle>
             <CardDescription>
-              Same ChannelGroups, longer observation. The 365-day cohort is smaller (customers with
-              a full year of data). Dashed line is 1.0× (payback).
+              Smaller, identical cohort used here to hold CAC constant — see full cohort in the
+              table above. Dashed line is 1.0× (payback).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -400,8 +400,8 @@ export default function CacPaybackPage() {
           <CardHeader>
             <CardTitle>Horizon detail</CardTitle>
             <CardDescription>
-              Channel totals first, then branded / non-branded and Meta prospecting / retargeting
-              where the export includes them.
+              Smaller, identical cohort used here to hold CAC constant — see full cohort in the
+              table above.
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">

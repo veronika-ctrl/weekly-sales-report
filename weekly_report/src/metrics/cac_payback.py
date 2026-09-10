@@ -62,8 +62,9 @@ FOOTNOTES = [
     "180-day net GP2 per customer ÷ CAC.",
     "Campaign segments use the same full-allocation CAC and payback. "
     "New-share CAC is shown where the export provides it (blank for affiliate).",
-    "The 365-day comparison uses customers with a full year of observation, "
-    "so the cohort is smaller than the 180-day headline.",
+    "The 180d vs 365d table uses a smaller, identical cohort so CAC stays "
+    "held constant — it will not match customer counts or GP2 in the headline "
+    "table (full 180-day cohort).",
     *CAVEATS,
 ]
 
