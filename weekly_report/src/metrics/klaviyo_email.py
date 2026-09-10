@@ -45,6 +45,23 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat()
 
 
+def _public_api_failure_message(exc: BaseException) -> str:
+    """User-facing API fallback copy — never dump Klaviyo JSON bodies."""
+    text = str(exc)
+    lowered = text.lower()
+    if "429" in text or "throttled" in lowered:
+        return (
+            "Klaviyo rate-limited the live pull (HTTP 429). "
+            "Showing the uploaded CSV instead — retry in about a minute."
+        )
+    if "401" in text or "403" in text or "authentication" in lowered or "unauthorized" in lowered:
+        return "Klaviyo rejected the private API key. Showing the uploaded CSV instead."
+    head = text.split(":", 1)[0].strip()
+    if len(head) > 120:
+        head = head[:117] + "..."
+    return f"Klaviyo API pull failed ({head}). Showing the uploaded CSV instead."
+
+
 def _to_number(series: pd.Series) -> pd.Series:
     as_str = series.astype(str).str.strip().str.replace("\u00a0", "", regex=False)
     as_str = as_str.replace({"": None, "nan": None, "None": None, "NaT": None})
@@ -298,7 +315,7 @@ def calculate_klaviyo_email(data_root: Path) -> Dict[str, Any]:
             warnings.append(
                 {
                     "code": "klaviyo_api_failed",
-                    "message": f"Klaviyo API pull failed ({exc}). Showing the uploaded CSV instead.",
+                    "message": _public_api_failure_message(exc),
                 }
             )
 

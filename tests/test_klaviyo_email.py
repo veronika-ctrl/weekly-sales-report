@@ -7,6 +7,7 @@ from pathlib import Path
 from weekly_report.src.metrics.klaviyo_email import (
     HEADER_NOTE,
     KLAVIYO_EMAIL_TYPE,
+    _public_api_failure_message,
     calculate_klaviyo_email,
 )
 
@@ -113,3 +114,38 @@ def test_sek_conversion_uses_fallback_rate(tmp_path: Path, monkeypatch):
     assert payload["fx"]["sample_rate"] == 10
     assert abs(payload["total"]["revenue_sek"] - 7805.0) < 1e-6
     assert abs(payload["newsletter"]["revenue_sek"] - 5000.0) < 1e-6
+
+
+def test_public_api_failure_hides_klaviyo_json():
+    raw = (
+        'Klaviyo HTTP 429: {"errors":[{"title":"Request was throttled.",'
+        '"detail":"Request was throttled. Expected available in 50 seconds.",'
+        '"status":429,"code":"throttled"}]}'
+    )
+    msg = _public_api_failure_message(RuntimeError(raw))
+    assert "429" in msg
+    assert "CSV" in msg
+    assert "{" not in msg
+    assert "throttled. Expected" not in msg
+
+
+def test_api_429_falls_back_to_csv_without_json_warning(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("KLAVIYO_PRIVATE_API_KEY", "pk_test_placeholder_not_real")
+    monkeypatch.setenv("DISABLE_FX_CONVERSION", "true")
+    path = tmp_path / "raw" / "2026-36" / KLAVIYO_EMAIL_TYPE / "Klaviyo_email_performance_last12m.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(CSV, encoding="utf-8")
+
+    def boom():
+        raise RuntimeError(
+            'Klaviyo HTTP 429: {"errors":[{"title":"Request was throttled."}]}'
+        )
+
+    monkeypatch.setattr("weekly_report.src.metrics.klaviyo_email._from_api", boom)
+    payload = calculate_klaviyo_email(tmp_path)
+    assert payload["source"] == "csv"
+    assert payload["available"] is True
+    assert payload["total"]["recipients"] == 1170
+    warn = payload["warnings"][0]["message"]
+    assert "{" not in warn
+    assert "429" in warn
