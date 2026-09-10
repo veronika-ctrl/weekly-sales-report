@@ -142,14 +142,7 @@ function ChannelBarChart({
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value) => (
-                      <div className="flex flex-1 items-center justify-between gap-4">
-                        <span className="text-muted-foreground">{title}</span>
-                        <span className="font-mono font-medium tabular-nums">
-                          {formatTooltip(typeof value === 'number' ? value : Number(value))}
-                        </span>
-                      </div>
-                    )}
+                    formatter={(value: unknown) => formatTooltip(Number(value ?? 0))}
                   />
                 }
               />
