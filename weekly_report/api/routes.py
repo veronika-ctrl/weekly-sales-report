@@ -42,6 +42,10 @@ from weekly_report.src.metrics.adjusted_amer import (
     AMER_DEMA_FILE_TYPES,
     calculate_adjusted_amer,
 )
+from weekly_report.src.metrics.retention_by_channel import (
+    RETENTION_CUSTOMERS_TYPE,
+    calculate_retention_by_channel,
+)
 from weekly_report.src.metrics.quarterly_veronika_board import calculate_quarterly_veronika_board_kpis
 from weekly_report.src.pdf.veronika_monthly_pdf import build_veronika_monthly_pdf
 from weekly_report.src.metrics.contribution import calculate_contribution_for_weeks
@@ -2805,6 +2809,26 @@ async def get_adjusted_amer(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/retention-by-channel")
+async def get_retention_by_channel(
+    base_week: str = Query(..., description="ISO week folder used for upload location"),
+):
+    """Last-click retention by acquisition channel (Eligible180d = 1). Separate from Adjusted aMER."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        config = load_config(week=base_week)
+        return calculate_retention_by_channel(Path(config.data_root))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error retention-by-channel {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.get("/api/quarterly-veronika-board")
 async def get_quarterly_veronika_board(
     year_quarter: str = Query(..., description="Calendar quarter YYYY-Q1..Q4"),
@@ -3879,7 +3903,7 @@ async def get_batch_all_metrics(
 async def upload_file(
     file: UploadFile = File(...),
     week: str = Form(...),
-    file_type: str = Form(..., description="qlik, dema_spend, dema_gm2, shopify, discounts, budget, amer_revenue, amer_spend, amer_gm2, or shopify_customers")
+        file_type: str = Form(..., description="qlik, dema_spend, dema_gm2, shopify, discounts, budget, amer_revenue, amer_spend, amer_gm2, shopify_customers, or retention_customers")
 ):
     """
     Upload data file for specific week and type.
@@ -3894,6 +3918,7 @@ async def upload_file(
         allowed_types = [
             "qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget",
             *AMER_ALL_FILE_TYPES,
+            RETENTION_CUSTOMERS_TYPE,
         ]
         if file_type not in allowed_types:
             raise HTTPException(status_code=400, detail=f"Invalid file type. Must be one of {allowed_types}")
@@ -3902,7 +3927,7 @@ async def upload_file(
         file_extension = Path(file.filename).suffix.lower()
         if file_type == "qlik" and file_extension not in ['.xlsx', '.csv']:
             raise HTTPException(status_code=400, detail="Qlik file must be .xlsx or .csv")
-        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES]
+        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE]
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
         
@@ -4078,7 +4103,7 @@ def validate_file_dimensions(file_path: Path, file_type: str) -> Dict[str, Any]:
             # Check for country dimension (case insensitive)
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
-        elif file_type in ("shopify", "discounts", "shopify_customers"):
+        elif file_type in ("shopify", "discounts", "shopify_customers", RETENTION_CUSTOMERS_TYPE):
             # Try to load the file
             try:
                 df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
@@ -4143,7 +4168,7 @@ async def get_file_dimensions(week: str = Query(...)):
             cached_result = _dimensions_cache[cache_key]
             # Verify files haven't changed
             cache_valid = True
-            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES]:
+            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE]:
                 type_path = raw_path / file_type
                 if type_path.exists():
                     files = list(type_path.glob("*.*"))
@@ -4172,7 +4197,7 @@ async def get_file_dimensions(week: str = Query(...)):
         file_hashes = []
         
         # Check each file type
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE]:
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))
@@ -4242,7 +4267,7 @@ async def get_file_metadata(week: str = Query(...)):
         
         metadata = {}
         file_hashes = []
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE]:
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))

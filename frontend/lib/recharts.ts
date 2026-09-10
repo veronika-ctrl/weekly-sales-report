@@ -32,6 +32,7 @@ export const ComposedChart = RComposedChart as React.ForwardRefExoticComponent<
 export {
   Bar,
   CartesianGrid,
+  Cell,
   LabelList,
   Legend,
   Line,

@@ -31,7 +31,8 @@ function LayoutContentInner({
   const pathname = usePathname()
   const isSettings = pathname === '/settings'
   const isAdjustedAmer = pathname === '/adjusted-amer'
-  const allowWithoutWeek = isSettings || isAdjustedAmer
+  const isRetentionByChannel = pathname === '/retention-by-channel'
+  const allowWithoutWeek = isSettings || isAdjustedAmer || isRetentionByChannel
 
   // Before we've restored week from URL/localStorage, show a neutral loading state (same on server and client to avoid hydration mismatch)
   if (!hasRestoredWeek && !allowWithoutWeek) {

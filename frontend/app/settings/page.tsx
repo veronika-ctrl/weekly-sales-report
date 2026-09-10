@@ -271,7 +271,15 @@ export default function Settings() {
     },
   ]
 
-  const allStatusFileTypes = [...fileTypes, ...amerFileTypes]
+  const retentionFileTypes = [
+    {
+      type: 'retention_customers',
+      label: 'Retention by channel — Dema customer export (last-click)',
+      formats: '.csv',
+    },
+  ]
+
+  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes]
 
   return (
     <div className="space-y-8">
@@ -492,6 +500,31 @@ export default function Settings() {
               </div>
             )}
 
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Retention by acquisition channel — last-click</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Separate from Adjusted aMER. Upload Retention_customers_*.csv (Dema customer
+                    export). Metrics use last-click AcquisitionChannelGroup and Eligible180d = 1
+                    only. Backfilled stays its own row. Not comparable to CFA headline aMER.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={retentionFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
             {/* File Metadata Display */}
             <div className="space-y-4 mt-6">
               <h4 className="text-sm font-medium">Current Files</h4>
@@ -530,7 +563,7 @@ export default function Settings() {
                             rowCount={metadata[ft.type].row_count}
                           />
                           {/* Dimension validation status */}
-                          {dimensions && dimensions[ft.type] && (
+                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">

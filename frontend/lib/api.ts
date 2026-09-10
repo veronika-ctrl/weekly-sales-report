@@ -1832,6 +1832,66 @@ export interface AdjustedAmerResponse {
   footnotes: string[]
 }
 
+export interface RetentionChannelRow {
+  channel_group: string
+  is_backfilled: boolean
+  is_total: boolean
+  customers: number
+  repeat_rate_180d: number | null
+  net_sales_per_customer_180d: number | null
+  full_price_share_lifetime: number | null
+  median_days_to_second_order: number | null
+  repeaters_180d: number
+  full_price_share_n: number
+  second_order_n: number
+}
+
+export interface RetentionByChannelResponse {
+  available: boolean
+  message: string | null
+  attribution: string
+  filter: string
+  channels: RetentionChannelRow[]
+  total: RetentionChannelRow | null
+  files: Array<{ filename: string; uploaded_at: string }>
+  customer_count: number
+  eligible_count: number
+  cohort_min: string | null
+  cohort_max: string | null
+  acquisition_min?: string | null
+  acquisition_max?: string | null
+  as_of: string | null
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export async function getRetentionByChannel(baseWeek: string): Promise<RetentionByChannelResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/retention-by-channel?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
 export async function getAdjustedAmer(baseWeek: string): Promise<AdjustedAmerResponse> {
   const timeoutMs = 180_000
   const controller = new AbortController()
