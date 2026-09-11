@@ -1,3 +1,11 @@
+import {
+  describeApiFetchFailure,
+  describeHttpError,
+  withApiCredentials,
+} from './api-fetch'
+
+export { describeApiFetchFailure, describeHttpError } from './api-fetch'
+
 /** Default when NEXT_PUBLIC_API_URL is unset (avoids IPv6 `localhost` quirks vs uvicorn on 127.0.0.1). */
 const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000'
 
@@ -24,7 +32,7 @@ async function fetchWithTimeout(
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    return await fetch(input, { ...init, signal: controller.signal })
+    return await fetch(input, withApiCredentials({ ...init, signal: controller.signal }))
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
       throw new Error(
@@ -33,9 +41,22 @@ async function fetchWithTimeout(
           'If the API is running, large Excel/Qlik exports can take several minutes—check the server terminal for progress.',
       )
     }
-    throw e
+    throw new Error(describeApiFetchFailure(e, { timeoutMs }))
   } finally {
     clearTimeout(id)
+  }
+}
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number, endpoint: string): Promise<T> {
+  try {
+    const response = await fetchWithTimeout(url, undefined, timeoutMs)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(describeHttpError(response.status, t))
+    }
+    return response.json() as Promise<T>
+  } catch (e: unknown) {
+    throw new Error(describeApiFetchFailure(e, { endpoint, timeoutMs }))
   }
 }
 
@@ -1822,6 +1843,7 @@ export interface AdjustedAmerResponse {
   monthly_by_group?: AdjustedAmerGroupMonth[]
   recruited_vs_dropped: {
     available: boolean
+    deferred?: boolean
     message: string | null
     months: Array<{ year_month: string; recruited: number; dropped: number; net: number }>
     order_count?: number
@@ -1930,30 +1952,11 @@ export interface CacPaybackResponse {
 }
 
 export async function getCacPayback(baseWeek: string): Promise<CacPaybackResponse> {
-  const timeoutMs = 180_000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/cac-payback?base_week=${encodeURIComponent(baseWeek)}`,
-      { signal: controller.signal }
-    )
-    clearTimeout(timeoutId)
-    if (!response.ok) {
-      const t = await response.text()
-      throw new Error(t || response.statusText)
-    }
-    return response.json()
-  } catch (e: unknown) {
-    clearTimeout(timeoutId)
-    const err = e as { name?: string }
-    if (err?.name === 'AbortError') {
-      throw new Error(
-        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
-      )
-    }
-    throw e
-  }
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/cac-payback?base_week=${encodeURIComponent(baseWeek)}`,
+    180_000,
+    '/api/cac-payback',
+  )
 }
 
 export interface KlaviyoEmailRow {
@@ -2008,91 +2011,49 @@ export interface KlaviyoStatusResponse {
 }
 
 export async function getKlaviyoEmail(baseWeek: string): Promise<KlaviyoEmailResponse> {
-  const timeoutMs = 180_000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/klaviyo-email?base_week=${encodeURIComponent(baseWeek)}`,
-      { signal: controller.signal }
-    )
-    clearTimeout(timeoutId)
-    if (!response.ok) {
-      const t = await response.text()
-      throw new Error(t || response.statusText)
-    }
-    return response.json()
-  } catch (e: unknown) {
-    clearTimeout(timeoutId)
-    const err = e as { name?: string }
-    if (err?.name === 'AbortError') {
-      throw new Error(
-        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
-      )
-    }
-    throw e
-  }
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/klaviyo-email?base_week=${encodeURIComponent(baseWeek)}`,
+    180_000,
+    '/api/klaviyo-email',
+  )
 }
 
 export async function getKlaviyoStatus(): Promise<KlaviyoStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/klaviyo-status`)
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/klaviyo-status`)
   if (!response.ok) {
     const t = await response.text()
-    throw new Error(t || response.statusText)
+    throw new Error(describeHttpError(response.status, t))
   }
   return response.json()
 }
 
 export async function getRetentionByChannel(baseWeek: string): Promise<RetentionByChannelResponse> {
-  const timeoutMs = 180_000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/retention-by-channel?base_week=${encodeURIComponent(baseWeek)}`,
-      { signal: controller.signal }
-    )
-    clearTimeout(timeoutId)
-    if (!response.ok) {
-      const t = await response.text()
-      throw new Error(t || response.statusText)
-    }
-    return response.json()
-  } catch (e: unknown) {
-    clearTimeout(timeoutId)
-    const err = e as { name?: string }
-    if (err?.name === 'AbortError') {
-      throw new Error(
-        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
-      )
-    }
-    throw e
-  }
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/retention-by-channel?base_week=${encodeURIComponent(baseWeek)}`,
+    180_000,
+    '/api/retention-by-channel',
+  )
 }
 
-export async function getAdjustedAmer(baseWeek: string): Promise<AdjustedAmerResponse> {
-  const timeoutMs = 180_000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/adjusted-amer?base_week=${encodeURIComponent(baseWeek)}`,
-      { signal: controller.signal }
-    )
-    clearTimeout(timeoutId)
-    if (!response.ok) {
-      const t = await response.text()
-      throw new Error(t || response.statusText)
-    }
-    return response.json()
-  } catch (e: unknown) {
-    clearTimeout(timeoutId)
-    const err = e as { name?: string }
-    if (err?.name === 'AbortError') {
-      throw new Error(
-        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
-      )
-    }
-    throw e
-  }
+export async function getAdjustedAmer(
+  baseWeek: string,
+  opts?: { includeCustomers?: boolean }
+): Promise<AdjustedAmerResponse> {
+  const params = new URLSearchParams({ base_week: baseWeek })
+  if (opts?.includeCustomers === false) params.set('include_customers', 'false')
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/adjusted-amer?${params.toString()}`,
+    180_000,
+    '/api/adjusted-amer',
+  )
+}
+
+export async function getAdjustedAmerRecruited(
+  baseWeek: string
+): Promise<AdjustedAmerResponse['recruited_vs_dropped']> {
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/adjusted-amer/recruited-vs-dropped?base_week=${encodeURIComponent(baseWeek)}`,
+    180_000,
+    '/api/adjusted-amer/recruited-vs-dropped',
+  )
 }

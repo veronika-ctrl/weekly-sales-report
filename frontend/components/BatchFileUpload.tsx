@@ -169,6 +169,7 @@ export default function BatchFileUpload({
       const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
         method: 'POST',
         body: formData,
+        credentials: 'include',
         signal: controller.signal
       })
 
@@ -268,6 +269,7 @@ export default function BatchFileUpload({
         await fetch(`${apiBase.replace(/\/$/, '')}/api/health`, {
           method: 'GET',
           cache: 'no-store',
+          credentials: 'include',
           signal: warm.signal,
         })
       } catch {

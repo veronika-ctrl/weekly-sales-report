@@ -592,3 +592,49 @@ def test_reconciliation_matches_dema_validated_totals(tmp_path: Path):
     assert by[("month", "2026-08")]["net_sales"] == pytest.approx(6_748_620.98)
     assert by[("month", "2026-08")]["marketing_spend"] == pytest.approx(780_010.85)
     assert not any(w["code"] == "reconciliation_mismatch" for w in payload["warnings"])
+
+
+def test_include_customers_false_skips_shopify_and_keeps_dema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    write_w36_style_fixtures(tmp_path)
+    _write_csv(
+        tmp_path / "raw" / WEEK / SHOPIFY_CUSTOMERS_TYPE / "customers.csv",
+        "Customer ID;Created at",
+        ["a;2025-03-10"],
+    )
+    called = {"n": 0}
+
+    def boom(*_args, **_kwargs):
+        called["n"] += 1
+        raise AssertionError("shopify loader must not run when include_customers=False")
+
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.adjusted_amer.load_shopify_customer_orders", boom
+    )
+    payload = calculate_adjusted_amer(WEEK, tmp_path, include_customers=False)
+    assert called["n"] == 0
+    assert payload["week"]["adjustedAMER"] == pytest.approx(220 / 140)
+    assert payload["recruited_vs_dropped"]["available"] is False
+    assert payload["recruited_vs_dropped"]["deferred"] is True
+    assert payload["monthly"]
+
+
+def test_shopify_loader_failure_does_not_drop_dema_headline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    write_w36_style_fixtures(tmp_path)
+    _write_csv(
+        tmp_path / "raw" / WEEK / SHOPIFY_CUSTOMERS_TYPE / "customers.csv",
+        "Customer ID;Created at",
+        ["a;2025-03-10"],
+    )
+
+    def boom(*_args, **_kwargs):
+        raise MemoryError("simulated shopify OOM")
+
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.adjusted_amer.load_shopify_customer_orders", boom
+    )
+    payload = calculate_adjusted_amer(WEEK, tmp_path)
+    assert payload["week"]["adjustedAMER"] == pytest.approx(220 / 140)
+    rvd = payload["recruited_vs_dropped"]
+    assert rvd["available"] is False
+    assert "Dema agent trio is unaffected" in rvd["message"]
+    assert rvd["months"] == []

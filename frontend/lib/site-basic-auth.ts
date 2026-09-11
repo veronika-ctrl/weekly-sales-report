@@ -66,3 +66,22 @@ export function isBasicAuthAuthorized(header: string | null): boolean {
   const passOk = timingSafeEqualString(parsed.password, expectedPassword)
   return userOk && passOk
 }
+
+/**
+ * Browser document navigations need WWW-Authenticate so the password dialog appears.
+ * fetch() / XHR to /api with that header often becomes TypeError: Failed to fetch
+ * instead of a readable 401 — those requests get a JSON 401 without the challenge.
+ */
+export function shouldUseWwwAuthenticateChallenge(args: {
+  pathname: string
+  secFetchDest?: string | null
+  accept?: string | null
+}): boolean {
+  const pathname = args.pathname || ''
+  if (pathname === '/api' || pathname.startsWith('/api/')) return false
+  const dest = (args.secFetchDest || '').toLowerCase()
+  if (dest === 'empty' || dest === 'cors') return false
+  if (dest === 'document' || dest === 'iframe' || dest === 'frame') return true
+  const accept = args.accept || ''
+  return accept.includes('text/html')
+}

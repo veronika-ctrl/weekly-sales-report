@@ -117,6 +117,7 @@ export default function Settings() {
         {
           signal: controller.signal,
           cache: clearCache ? 'no-store' : 'default',
+          credentials: 'include',
         }
       )
       
@@ -204,7 +205,9 @@ export default function Settings() {
     }
     
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/file-dimensions?week=${selectedWeek}`)
+      const response = await fetch(`${getApiBaseUrl()}/api/file-dimensions?week=${selectedWeek}`, {
+        credentials: 'include',
+      })
       if (!response.ok) {
         console.warn(`Failed to fetch dimensions: ${response.statusText}`)
         setDimensions({})

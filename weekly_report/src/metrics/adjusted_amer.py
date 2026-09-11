@@ -996,7 +996,69 @@ def build_reconciliation(
     return out
 
 
-def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
+def _file_payload(paths: List[Path]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "filename": p.name,
+            "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)),
+        }
+        for p in paths
+    ]
+
+
+MISSING_CUSTOMERS_MESSAGE = (
+    "Upload a Shopify customer-order export (customer id + order date) in Settings "
+    "under Adjusted aMER. Sessions and Qlik cannot substitute for recruited vs dropped."
+)
+
+
+def _empty_recruited(*, deferred: bool = False, message: Optional[str] = None) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "available": False,
+        "message": message or MISSING_CUSTOMERS_MESSAGE,
+        "months": [],
+    }
+    if deferred:
+        payload["deferred"] = True
+    return payload
+
+
+def build_recruited_vs_dropped_payload(
+    data_root: Path, as_of_d: Optional[date] = None
+) -> Dict[str, Any]:
+    """Load Shopify customer orders and compute recruited vs dropped. Never raises."""
+    try:
+        customer_files = _scan_customer_files(data_root)
+        if not customer_files:
+            return _empty_recruited()
+        customer_orders = load_shopify_customer_orders(data_root)
+        last_order = customer_orders["order_date"].max() if not customer_orders.empty else pd.NaT
+        rvd_as_of = last_order.date() if pd.notna(last_order) else (as_of_d or date.today())
+        return {
+            "available": True,
+            "message": None,
+            "months": recruited_vs_dropped(customer_orders, rvd_as_of),
+            "order_count": int(len(customer_orders)),
+            "customer_count": int(customer_orders["customer_id"].nunique())
+            if not customer_orders.empty
+            else 0,
+            "as_of": rvd_as_of.isoformat(),
+            "files": _file_payload(customer_files),
+        }
+    except Exception as exc:
+        logger.exception(f"Shopify customer orders failed: {exc}")
+        return _empty_recruited(
+            message=(
+                "Shopify customer-order file could not be processed, so recruited vs dropped is hidden. "
+                "Headline Adjusted aMER from the Dema agent trio is unaffected. Re-upload is not required "
+                f"unless the CSV is corrupt ({exc})."
+            )
+        )
+
+
+def calculate_adjusted_amer(
+    base_week: str, data_root: Path, *, include_customers: bool = True
+) -> Dict[str, Any]:
     """Build the Adjusted aMER payload for the report page and API."""
     if not validate_iso_week(base_week):
         raise ValueError(f"Invalid ISO week format: {base_week}")
@@ -1090,40 +1152,16 @@ def calculate_adjusted_amer(base_week: str, data_root: Path) -> Dict[str, Any]:
     by_channel = monthly_channel_rows(joined, as_of_d) if not joined.empty else []
     by_group = monthly_group_rows(joined, as_of_d) if not joined.empty else []
 
-    def _file_payload(paths: List[Path]) -> List[Dict[str, Any]]:
-        return [
-            {
-                "filename": p.name,
-                "uploaded_at": _iso(datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)),
-            }
-            for p in paths
-        ]
-
-    customer_files = _scan_customer_files(data_root)
-    customer_orders = load_shopify_customer_orders(data_root) if customer_files else pd.DataFrame()
-    if not customer_files:
-        recruited = {
-            "available": False,
-            "message": (
-                "Upload a Shopify customer-order export (customer id + order date) in Settings "
-                "under Adjusted aMER. Sessions and Qlik cannot substitute for recruited vs dropped."
-            ),
-            "months": [],
-        }
+    if include_customers:
+        recruited = build_recruited_vs_dropped_payload(data_root, as_of_d)
     else:
-        last_order = (
-            customer_orders["order_date"].max() if not customer_orders.empty else pd.NaT
+        recruited = _empty_recruited(
+            deferred=True,
+            message=(
+                "Shopify customer orders are loaded in a second request so Dema headline "
+                "ratios are not blocked."
+            ),
         )
-        rvd_as_of = last_order.date() if pd.notna(last_order) else as_of_d
-        recruited = {
-            "available": True,
-            "message": None,
-            "months": recruited_vs_dropped(customer_orders, rvd_as_of),
-            "order_count": int(len(customer_orders)),
-            "customer_count": int(customer_orders["customer_id"].nunique()) if not customer_orders.empty else 0,
-            "as_of": rvd_as_of.isoformat(),
-            "files": _file_payload(customer_files),
-        }
 
     trend_end = as_of_d
     if recruited.get("available") and recruited.get("as_of"):
