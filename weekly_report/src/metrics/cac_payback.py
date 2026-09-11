@@ -6,11 +6,14 @@ exports use last-click ChannelGroup; CFA is not available here. Net GP2 is
 derived from channel margin rates, not an official per-customer metric.
 Payback is an average (not marginal) return.
 
-Inputs (semicolon CSV):
+Inputs (semicolon CSV), accumulated per slot (all files in the type folder):
 
     cac_payback_groups   — ChannelGroup CAC, GP2_180d, Payback_180d
     cac_payback_segments — campaign-segment CAC / payback (180d)
     cac_payback_horizon  — 180d vs 365d payback, same channels/segments
+
+Multiple extracts in one slot are concatenated. Overlapping grain keys keep the
+newest upload; channels/segments that appear in only one file are kept.
 """
 
 from __future__ import annotations
@@ -33,6 +36,31 @@ CAC_PAYBACK_FILE_TYPES = (
     CAC_PAYBACK_SEGMENTS_TYPE,
     CAC_PAYBACK_HORIZON_TYPE,
 )
+
+_SOURCE_META_COLS = ("_source_file", "_source_mtime")
+
+# Distinct filename stems — do not match a generic "cac_payback" token.
+_CAC_NAME_PATTERNS: Tuple[Tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"cac_payback_by_channelgroup", re.I), CAC_PAYBACK_GROUPS_TYPE),
+    (re.compile(r"cac_payback_by_campaign_segment", re.I), CAC_PAYBACK_SEGMENTS_TYPE),
+    (re.compile(r"cac_payback_horizon", re.I), CAC_PAYBACK_HORIZON_TYPE),
+)
+
+
+def infer_cac_payback_file_type(filename: str | None) -> Optional[str]:
+    """Map a known CAC export name to its slot. Unknown names return None (do not guess)."""
+    name = Path(filename or "").name
+    for pattern, file_type in _CAC_NAME_PATTERNS:
+        if pattern.search(name):
+            return file_type
+    return None
+
+
+def resolve_cac_payback_upload_type(declared: str, filename: str | None) -> str:
+    """Keep the declared slot unless the filename unambiguously belongs to another CAC slot."""
+    inferred = infer_cac_payback_file_type(filename)
+    return inferred if inferred else declared
+
 
 CHANNEL_ORDER = ["social_ppc", "sem", "affiliate"]
 
@@ -148,7 +176,7 @@ def _scan_type(data_root: Path, file_type: str) -> List[Path]:
         for f in raw.glob(f"*/{file_type}/*.*")
         if f.suffix.lower() == ".csv" and not f.name.startswith(".")
     ]
-    files.sort(key=lambda p: p.stat().st_mtime)
+    files.sort(key=lambda p: (p.stat().st_mtime, p.name.lower()))
     return files
 
 
@@ -171,17 +199,47 @@ def _period_from_name(name: str) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _load_latest(paths: List[Path]) -> pd.DataFrame:
-    if not paths:
+def _span_periods(paths: List[Path]) -> Tuple[Optional[str], Optional[str]]:
+    mins: List[str] = []
+    maxs: List[str] = []
+    for path in paths:
+        period_min, period_max = _period_from_name(path.name)
+        if period_min:
+            mins.append(period_min)
+        if period_max:
+            maxs.append(period_max)
+    if not mins:
+        return None, None
+    return min(mins), max(maxs) if maxs else None
+
+
+def _load_all(paths: List[Path]) -> pd.DataFrame:
+    """Read every CSV in the slot (mtime order). Empty if none parse."""
+    frames: List[pd.DataFrame] = []
+    for path in paths:
+        try:
+            df = _read_csv_flexible(path)
+        except Exception as exc:
+            logger.warning(f"Skipping CAC payback file {path}: {exc}")
+            continue
+        df.columns = [str(c).strip().strip('"').strip("'") for c in df.columns]
+        df["_source_file"] = path.name
+        df["_source_mtime"] = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        frames.append(df)
+    if not frames:
         return pd.DataFrame()
-    path = paths[-1]
-    try:
-        df = _read_csv_flexible(path)
-    except Exception as exc:
-        logger.warning(f"Skipping CAC payback file {path}: {exc}")
-        return pd.DataFrame()
-    df.columns = [str(c).strip().strip('"').strip("'") for c in df.columns]
-    return df
+    return pd.concat(frames, ignore_index=True)
+
+
+def _keep_latest_rows(work: pd.DataFrame, keys: List[str]) -> pd.DataFrame:
+    if work.empty:
+        return work
+    if "_source_mtime" in work.columns:
+        work = work.sort_values("_source_mtime", kind="mergesort")
+    existing = [k for k in keys if k in work.columns]
+    if not existing:
+        return work
+    return work.drop_duplicates(existing, keep="last").reset_index(drop=True)
 
 
 def _empty_payload(message: str, files: Optional[Dict[str, List[Dict[str, str]]]] = None) -> Dict[str, Any]:
@@ -218,9 +276,10 @@ def _channel_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
     work = df.copy()
     work["channel_group"] = work["ChannelGroup"].map(_norm_group)
     for col in work.columns:
-        if col in ("ChannelGroup", "channel_group"):
+        if col in ("ChannelGroup", "channel_group", *_SOURCE_META_COLS):
             continue
         work[col] = _to_number(work[col])
+    work = _keep_latest_rows(work, ["channel_group"])
     rows = []
     for name in _sort_channels(sorted(work["channel_group"].unique())):
         part = work[work["channel_group"] == name].iloc[-1]
@@ -249,9 +308,15 @@ def _segment_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
     work["channel_group"] = work[group_col].map(_norm_group)
     work["segment_label"] = work["Segment"].astype(str).str.strip()
     work["segment"] = work["Segment"].map(_norm_segment)
-    numeric_cols = [c for c in work.columns if c not in (group_col, "Segment", "Horizon", "channel_group", "segment_label", "segment")]
+    if "Horizon" in work.columns:
+        work["horizon"] = work["Horizon"].map(lambda v: str(v).strip() if pd.notna(v) else "180d")
+    else:
+        work["horizon"] = "180d"
+    skip = {group_col, "Segment", "Horizon", "horizon", "channel_group", "segment_label", "segment", *_SOURCE_META_COLS}
+    numeric_cols = [c for c in work.columns if c not in skip]
     for col in numeric_cols:
         work[col] = _to_number(work[col])
+    work = _keep_latest_rows(work, ["channel_group", "segment", "horizon"])
     rows = []
     for _, part in work.iterrows():
         label = str(part.get("segment_label") or "")
@@ -261,7 +326,7 @@ def _segment_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
                 "segment": part["segment"],
                 "segment_label": label,
                 "indicative": "indicative" in label.lower(),
-                "horizon": str(part["Horizon"]).strip() if "Horizon" in part.index and pd.notna(part.get("Horizon")) else "180d",
+                "horizon": str(part.get("horizon") or "180d"),
                 "spend": _num(part, "Spend"),
                 "new_customers": _int(part, "NewCustomers"),
                 "repeat_rate": _num(part, "RepeatRate"),
@@ -293,13 +358,11 @@ def _horizon_rows(df: pd.DataFrame) -> List[Dict[str, Any]]:
     else:
         work["segment_label"] = "ALL campaigns"
         work["segment"] = "all"
-    numeric_cols = [
-        c
-        for c in work.columns
-        if c not in (group_col, "Segment", "channel_group", "segment_label", "segment")
-    ]
+    skip = {group_col, "Segment", "channel_group", "segment_label", "segment", *_SOURCE_META_COLS}
+    numeric_cols = [c for c in work.columns if c not in skip]
     for col in numeric_cols:
         work[col] = _to_number(work[col])
+    work = _keep_latest_rows(work, ["channel_group", "segment"])
     rows = []
     for _, part in work.iterrows():
         kind = part["segment"]
@@ -343,9 +406,9 @@ def calculate_cac_payback(data_root: Path) -> Dict[str, Any]:
             "Upload the CAC payback CSVs in Settings under CAC payback by channel."
         )
 
-    groups_df = _load_latest(group_files)
-    segments_df = _load_latest(segment_files)
-    horizon_df = _load_latest(horizon_files)
+    groups_df = _load_all(group_files)
+    segments_df = _load_all(segment_files)
+    horizon_df = _load_all(horizon_files)
     channels = _channel_rows(groups_df)
     segments = _segment_rows(segments_df)
     horizon = _horizon_rows(horizon_df)
@@ -379,10 +442,38 @@ def calculate_cac_payback(data_root: Path) -> Dict[str, Any]:
                 "message": "180d vs 365d file is missing. Upload CAC_payback_horizon_180d_vs_365d.csv.",
             }
         )
+    if len(group_files) > 1:
+        warnings.append(
+            {
+                "code": "multiple_groups_files",
+                "message": (
+                    f"Using {len(group_files)} ChannelGroup files; overlapping channels keep "
+                    "the newest upload, extra channels from any file are kept."
+                ),
+            }
+        )
+    if len(segment_files) > 1:
+        warnings.append(
+            {
+                "code": "multiple_segments_files",
+                "message": (
+                    f"Using {len(segment_files)} campaign-segment files; overlapping "
+                    "segments keep the newest upload."
+                ),
+            }
+        )
+    if len(horizon_files) > 1:
+        warnings.append(
+            {
+                "code": "multiple_horizon_files",
+                "message": (
+                    f"Using {len(horizon_files)} 180d vs 365d files; overlapping rows keep "
+                    "the newest upload."
+                ),
+            }
+        )
 
-    period_min, period_max = (None, None)
-    if group_files:
-        period_min, period_max = _period_from_name(group_files[-1].name)
+    period_min, period_max = _span_periods([*group_files, *segment_files, *horizon_files])
 
     mtimes = []
     for path in [*group_files, *segment_files, *horizon_files]:

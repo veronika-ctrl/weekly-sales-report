@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from weekly_report.src.metrics.cac_payback import (
@@ -9,6 +10,8 @@ from weekly_report.src.metrics.cac_payback import (
     CAC_PAYBACK_HORIZON_TYPE,
     CAC_PAYBACK_SEGMENTS_TYPE,
     calculate_cac_payback,
+    infer_cac_payback_file_type,
+    resolve_cac_payback_upload_type,
 )
 
 
@@ -98,3 +101,81 @@ def test_horizon_180_vs_365(tmp_path: Path):
     branded = next(r for r in payload["horizon"] if r["segment"] == "branded")
     assert branded["is_channel_total"] is False
     assert branded["payback_365"] == 5.75
+
+
+def test_infer_cac_payback_file_type_from_known_stems():
+    assert (
+        infer_cac_payback_file_type("CAC_payback_by_channelgroup_2025-03_2026-02.csv")
+        == CAC_PAYBACK_GROUPS_TYPE
+    )
+    assert infer_cac_payback_file_type("CAC_payback_by_campaign_segment.csv") == CAC_PAYBACK_SEGMENTS_TYPE
+    assert infer_cac_payback_file_type("CAC_payback_by_campaign_segment_extra.csv") == CAC_PAYBACK_SEGMENTS_TYPE
+    assert infer_cac_payback_file_type("CAC_payback_horizon_180d_vs_365d.csv") == CAC_PAYBACK_HORIZON_TYPE
+    assert infer_cac_payback_file_type("custom_export.csv") is None
+    assert infer_cac_payback_file_type("cac_payback.csv") is None
+    assert infer_cac_payback_file_type("Revenue_by_channel_W36.csv") is None
+    assert (
+        resolve_cac_payback_upload_type(CAC_PAYBACK_GROUPS_TYPE, "CAC_payback_by_campaign_segment.csv")
+        == CAC_PAYBACK_SEGMENTS_TYPE
+    )
+    assert resolve_cac_payback_upload_type(CAC_PAYBACK_SEGMENTS_TYPE, "custom_export.csv") == CAC_PAYBACK_SEGMENTS_TYPE
+
+
+def test_multiple_group_files_union_keep_extras_and_newest_overlap(tmp_path: Path):
+    older = (
+        tmp_path
+        / "raw"
+        / "2026-36"
+        / CAC_PAYBACK_GROUPS_TYPE
+        / "CAC_payback_by_channelgroup_2025-03_2026-02.csv"
+    )
+    newer = (
+        tmp_path
+        / "raw"
+        / "2026-36"
+        / CAC_PAYBACK_GROUPS_TYPE
+        / "CAC_payback_by_channelgroup_2026-03_2026-08.csv"
+    )
+    _write(older, GROUPS)
+    later = """ChannelGroup;Spend;NewCustomers;CAC;GP2_FirstOrder;GP2_180d;Payback_FirstOrder;Payback_180d;PB_low;PB_high
+social_ppc;800;8;80;20;30;0.25;0.375;0.3;1.0
+sem;2100;21;100;80;180;0.8;1.8;1.0;2.0
+"""
+    _write(newer, later)
+    older.touch()
+    newer.touch()
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_000_100, 1_700_000_100))
+
+    payload = calculate_cac_payback(tmp_path)
+    names = [r["channel_group"] for r in payload["channels"]]
+    assert names == ["social_ppc", "sem", "affiliate"]
+    by = {r["channel_group"]: r for r in payload["channels"]}
+    assert by["social_ppc"]["cac"] == 80
+    assert by["affiliate"]["cac"] == 100
+    assert payload["period_min"] == "2025-03"
+    assert payload["period_max"] == "2026-08"
+    listed = {f["filename"] for f in payload["files"]["groups"]}
+    assert listed == {
+        "CAC_payback_by_channelgroup_2025-03_2026-02.csv",
+        "CAC_payback_by_channelgroup_2026-03_2026-08.csv",
+    }
+    assert any(w["code"] == "multiple_groups_files" for w in payload["warnings"])
+
+
+def test_multiple_segment_files_keep_union(tmp_path: Path):
+    first = tmp_path / "raw" / "2026-36" / CAC_PAYBACK_SEGMENTS_TYPE / "CAC_payback_by_campaign_segment.csv"
+    extra = tmp_path / "raw" / "2026-36" / CAC_PAYBACK_SEGMENTS_TYPE / "CAC_payback_by_campaign_segment_q2.csv"
+    _write(first, SEGMENTS)
+    extra_body = """Horizon;AcquisitionChannelGroup;Segment;Spend;NewCustomers;RepeatRate;new_share;CAC_full;CAC_newshare;GP2_perCust;Payback_full;Payback_newshare
+180d;social_ppc;TOF / prospecting;700;7;0.2;0.7;90;70;40;0.44;0.57
+"""
+    _write(extra, extra_body)
+    os.utime(first, (1_700_000_000, 1_700_000_000))
+    os.utime(extra, (1_700_000_100, 1_700_000_100))
+
+    payload = calculate_cac_payback(tmp_path)
+    by = {(r["channel_group"], r["segment"]): r for r in payload["segments"]}
+    assert by[("social_ppc", "prospecting")]["cac"] == 90
+    assert by[("sem", "branded")]["cac"] == 50
+    assert len(payload["files"]["segments"]) == 2

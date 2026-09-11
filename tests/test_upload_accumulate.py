@@ -1,4 +1,4 @@
-"""Upload slots: accumulate week+month aMER files; replace CAC/retention/Klaviyo."""
+"""Upload slots: accumulate aMER and CAC files; replace retention/Klaviyo."""
 
 from __future__ import annotations
 
@@ -26,18 +26,25 @@ def _write(path: Path, name: str, body: str = AMER_HEADER) -> Path:
     return dest
 
 
-def test_amer_and_shopify_customers_accumulate():
+def test_amer_shopify_customers_and_cac_accumulate():
     assert is_accumulating_file_type("amer_revenue")
     assert is_accumulating_file_type("amer_spend")
     assert is_accumulating_file_type("amer_gm2")
     assert is_accumulating_file_type("shopify_customers")
     assert is_accumulating_file_type("discounts")
+    assert is_accumulating_file_type("cac_payback_groups")
+    assert is_accumulating_file_type("cac_payback_segments")
+    assert is_accumulating_file_type("cac_payback_horizon")
     assert "amer_revenue" in ACCUMULATING_FILE_TYPES
+    assert "cac_payback_groups" in ACCUMULATING_FILE_TYPES
 
 
-def test_cac_retention_klaviyo_replace_on_upload():
+def test_retention_klaviyo_replace_on_upload():
     for file_type in REPLACE_ON_UPLOAD_FILE_TYPES:
         assert not is_accumulating_file_type(file_type)
+    assert "cac_payback_groups" not in REPLACE_ON_UPLOAD_FILE_TYPES
+    assert "retention_customers" in REPLACE_ON_UPLOAD_FILE_TYPES
+    assert "klaviyo_email" in REPLACE_ON_UPLOAD_FILE_TYPES
 
 
 def test_sanitize_keeps_veronika_shopify_filename():
@@ -87,6 +94,43 @@ def test_replace_type_wipes_previous_file(tmp_path: Path):
     prepare_slot_for_upload(slot, "klaviyo_email", "new.csv").write_text("b", encoding="utf-8")
     names = {p.name for p in list_slot_files(slot)}
     assert names == {"new.csv"}
+
+
+def test_cac_sequential_uploads_keep_both_period_files(tmp_path: Path):
+    slot = tmp_path / "raw" / WEEK / "cac_payback_groups"
+    prepare_slot_for_upload(slot, "cac_payback_groups", "CAC_payback_by_channelgroup_2025-03_2026-02.csv").write_text(
+        "a", encoding="utf-8"
+    )
+    prepare_slot_for_upload(slot, "cac_payback_groups", "CAC_payback_by_channelgroup_2026-03_2026-08.csv").write_text(
+        "b", encoding="utf-8"
+    )
+    names = {p.name for p in list_slot_files(slot)}
+    assert names == {
+        "CAC_payback_by_channelgroup_2025-03_2026-02.csv",
+        "CAC_payback_by_channelgroup_2026-03_2026-08.csv",
+    }
+
+
+def test_cac_same_filename_replaces_only_that_file(tmp_path: Path):
+    slot = tmp_path / "raw" / WEEK / "cac_payback_groups"
+    first = prepare_slot_for_upload(
+        slot, "cac_payback_groups", "CAC_payback_by_channelgroup_2025-03_2026-02.csv"
+    )
+    first.write_text("old", encoding="utf-8")
+    prepare_slot_for_upload(slot, "cac_payback_groups", "CAC_payback_by_channelgroup_2026-03_2026-08.csv").write_text(
+        "keep", encoding="utf-8"
+    )
+    second = prepare_slot_for_upload(
+        slot, "cac_payback_groups", "CAC_payback_by_channelgroup_2025-03_2026-02.csv"
+    )
+    second.write_text("new", encoding="utf-8")
+    names = {p.name for p in list_slot_files(slot)}
+    assert names == {
+        "CAC_payback_by_channelgroup_2025-03_2026-02.csv",
+        "CAC_payback_by_channelgroup_2026-03_2026-08.csv",
+    }
+    assert first == second
+    assert second.read_text(encoding="utf-8") == "new"
 
 
 def _upload(routes, filename: str, file_type: str, body: str, week: str = WEEK):
@@ -154,3 +198,78 @@ def test_upload_endpoint_klaviyo_replaces(upload_env):
     assert names == {"klaviyo_new.csv"}
     assert [f["filename"] for f in payload["files"]] == ["klaviyo_new.csv"]
     assert payload["accumulates"] is False
+
+
+CAC_GROUPS_BODY = "ChannelGroup;Spend;NewCustomers;CAC\nsocial_ppc;1;1;1\n"
+CAC_SEGMENTS_BODY = "AcquisitionChannelGroup;Segment;CAC_full\nsocial_ppc;TOF / prospecting;1\n"
+CAC_HORIZON_BODY = "AcquisitionChannelGroup;Segment;Payback_180\nsocial_ppc;ALL campaigns;1\n"
+
+
+def test_upload_endpoint_cac_accumulates_two_group_files(upload_env):
+    import asyncio
+
+    routes, data_root = upload_env
+    first = "CAC_payback_by_channelgroup_2025-03_2026-02.csv"
+    second = "CAC_payback_by_channelgroup_2026-03_2026-08.csv"
+
+    async def _run():
+        for name in (first, second):
+            result = await _upload(routes, name, "cac_payback_groups", CAC_GROUPS_BODY)
+            assert result["success"] is True
+        response = await routes.get_file_metadata(week=WEEK)
+        return json.loads(response.body)
+
+    payload = asyncio.run(_run())["cac_payback_groups"]
+    slot = data_root / "raw" / WEEK / "cac_payback_groups"
+    names = {p.name for p in list_slot_files(slot)}
+    assert names == {first, second}
+    listed = {f["filename"] for f in payload["files"]}
+    assert listed == names
+    assert payload["accumulates"] is True
+
+
+def test_upload_endpoint_routes_mixed_cac_filenames_from_one_slot(upload_env):
+    import asyncio
+
+    routes, data_root = upload_env
+    files = [
+        ("CAC_payback_by_channelgroup_2025-03_2026-02.csv", CAC_GROUPS_BODY),
+        ("CAC_payback_by_campaign_segment.csv", CAC_SEGMENTS_BODY),
+        ("CAC_payback_horizon_180d_vs_365d.csv", CAC_HORIZON_BODY),
+    ]
+
+    async def _run():
+        for name, body in files:
+            result = await _upload(routes, name, "cac_payback_groups", body)
+            assert result["success"] is True
+        response = await routes.get_file_metadata(week=WEEK)
+        return json.loads(response.body)
+
+    payload = asyncio.run(_run())
+    groups = data_root / "raw" / WEEK / "cac_payback_groups"
+    segments = data_root / "raw" / WEEK / "cac_payback_segments"
+    horizon = data_root / "raw" / WEEK / "cac_payback_horizon"
+    assert {p.name for p in list_slot_files(groups)} == {
+        "CAC_payback_by_channelgroup_2025-03_2026-02.csv"
+    }
+    assert {p.name for p in list_slot_files(segments)} == {"CAC_payback_by_campaign_segment.csv"}
+    assert {p.name for p in list_slot_files(horizon)} == {"CAC_payback_horizon_180d_vs_365d.csv"}
+    assert payload["cac_payback_groups"]["accumulates"] is True
+    assert payload["cac_payback_segments"]["accumulates"] is True
+    assert payload["cac_payback_horizon"]["accumulates"] is True
+
+
+def test_upload_endpoint_does_not_reroute_unknown_cac_name(upload_env):
+    import asyncio
+
+    routes, data_root = upload_env
+
+    async def _run():
+        result = await _upload(routes, "custom_export.csv", "cac_payback_segments", CAC_SEGMENTS_BODY)
+        assert result["success"] is True
+
+    asyncio.run(_run())
+    slot = data_root / "raw" / WEEK / "cac_payback_segments"
+    assert {p.name for p in list_slot_files(slot)} == {"custom_export.csv"}
+    groups = data_root / "raw" / WEEK / "cac_payback_groups"
+    assert list_slot_files(groups) == []

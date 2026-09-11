@@ -34,6 +34,8 @@ interface BatchFileUploadProps {
   refreshData: () => Promise<void>
   loading: boolean
   loadingProgress?: { message: string; percentage: number } | null
+  /** When set, a picked file whose name matches another slot in this group is moved there. */
+  inferFileType?: (filename: string) => string | null
 }
 
 /** Base 5 min covers slow hosts (e.g. Render free cold start); +1 min per MB over 10 MB; max 15 min. */
@@ -49,7 +51,8 @@ export default function BatchFileUpload({
   onUploadComplete,
   refreshData,
   loading,
-  loadingProgress
+  loadingProgress,
+  inferFileType
 }: BatchFileUploadProps) {
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File[]>>({})
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, UploadStatus>>({})
@@ -84,8 +87,27 @@ export default function BatchFileUpload({
   const handleFileChange = (fileType: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files ? Array.from(e.target.files) : []
     if (picked.length === 0) return
-    setSelectedFiles(prev => ({ ...prev, [fileType]: picked }))
-    setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'idle' } }))
+    const knownTypes = new Set(fileTypes.map((ft) => ft.type))
+    const routed: Record<string, File[]> = {}
+    for (const file of picked) {
+      const inferred = inferFileType?.(file.name)
+      const dest = inferred && knownTypes.has(inferred) ? inferred : fileType
+      routed[dest] = [...(routed[dest] || []), file]
+    }
+    setSelectedFiles((prev) => {
+      const next = { ...prev, ...routed }
+      if (!routed[fileType]) {
+        next[fileType] = []
+      }
+      return next
+    })
+    setUploadStatuses((prev) => {
+      const next = { ...prev }
+      for (const t of new Set([...Object.keys(routed), fileType])) {
+        next[t] = { status: 'idle' }
+      }
+      return next
+    })
     setUploadResults({ success: [], failed: [] })
   }
 

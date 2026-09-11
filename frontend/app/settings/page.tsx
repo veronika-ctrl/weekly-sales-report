@@ -23,6 +23,14 @@ import {
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 
+function inferCacPaybackFileType(filename: string): string | null {
+  const name = filename.toLowerCase()
+  if (name.includes('cac_payback_by_channelgroup')) return 'cac_payback_groups'
+  if (name.includes('cac_payback_by_campaign_segment')) return 'cac_payback_segments'
+  if (name.includes('cac_payback_horizon')) return 'cac_payback_horizon'
+  return null
+}
+
 export default function Settings() {
   const { refreshData, loading, loadingProgress, baseWeek, setBaseWeek } = useDataCache()
   const { animationsEnabled, setAnimationsEnabled } = useChartSettings()
@@ -313,21 +321,30 @@ export default function Settings() {
     },
   ]
 
+  const cacPaybackHint =
+    'Keep extra period extracts in this same slot. Multi-select them, or upload one then the other — a later upload does not delete the first if the filenames differ. Re-uploading the same filename replaces that file only.'
+
   const cacPaybackFileTypes = [
     {
       type: 'cac_payback_groups',
       label: 'CAC payback — ChannelGroup (2025-03 to 2026-02)',
       formats: '.csv',
+      accumulate: true,
+      hint: cacPaybackHint,
     },
     {
       type: 'cac_payback_segments',
       label: 'CAC payback — campaign segments',
       formats: '.csv',
+      accumulate: true,
+      hint: cacPaybackHint,
     },
     {
       type: 'cac_payback_horizon',
       label: 'CAC payback — 180d vs 365d horizon',
       formats: '.csv',
+      accumulate: true,
+      hint: cacPaybackHint,
     },
   ]
 
@@ -591,15 +608,22 @@ export default function Settings() {
                 <div>
                   <h4 className="text-sm font-medium">CAC payback by channel — last-click</h4>
                   <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-                    Sibling of Retention by channel, not Adjusted aMER. Upload the three Dema CAC
-                    payback CSVs: ChannelGroup headline, campaign segments (prospecting/retargeting,
-                    branded/non-branded, editorial/coupon), and 180d vs 365d. Net GP2 is derived
-                    from channel margin rates; payback is an average, not a marginal return.
+                    Sibling of Retention by channel, not Adjusted aMER. Three slots stay
+                    separate: ChannelGroup headline, campaign segments (prospecting/retargeting,
+                    branded/non-branded, editorial/coupon), and 180d vs 365d. Each slot keeps
+                    more than one file — add another extract without wiping the first. Multi-select
+                    all three CAC CSVs in any slot and we route by filename (
+                    <code>CAC_payback_by_channelgroup_*</code>,{' '}
+                    <code>CAC_payback_by_campaign_segment*</code>,{' '}
+                    <code>CAC_payback_horizon_*</code>
+                    ). Net GP2 is derived from channel margin rates; payback is an average, not a
+                    marginal return.
                   </p>
                 </div>
                 <BatchFileUpload
                   fileTypes={cacPaybackFileTypes}
                   currentWeek={selectedWeek}
+                  inferFileType={inferCacPaybackFileType}
                   onUploadComplete={async () => {
                     await loadMetadata(true)
                   }}
@@ -716,8 +740,8 @@ export default function Settings() {
                           {metadata[ft.type].accumulates &&
                             (metadata[ft.type].files?.length || 0) > 1 && (
                               <p className="text-xs text-muted-foreground">
-                                {metadata[ft.type].files.length} files kept in this slot (week +
-                                month uploads accumulate).
+                                {metadata[ft.type].files.length} files kept in this slot
+                                (different filenames accumulate; same name replaces that file).
                               </p>
                             )}
                           {/* Dimension validation: skip types with no Country column. */}

@@ -48,6 +48,7 @@ from weekly_report.src.metrics.retention_by_channel import (
 from weekly_report.src.metrics.cac_payback import (
     CAC_PAYBACK_FILE_TYPES,
     calculate_cac_payback,
+    resolve_cac_payback_upload_type,
 )
 from weekly_report.src.metrics.klaviyo_email import (
     KLAVIYO_EMAIL_TYPE,
@@ -4006,10 +4007,18 @@ async def upload_file(
         csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
+
+        if file_type in CAC_PAYBACK_FILE_TYPES:
+            routed = resolve_cac_payback_upload_type(file_type, file.filename)
+            if routed != file_type:
+                logger.info(
+                    f"Routed CAC upload {file.filename!r} from {file_type} to {routed}"
+                )
+            file_type = routed
         
         # Create target directory. Replace-on-upload types wipe siblings;
-        # aMER Dema + Shopify customers + discounts keep other files in the slot
-        # (week + month CSVs coexist). Same sanitized filename overwrites that file only.
+        # aMER Dema + Shopify customers + discounts + CAC payback keep other files
+        # in the slot (successive CSVs coexist). Same sanitized filename overwrites that file only.
         config = load_config(week=week)
         target_dir = config.raw_data_path / file_type
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)

@@ -7,15 +7,21 @@ from pathlib import Path
 from typing import FrozenSet, List
 
 from weekly_report.src.metrics.adjusted_amer import AMER_DEMA_FILE_TYPES, SHOPIFY_CUSTOMERS_TYPE
+from weekly_report.src.metrics.cac_payback import CAC_PAYBACK_FILE_TYPES
 
 # Slots that keep prior CSVs so week + month (or successive history) files coexist.
 # Same sanitized filename in the same week folder still overwrites that one file
 # (a corrected W36 replaces the test-only W36; August with a different name stays).
 ACCUMULATING_FILE_TYPES: FrozenSet[str] = frozenset(
-    {"discounts", SHOPIFY_CUSTOMERS_TYPE, *AMER_DEMA_FILE_TYPES}
+    {
+        "discounts",
+        SHOPIFY_CUSTOMERS_TYPE,
+        *AMER_DEMA_FILE_TYPES,
+        *CAC_PAYBACK_FILE_TYPES,
+    }
 )
 
-# CAC / retention / Klaviyo / weekly Qlik+Dema+Shopify sessions: one file per slot.
+# Retention / Klaviyo / weekly Qlik+Dema+Shopify sessions: one file per slot.
 REPLACE_ON_UPLOAD_FILE_TYPES: FrozenSet[str] = frozenset(
     {
         "qlik",
@@ -24,9 +30,6 @@ REPLACE_ON_UPLOAD_FILE_TYPES: FrozenSet[str] = frozenset(
         "shopify",
         "budget",
         "retention_customers",
-        "cac_payback_groups",
-        "cac_payback_segments",
-        "cac_payback_horizon",
         "klaviyo_email",
     }
 )
