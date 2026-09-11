@@ -5,8 +5,8 @@ import { Calendar, FileText } from 'lucide-react'
 
 interface FileMetadataProps {
   filename: string
-  firstDate: string
-  lastDate: string
+  firstDate?: string
+  lastDate?: string
   uploadedAt: string
   rowCount?: number
 }

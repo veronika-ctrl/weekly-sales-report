@@ -17,6 +17,9 @@ interface FileType {
   type: string
   label: string
   formats: string
+  /** Week + month (or history) files stay in the same slot; input allows multi-select. */
+  accumulate?: boolean
+  hint?: string
 }
 
 interface UploadStatus {
@@ -31,6 +34,8 @@ interface BatchFileUploadProps {
   refreshData: () => Promise<void>
   loading: boolean
   loadingProgress?: { message: string; percentage: number } | null
+  /** When set, a picked file whose name matches another slot in this group is moved there. */
+  inferFileType?: (filename: string) => string | null
 }
 
 /** Base 5 min covers slow hosts (e.g. Render free cold start); +1 min per MB over 10 MB; max 15 min. */
@@ -46,9 +51,10 @@ export default function BatchFileUpload({
   onUploadComplete,
   refreshData,
   loading,
-  loadingProgress
+  loadingProgress,
+  inferFileType
 }: BatchFileUploadProps) {
-  const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({})
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File[]>>({})
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, UploadStatus>>({})
   const [isUploading, setIsUploading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -79,11 +85,30 @@ export default function BatchFileUpload({
   }, [fileTypes])
 
   const handleFileChange = (fileType: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFiles(prev => ({ ...prev, [fileType]: e.target.files![0] }))
-      setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'idle' } }))
-      setUploadResults({ success: [], failed: [] })
+    const picked = e.target.files ? Array.from(e.target.files) : []
+    if (picked.length === 0) return
+    const knownTypes = new Set(fileTypes.map((ft) => ft.type))
+    const routed: Record<string, File[]> = {}
+    for (const file of picked) {
+      const inferred = inferFileType?.(file.name)
+      const dest = inferred && knownTypes.has(inferred) ? inferred : fileType
+      routed[dest] = [...(routed[dest] || []), file]
     }
+    setSelectedFiles((prev) => {
+      const next = { ...prev, ...routed }
+      if (!routed[fileType]) {
+        next[fileType] = []
+      }
+      return next
+    })
+    setUploadStatuses((prev) => {
+      const next = { ...prev }
+      for (const t of new Set([...Object.keys(routed), fileType])) {
+        next[t] = { status: 'idle' }
+      }
+      return next
+    })
+    setUploadResults({ success: [], failed: [] })
   }
 
   const uploadSingleFile = async (
@@ -197,9 +222,9 @@ export default function BatchFileUpload({
 
   const handleUploadAll = async () => {
     // Get all file types that have selected files
-    const filesToUpload = Object.entries(selectedFiles)
-      .filter(([_, file]) => file !== null)
-      .map(([type, file]) => ({ type, file: file! }))
+    const filesToUpload = Object.entries(selectedFiles).flatMap(([type, files]) =>
+      (files || []).map((file) => ({ type, file }))
+    )
 
     // If no new files selected, still allow a full refresh so users don't need to re-upload
     if (filesToUpload.length === 0) {
@@ -316,7 +341,7 @@ export default function BatchFileUpload({
     }
   }
 
-  const hasSelectedFiles = Object.values(selectedFiles).some(file => file !== null)
+  const hasSelectedFiles = Object.values(selectedFiles).some((files) => (files || []).length > 0)
   // Allow button to be enabled even if no files selected (for refresh-only mode)
   const canUpload = !isUploading && !isRefreshing && overallStatus !== 'refreshing' && !loading
 
@@ -324,27 +349,35 @@ export default function BatchFileUpload({
     <div className="space-y-6">
       <div className="space-y-4">
         {fileTypes.map((ft) => {
-          const file = selectedFiles[ft.type]
+          const files = selectedFiles[ft.type] || []
           const status = uploadStatuses[ft.type] || { status: 'idle' }
-          const hasFile = file !== null
+          const hasFile = files.length > 0
 
           return (
             <div key={ft.type} className="space-y-2">
               <Label htmlFor={`file-${ft.type}`} className="text-sm font-medium">
                 {ft.label}
               </Label>
+              {ft.hint && (
+                <p className="text-xs text-muted-foreground">{ft.hint}</p>
+              )}
               <div className="flex gap-2 items-center">
                 <Input
                   id={`file-${ft.type}`}
                   type="file"
                   accept={ft.formats}
+                  multiple={Boolean(ft.accumulate)}
                   onChange={(e) => handleFileChange(ft.type, e)}
                   disabled={isUploading || isRefreshing}
                   className="flex-1"
                 />
                 {status.status === 'idle' && hasFile && (
                   <div className="flex items-center gap-2 text-sm text-gray-600 min-w-[120px]">
-                    <span>{file?.name}</span>
+                    <span>
+                      {files.length === 1
+                        ? files[0].name
+                        : `${files.length} files selected`}
+                    </span>
                   </div>
                 )}
                 {status.status === 'uploading' && (
@@ -366,6 +399,13 @@ export default function BatchFileUpload({
                   </div>
                 )}
               </div>
+              {ft.accumulate && files.length > 1 && status.status === 'idle' && (
+                <ul className="text-xs text-gray-600 list-disc pl-5">
+                  {files.map((f) => (
+                    <li key={f.name}>{f.name}</li>
+                  ))}
+                </ul>
+              )}
               {status.status === 'error' && status.errorMessage && (
                 <div className="text-xs text-red-600 ml-1">
                   {status.errorMessage}
@@ -480,8 +520,8 @@ export default function BatchFileUpload({
                 <span>{uploadResults.failed.length} file(s) failed</span>
               </div>
               <ul className="list-disc list-inside text-xs text-red-600 ml-6 space-y-1">
-                {uploadResults.failed.map(({ type, error }) => (
-                  <li key={type}>
+                {uploadResults.failed.map(({ type, error }, idx) => (
+                  <li key={`${type}-${idx}`}>
                     {fileTypes.find(ft => ft.type === type)?.label || type}: {error}
                   </li>
                 ))}
