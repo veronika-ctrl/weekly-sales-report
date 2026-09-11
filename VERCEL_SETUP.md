@@ -59,6 +59,21 @@ NEXT_PUBLIC_DISABLE_SUPABASE=false     # viktigt: false eller utelämna – anna
 - Om du **utelämnar** `NEXT_PUBLIC_DISABLE_SUPABASE` används Supabase när URL och anon key är satta.
 - Sätt **endast** `NEXT_PUBLIC_DISABLE_SUPABASE=true` om du medvetet vill stänga av Supabase (t.ex. bara API-läge).
 
+#### HTTP Basic Auth (required before sharing the URL — company revenue/spend data)
+Set these for **Production** and **Preview**, then **Redeploy**. The password is not stored in git.
+
+```
+SITE_BASIC_AUTH_USER=ohjay
+SITE_BASIC_AUTH_PASSWORD=          # choose a long random password in the dashboard
+```
+
+You can use `SITE_PASSWORD` instead of `SITE_BASIC_AUTH_PASSWORD` if you prefer a single variable.
+
+- After deploy, visitors get a browser login prompt. Username example: `ohjay`. Use the password you set above.
+- `NEXT_PUBLIC_DISABLE_SUPABASE=true` does **not** bypass this gate.
+- If `SITE_BASIC_AUTH_PASSWORD` / `SITE_PASSWORD` is missing on **Production**, the site stays locked (HTTP 401) so data is not world-readable.
+- Vercel Preview deployments may also ask for Vercel SSO (Deployment Protection). A colleague who is not on the Vercel team cannot use SSO. To share a Preview URL, either disable Deployment Protection for Preview and keep this password, or merge to Production and share `https://weekly-sales-report-two.vercel.app` after the env vars are set.
+
 #### Valfria (för development/preview):
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000  # Endast för local dev
