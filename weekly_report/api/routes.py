@@ -24,7 +24,6 @@ import re
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import tempfile
-import shutil
 from io import BytesIO
 from datetime import datetime, timedelta
 from loguru import logger
@@ -88,7 +87,6 @@ from weekly_report.src.compute.budget_table1_month import (
     budget_table1_for_calendar_month as _budget_table1_for_calendar_month,
     derive_emer_from_budget_components as _derive_emer_from_budget_components,
 )
-from weekly_report.src.utils.file_metadata import extract_file_metadata
 from weekly_report.src.storage.uploads import (
     is_accumulating_file_type,
     list_slot_files,
@@ -4002,6 +4000,23 @@ async def get_batch_all_metrics(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def persist_upload_file(upload: UploadFile, dest: Path) -> int:
+    """Write the upload in 1 MB chunks so a large Qlik xlsx yields to other requests."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    with dest.open("wb") as buffer:
+        while True:
+            chunk = await upload.read(UPLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            buffer.write(chunk)
+            size += len(chunk)
+    return size
+
+
 @app.post("/api/upload-file")
 async def upload_file(
     file: UploadFile = File(...),
@@ -4011,6 +4026,10 @@ async def upload_file(
     """
     Upload data file for specific week and type.
     Validates file type, extracts date range, saves to correct location.
+
+    Starlette has no small default multipart cap (Qlik xlsx can be ~90 MB).
+    Do not pandas-scan the file before returning — that blocked Render and
+    made the Settings UI sit at 99% until the 5-minute browser abort.
     """
     try:
         # Validate week format
@@ -4050,10 +4069,9 @@ async def upload_file(
         config = load_config(week=week)
         target_dir = config.raw_data_path / file_type
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
-        with target_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        bytes_written = await persist_upload_file(file, target_path)
         
-        logger.info(f"File uploaded: {target_path}")
+        logger.info(f"File uploaded: {target_path} ({bytes_written} bytes)")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")
         
         # Special handling for budget files: save to Supabase for reuse (only when Supabase is enabled)
@@ -4152,13 +4170,14 @@ async def upload_file(
         except Exception as invalidation_error:
             logger.warning(f"Failed to invalidate Supabase cache (non-blocking): {invalidation_error}")
         
-        # Extract metadata (date range)
-        metadata = extract_file_metadata(target_path, file_type)
-        
+        # File is already on disk. Do not scan it with pandas here — a full Qlik
+        # xlsx read blocks the single Render worker, the UI sits at 99%, and
+        # every other Settings card times out. Current Files uses GET /api/file-metadata.
         return {
             "success": True,
             "file_path": str(target_path),
-            "metadata": metadata
+            "bytes_written": bytes_written,
+            "metadata": {"deferred": True},
         }
         
     except HTTPException:

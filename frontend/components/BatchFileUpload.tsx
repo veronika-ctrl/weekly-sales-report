@@ -1,12 +1,22 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { CheckCircle, XCircle, Loader2, Upload, RefreshCw } from 'lucide-react'
 import { getApiBaseUrl } from '@/lib/api'
+import { releaseUploadLock, tryAcquireUploadLock } from '@/lib/upload-lock'
+import {
+  computeUploadTimeoutMs,
+  formatOtherCardUploadingError,
+  formatSkippedAfterTimeoutError,
+  formatUploadFileSize,
+  formatUploadTimeoutError,
+  isRemoteApiUrl,
+  shouldAbortRemainingUploads,
+} from '@/lib/upload-timeout'
 
 function clampPct(n: number): number {
   if (!Number.isFinite(n)) return 0
@@ -38,13 +48,6 @@ interface BatchFileUploadProps {
   inferFileType?: (filename: string) => string | null
 }
 
-/** Base 5 min covers slow hosts (e.g. Render free cold start); +1 min per MB over 10 MB; max 15 min. */
-function computeUploadTimeoutMs(fileSizeMB: number): number {
-  const baseMs = 5 * 60 * 1000
-  const extraOver10Mb = Math.max(0, fileSizeMB - 10) * 60 * 1000
-  return Math.min(15 * 60 * 1000, baseMs + extraOver10Mb)
-}
-
 export default function BatchFileUpload({
   fileTypes,
   currentWeek,
@@ -68,7 +71,12 @@ export default function BatchFileUpload({
     fileName: string
     progress: number
     phase?: 'uploading' | 'processing'
+    elapsedMs?: number
   } | null>(null)
+  const lockIdRef = useRef(`batch-${Math.random().toString(36).slice(2)}`)
+  const cancelledRef = useRef(false)
+  const activeAbortRef = useRef<AbortController | null>(null)
+  const remoteApi = isRemoteApiUrl(getApiBaseUrl())
 
   // Initialize upload statuses function
   const initializeStatuses = () => {
@@ -114,13 +122,10 @@ export default function BatchFileUpload({
   const uploadSingleFile = async (
     fileType: string, 
     file: File,
-    onProgress?: (progress: number, phase?: 'uploading' | 'processing') => void
+    onProgress?: (progress: number, phase?: 'uploading' | 'processing', elapsedMs?: number) => void
   ): Promise<{ success: boolean, error?: string }> => {
     setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'uploading' } }))
     
-    // Simulera progress eftersom fetch inte har inbyggd progress support
-    // Vi uppdaterar status baserat på tiden för att ge användaren feedback
-    const startTime = Date.now()
     const fileSize = file.size
     let progressInterval: NodeJS.Timeout | null = null
     let timeoutId: NodeJS.Timeout | null = null
@@ -131,39 +136,32 @@ export default function BatchFileUpload({
       formData.append('week', currentWeek)
       formData.append('file_type', fileType)
 
-      // Använd fetch med timeout - längre timeout för större filer (QLIK kan vara stora)
       const controller = new AbortController()
-      const fileSizeMB = file.size / (1024 * 1024)
-      const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
+      activeAbortRef.current = controller
+      const timeoutMs = computeUploadTimeoutMs(file.size, { remoteApi })
       timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-      // Start progress simulation - uppdatera progress under uppladdning och processing
       if (onProgress) {
-        let uploadPhase = true // true = uploading, false = processing
+        let uploadPhase = true
         const uploadStartTime = Date.now()
         
         progressInterval = setInterval(() => {
           const elapsed = Date.now() - uploadStartTime
           
           if (uploadPhase) {
-            // Upload phase: 0-80% baserat på uppskattad uppladdningstid
-            // Större filer tar längre tid att ladda upp
-            const estimatedUploadTime = Math.max(3000, fileSize / 5000) // Minst 3 sekunder
+            const estimatedUploadTime = Math.max(3000, fileSize / 5000)
             const uploadProgress = Math.min(80, (elapsed / estimatedUploadTime) * 100)
-            onProgress(uploadProgress, 'uploading')
+            onProgress(uploadProgress, 'uploading', elapsed)
             
-            // Efter 80% eller 5 sekunder, gå över till processing phase
             if (uploadProgress >= 80 || elapsed > 5000) {
               uploadPhase = false
             }
           } else {
-            // Processing phase: 80-99% - servern processar filen
-            // Öka långsamt från 80% till 99% medan vi väntar på svar
-            const processingElapsed = elapsed - 5000 // Tid sedan processing började
-            const processingProgress = Math.min(99, 80 + (processingElapsed / 30000) * 19) // 19% över 30 sekunder
-            onProgress(processingProgress, 'processing')
+            const processingElapsed = elapsed - 5000
+            const processingProgress = Math.min(99, 80 + (processingElapsed / 30000) * 19)
+            onProgress(processingProgress, 'processing', elapsed)
           }
-        }, 200) // Uppdatera var 200ms
+        }, 200)
       }
 
       const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
@@ -175,6 +173,7 @@ export default function BatchFileUpload({
 
       if (timeoutId) clearTimeout(timeoutId)
       if (progressInterval) clearInterval(progressInterval)
+      activeAbortRef.current = null
       if (onProgress) onProgress(100)
 
       if (!response.ok) {
@@ -196,24 +195,29 @@ export default function BatchFileUpload({
       setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'success' } }))
       return { success: true }
     } catch (error: any) {
-      // Cleanup on error
       if (timeoutId) clearTimeout(timeoutId)
       if (progressInterval) clearInterval(progressInterval)
+      activeAbortRef.current = null
       
       let errorMessage = error.message || 'Upload failed'
-      const fileSizeMB = file.size / (1024 * 1024)
+      const timeoutMs = computeUploadTimeoutMs(file.size, { remoteApi })
       
-      // Handle specific error types
-      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-        const timeoutMs = computeUploadTimeoutMs(fileSizeMB)
-        const timeoutMinutes = Math.round(timeoutMs / 60000)
-        errorMessage = `Upload timeout: The file "${file.name}" (${fileSizeMB.toFixed(1)} MB) took too long to upload (over ${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}). The file may be too large or the server may be slow. Please try again.`
+      if (cancelledRef.current) {
+        errorMessage = 'Upload cancelled. Refresh Settings, then upload one file at a time.'
+      } else if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+        errorMessage = formatUploadTimeoutError({
+          fileName: file.name,
+          bytes: file.size,
+          timeoutMs,
+          remoteApi,
+        })
       } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
         errorMessage =
-          'Network error: API unreachable. Free hosts often sleep—wait ~1 min and retry, or open https://…/docs once to wake the server. ' +
-          'Verify NEXT_PUBLIC_API_URL and FRONTEND_URL on Render.'
+          `Network error while uploading "${file.name}" (${formatUploadFileSize(file.size)}). ` +
+          'Free hosts often sleep or a previous file is still blocking the worker—wait ~1 min and retry this file alone. ' +
+          'Confirm NEXT_PUBLIC_API_URL points at Render (not a Vercel /api rewrite).'
       } else if (error.message?.includes('signal is aborted') || error.message?.includes('aborted without reason')) {
-        errorMessage = `Upload was cancelled or timed out. Please try again.`
+        errorMessage = `Upload was cancelled or timed out. Please try again with this one file.`
       }
       
       setUploadStatuses(prev => ({ ...prev, [fileType]: { status: 'error', errorMessage } }))
@@ -252,6 +256,15 @@ export default function BatchFileUpload({
       return
     }
 
+    if (!tryAcquireUploadLock(lockIdRef.current)) {
+      setUploadResults({
+        success: [],
+        failed: [{ type: filesToUpload[0].type, error: formatOtherCardUploadingError() }],
+      })
+      return
+    }
+
+    cancelledRef.current = false
     setIsUploading(true)
     setOverallStatus('uploading')
     setUploadResults({ success: [], failed: [] })
@@ -260,71 +273,86 @@ export default function BatchFileUpload({
     // Avoid first paint with total=0 (React batches updates → "1 of 0", NaN% before loop runs).
     setUploadProgress({ current: 0, total: filesToUpload.length })
 
-    // Wake cold hosts (e.g. Render free) before uploads so the first file is less likely to fail.
-    const apiBase = getApiBaseUrl()
-    if (String(process.env.NEXT_PUBLIC_API_URL || '').trim()) {
-      const warm = new AbortController()
-      const warmT = setTimeout(() => warm.abort(), 120000)
-      try {
-        await fetch(`${apiBase.replace(/\/$/, '')}/api/health`, {
-          method: 'GET',
-          cache: 'no-store',
-          credentials: 'include',
-          signal: warm.signal,
-        })
-      } catch {
-        // Continue; upload may still succeed once the service is up.
-      } finally {
-        clearTimeout(warmT)
-      }
-    }
-
     const results: { success: string[], failed: Array<{ type: string, error: string }> } = { 
       success: [], 
       failed: [] 
     }
 
-    // Upload files sequentially with detailed progress
-    for (let i = 0; i < filesToUpload.length; i++) {
-      const { type, file } = filesToUpload[i]
-      const fileTypeInfo = fileTypes.find(ft => ft.type === type)
-      
-      // Set current file BEFORE starting upload
-      setCurrentUploadingFile({
-        type,
-        label: fileTypeInfo?.label || type,
-        fileName: file.name,
-        progress: 0,
-        phase: 'uploading'
-      })
-      
-      // Update overall progress (which file we're on)
-      setUploadProgress({ current: i, total: filesToUpload.length })
-
-      // Upload with progress callback
-      const result = await uploadSingleFile(type, file, (progress, phase) => {
-        setCurrentUploadingFile(prev => prev ? { ...prev, progress, phase: phase || 'uploading' } : null)
-      })
-      
-      if (result.success) {
-        results.success.push(type)
-      } else {
-        results.failed.push({ type, error: result.error || 'Unknown error' })
+    try {
+      // Wake cold hosts (e.g. Render free) before uploads so the first file is less likely to fail.
+      const apiBase = getApiBaseUrl()
+      if (String(process.env.NEXT_PUBLIC_API_URL || '').trim()) {
+        const warm = new AbortController()
+        const warmT = setTimeout(() => warm.abort(), 120000)
+        try {
+          await fetch(`${apiBase.replace(/\/$/, '')}/api/health`, {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'include',
+            signal: warm.signal,
+          })
+        } catch {
+          // Continue; upload may still succeed once the service is up.
+        } finally {
+          clearTimeout(warmT)
+        }
       }
 
-      // Clear current file
+      let abortRest = false
+
+      // One file at a time. Do not start file N+1 until file N returns or is aborted.
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const { type, file } = filesToUpload[i]
+        const fileTypeInfo = fileTypes.find(ft => ft.type === type)
+
+        if (cancelledRef.current || abortRest) {
+          const skipError = cancelledRef.current
+            ? 'Upload cancelled. Remaining files were not sent.'
+            : formatSkippedAfterTimeoutError(file.name)
+          results.failed.push({ type, error: skipError })
+          setUploadStatuses(prev => ({ ...prev, [type]: { status: 'error', errorMessage: skipError } }))
+          continue
+        }
+        
+        setCurrentUploadingFile({
+          type,
+          label: fileTypeInfo?.label || type,
+          fileName: file.name,
+          progress: 0,
+          phase: 'uploading',
+          elapsedMs: 0,
+        })
+        
+        setUploadProgress({ current: i, total: filesToUpload.length })
+
+        const result = await uploadSingleFile(type, file, (progress, phase, elapsedMs) => {
+          setCurrentUploadingFile(prev =>
+            prev ? { ...prev, progress, phase: phase || 'uploading', elapsedMs } : null
+          )
+        })
+        
+        if (result.success) {
+          results.success.push(type)
+        } else {
+          results.failed.push({ type, error: result.error || 'Unknown error' })
+          if (shouldAbortRemainingUploads(result.error || '')) {
+            abortRest = true
+          }
+        }
+
+        setCurrentUploadingFile(null)
+
+        if (i < filesToUpload.length - 1 && !abortRest && !cancelledRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      }
+    } finally {
+      setUploadProgress({ current: filesToUpload.length, total: filesToUpload.length })
+      setUploadResults(results)
+      setIsUploading(false)
       setCurrentUploadingFile(null)
-
-      // Small delay between uploads to avoid overwhelming the server
-      if (i < filesToUpload.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-      }
+      releaseUploadLock(lockIdRef.current)
     }
-
-    setUploadProgress({ current: filesToUpload.length, total: filesToUpload.length })
-    setUploadResults(results)
-    setIsUploading(false)
-    setCurrentUploadingFile(null)
 
     // Reload file metadata only — full dashboard refresh is slow (large Qlik export) and optional
     // until all files for the week are uploaded. User clicks "Refresh All Data" when ready.
@@ -343,7 +371,13 @@ export default function BatchFileUpload({
     }
   }
 
+  const handleCancelUpload = () => {
+    cancelledRef.current = true
+    activeAbortRef.current?.abort()
+  }
+
   const hasSelectedFiles = Object.values(selectedFiles).some((files) => (files || []).length > 0)
+  const selectedFileCount = Object.values(selectedFiles).reduce((n, files) => n + (files || []).length, 0)
   // Allow button to be enabled even if no files selected (for refresh-only mode)
   const canUpload = !isUploading && !isRefreshing && overallStatus !== 'refreshing' && !loading
 
@@ -431,8 +465,10 @@ export default function BatchFileUpload({
                       {currentUploadingFile.phase === 'processing' ? 'Processing' : 'Uploading'}: {currentUploadingFile.label}
                     </div>
                     <div className="text-xs text-gray-600 mt-0.5 truncate">
-                      {currentUploadingFile.fileName} • File {uploadProgress.current + 1} of {uploadProgress.total}
-                      {currentUploadingFile.phase === 'processing' && ' • Server is processing file...'}
+                      {currentUploadingFile.fileName} ({formatUploadFileSize(
+                        (selectedFiles[currentUploadingFile.type] || []).find(f => f.name === currentUploadingFile.fileName)?.size ?? 0
+                      )}) • File {uploadProgress.current + 1} of {uploadProgress.total}
+                      {currentUploadingFile.phase === 'processing' && ' • Waiting for the API to finish...'}
                     </div>
                   </div>
                 </>
@@ -481,6 +517,12 @@ export default function BatchFileUpload({
                 style={{ width: `${currentUploadingFile.progress}%` }}
               />
             </div>
+          )}
+          {currentUploadingFile?.phase === 'processing' && (currentUploadingFile.elapsedMs || 0) > 45_000 && (
+            <p className="text-xs text-amber-800">
+              Still waiting after {Math.round((currentUploadingFile.elapsedMs || 0) / 1000)}s.
+              Render processes one request at a time — cancel and retry this file alone if the bar stays at 99%.
+            </p>
           )}
         </div>
       )}
@@ -540,8 +582,26 @@ export default function BatchFileUpload({
         </p>
       )}
 
+      {remoteApi && selectedFileCount > 1 && !isUploading && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3">
+          {selectedFileCount} files selected. On production, upload <strong>one file at a time</strong> and
+          wait until Current Files lists it. A Qlik Excel plus several CSVs in one click will sit at 99%
+          while Render is busy; later files then show a timeout.
+        </p>
+      )}
+
       {/* Upload All Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {isUploading && (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={handleCancelUpload}
+          >
+            Cancel
+          </Button>
+        )}
         <Button
           onClick={handleUploadAll}
           disabled={!canUpload}

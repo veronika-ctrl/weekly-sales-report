@@ -68,7 +68,8 @@ export function getApiStorageWarning(opts: {
         'This site’s reports read CSVs from the FastAPI host in NEXT_PUBLIC_API_URL. ' +
         'Render’s default disk is ephemeral: a deploy, restart, or free-tier spin-up wipes every upload. ' +
         'Attach a persistent disk at DATA_ROOT (e.g. ./data) on Render, keep that service awake while you upload, ' +
-        'and confirm Current Files lists the CSVs for this week before opening reports.',
+        'and confirm Current Files lists the CSVs for this week before opening reports. ' +
+        'Upload one file at a time — a Qlik Excel plus many CSVs in one click times out at 99%.',
     }
   }
 
