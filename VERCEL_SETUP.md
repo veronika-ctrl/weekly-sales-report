@@ -1,5 +1,44 @@
 # Vercel Deployment Guide
 
+## Production architecture (Vercel frontend + Render API)
+
+The live site [https://weekly-sales-report-two.vercel.app](https://weekly-sales-report-two.vercel.app) is **Next.js on Vercel**. It does **not** store CSVs. `frontend/next.config.ts` rewrites `/api/:path*` to `http://127.0.0.1:8000/api/:path*`, which only works on a laptop where Uvicorn is running. On Vercel that rewrite has nowhere to go.
+
+FastAPI for production is the Render service **`https://weekly-sales-report.onrender.com`** (`GET /api/health` → `{"status":"healthy","service":"weekly-report-api"}`). CORS already allows `https://weekly-sales-report-two.vercel.app`.
+
+| What | Where it must live |
+|---|---|
+| Site password (HTTP Basic Auth) | Vercel env: `SITE_BASIC_AUTH_USER` / `SITE_BASIC_AUTH_PASSWORD` |
+| Browser API calls + Settings uploads | Vercel **Production** env: `NEXT_PUBLIC_API_URL=https://weekly-sales-report.onrender.com` — **not** `same-origin`, **not** `http://127.0.0.1:8000` |
+| CSV files (`data/raw/{week}/…`) | Render disk (`DATA_ROOT`). Default Render disk is **ephemeral**: deploys and free-tier restarts wipe every upload |
+| Weekly Summary / Qlik / audience cache | Supabase `weekly_report_metrics`, written by Render on **Refresh all data**. Requires a working `SUPABASE_SERVICE_ROLE_KEY` on Render |
+
+**Do this on Vercel (then Redeploy):**
+
+```
+NEXT_PUBLIC_API_URL=https://weekly-sales-report.onrender.com
+```
+
+Optional: `NEXT_PUBLIC_DISABLE_SUPABASE=false` plus `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` so the week chip can show `2026-36 ✓` after a successful sync.
+
+**Do this on Render:**
+
+1. Attach a **persistent disk** mounted where the app writes `DATA_ROOT` (typically `./data`). Without it, merging to `main` (or a sleep/wake) empties Adjusted aMER, retention, CAC, and weekly Qlik/Dema/Shopify files together.
+2. Set `FRONTEND_URL=https://weekly-sales-report-two.vercel.app` (no trailing slash). CORS regex already allows `*.vercel.app`.
+3. Set `SUPABASE_URL` and the **full** `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Settings → API → `service_role`). A short placeholder will leave `client_created: false` on `GET /api/supabase/verify`, so weekly reports stay on `(no data)` even after CSVs upload.
+4. Keep the service awake while uploading (open `https://weekly-sales-report.onrender.com/api/health` once if the free tier slept).
+5. Do **not** turn on auto-deploy from GitHub until a persistent disk exists — each deploy otherwise deletes uploads.
+
+**Settings slots (Adjusted aMER is not the weekly DEMA row):**
+
+- Weekly reports: **Qlik Sales Data**, **DEMA Marketing Spend**, **DEMA GM2 Data**, **Shopify Sessions Data**
+- Adjusted aMER section **Adjusted aMER — Dema agent files**: **Revenue by channel**, **Marketing spend**, **Net GM2**, plus the fourth **Shopify customer orders** slot
+- Then **Refresh all data** so weekly pages sync to Supabase
+
+Confirm **Current Files** lists every CSV for week `2026-36` on production Settings. If that list is empty, the API this site calls has no files — local `data/raw` and git are irrelevant.
+
+---
+
 ## Översikt
 Detta projekt består av två delar:
 - **Frontend**: Next.js-app som deployas på Vercel

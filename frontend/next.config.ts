@@ -17,7 +17,9 @@ const nextConfig: NextConfig = {
     // proxy timeout becomes a spurious Internal Server Error in the UI.
     proxyTimeout: 300_000,
   },
-  // Browser calls /api on this origin; Next proxies to the FastAPI process.
+  // Local `next dev`: browser /api is proxied to the FastAPI process on this machine.
+  // This rewrite does NOT work on Vercel (nothing listens on 127.0.0.1:8000 there).
+  // Production must set NEXT_PUBLIC_API_URL to a persistent FastAPI host (Render/Railway).
   async rewrites() {
     return [
       {

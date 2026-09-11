@@ -17,9 +17,11 @@ import {
   getDiscountsHistoryInfo,
   resetDiscountsHistory,
   getKlaviyoStatus,
+  verifySupabase,
   type DiscountsHistoryInfo,
   type KlaviyoStatusResponse,
 } from '@/lib/api'
+import { describeApiTarget, getApiStorageWarning } from '@/lib/api-storage'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 
@@ -48,7 +50,22 @@ export default function Settings() {
   const [discountsHistoryLoading, setDiscountsHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
   const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
+  const [pageHost, setPageHost] = useState('')
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
+  const apiTarget = describeApiTarget(getApiBaseUrl(), pageHost)
+  const apiStorageWarning = getApiStorageWarning({
+    apiBaseUrl: getApiBaseUrl(),
+    hostname: pageHost,
+  })
+  const noFilesOnApi =
+    Boolean(selectedWeek) &&
+    metadata != null &&
+    !metadata.error &&
+    Object.keys(metadata).filter((k) => k !== 'error').length === 0
+
+  useEffect(() => {
+    setPageHost(typeof window !== 'undefined' ? window.location.hostname : '')
+  }, [])
 
   useEffect(() => {
     import('@/lib/supabase-queries')
@@ -69,6 +86,37 @@ export default function Settings() {
         })
       )
   }, [])
+
+  useEffect(() => {
+    if (!hasBackend || supabaseDisabled) return
+    let cancelled = false
+    setSupabaseVerifyLoading(true)
+    verifySupabase()
+      .then((r) => {
+        if (!cancelled) setSupabaseVerifyResult(r)
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setSupabaseVerifyResult({
+          error: e instanceof Error ? e.message : String(e),
+          env_file_loaded: false,
+          SUPABASE_URL: 'not_set',
+          SUPABASE_SERVICE_ROLE_KEY: 'not_set',
+          key_length: 0,
+          client_created: false,
+          client_error: null,
+          query_ok: false,
+          query_error: null,
+          table_row_count: null,
+        })
+      })
+      .finally(() => {
+        if (!cancelled) setSupabaseVerifyLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [supabaseDisabled])
 
   // Sync selectedWeek with baseWeek from context
   useEffect(() => {
@@ -371,6 +419,76 @@ export default function Settings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+            <div className="text-sm font-medium">API this page uploads to</div>
+            <p className="text-xs text-muted-foreground font-mono break-all">{apiTarget}</p>
+            <p className="text-xs text-muted-foreground">
+              Weekly Summary / Qlik reports also need a successful backend sync into Supabase.
+              Adjusted aMER, retention, and CAC read CSVs from this API’s disk only.
+            </p>
+          </div>
+
+          {apiStorageWarning && (
+            <div
+              className={
+                apiStorageWarning.level === 'danger'
+                  ? 'rounded-md border border-red-300 bg-red-50 p-3 space-y-1'
+                  : 'rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1'
+              }
+            >
+              <div
+                className={
+                  apiStorageWarning.level === 'danger'
+                    ? 'text-sm font-medium text-red-900'
+                    : 'text-sm font-medium text-amber-900'
+                }
+              >
+                {apiStorageWarning.title}
+              </div>
+              <p
+                className={
+                  apiStorageWarning.level === 'danger'
+                    ? 'text-xs text-red-800'
+                    : 'text-xs text-amber-800'
+                }
+              >
+                {apiStorageWarning.body}
+              </p>
+            </div>
+          )}
+
+          {noFilesOnApi && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1">
+              <div className="text-sm font-medium text-amber-900">
+                No files on the API for week {selectedWeek}
+              </div>
+              <p className="text-xs text-amber-800">
+                Current Files is empty for every slot (Qlik, weekly DEMA, Adjusted aMER, retention,
+                CAC). This is the API disk, not your laptop. Re-upload while this page still shows
+                the API URL above, and wait until Current Files lists each CSV. A later Render
+                deploy wipes an ephemeral disk even if the upload succeeded earlier today.
+              </p>
+            </div>
+          )}
+
+          {supabaseVerifyResult &&
+            !('error' in supabaseVerifyResult) &&
+            supabaseVerifyResult.client_created === false && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1">
+                <div className="text-sm font-medium text-amber-900">
+                  Backend cannot write the weekly Supabase cache
+                </div>
+                <p className="text-xs text-amber-800">
+                  {supabaseVerifyResult.client_error ||
+                    'get_supabase_client() returned None.'}{' '}
+                  Weekly pages (Summary, audience, Qlik) stay on “(no data)” until Render has
+                  SUPABASE_URL plus the full <code>SUPABASE_SERVICE_ROLE_KEY</code> from Supabase →
+                  Settings → API, and the <code>supabase</code> Python package. Adjusted aMER /
+                  retention / CAC do not use this cache — they only need the CSV slots below.
+                </p>
+              </div>
+            )}
+
           {/* Chart Settings */}
           <div>
             <h3 className="text-sm font-medium mb-3">Chart Settings</h3>
