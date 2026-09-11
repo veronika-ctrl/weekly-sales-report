@@ -30,9 +30,14 @@ function LayoutContentInner({
   }, [])
   const pathname = usePathname()
   const isSettings = pathname === '/settings'
+  const isAdjustedAmer = pathname === '/adjusted-amer'
+  const isRetentionByChannel = pathname === '/retention-by-channel'
+  const isCacPayback = pathname === '/cac-payback'
+  const isEmailPerformance = pathname === '/email-performance'
+  const allowWithoutWeek = isSettings || isAdjustedAmer || isRetentionByChannel || isCacPayback || isEmailPerformance
 
   // Before we've restored week from URL/localStorage, show a neutral loading state (same on server and client to avoid hydration mismatch)
-  if (!hasRestoredWeek && !isSettings) {
+  if (!hasRestoredWeek && !allowWithoutWeek) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 px-4">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -42,7 +47,7 @@ function LayoutContentInner({
   }
 
   // No week selected – show prompt (except on Settings where they can select)
-  if (!baseWeek && !isSettings) {
+  if (!baseWeek && !allowWithoutWeek) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 px-4">
         <Calendar className="h-12 w-12 text-muted-foreground" />
@@ -62,7 +67,7 @@ function LayoutContentInner({
 
   // Don't show loading progress in PDF mode - let the page render even while loading.
   // Always allow Settings through so users can change week or reach the backend while a report load is in progress.
-  if (loading && loadingProgress && !isPdfMode && !isSettings) {
+  if (loading && loadingProgress && !isPdfMode && !allowWithoutWeek) {
     return <LoadingProgress progress={loadingProgress} />
   }
 

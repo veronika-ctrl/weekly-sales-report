@@ -5,6 +5,7 @@ const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000'
 export function getApiBaseUrl(): string {
   if (typeof process === 'undefined') return DEFAULT_LOCAL_API
   const explicit = String(process.env.NEXT_PUBLIC_API_URL || '').trim()
+  if (explicit === 'same-origin' || explicit === '/') return ''
   return explicit || DEFAULT_LOCAL_API
 }
 
@@ -1720,6 +1721,376 @@ export async function getQuarterlyVeronikaBoard(
     if (err?.name === 'AbortError') {
       throw new Error(
         'Request timed out after 5 minutes. Confirm Uvicorn is running and the API URL in frontend/.env.local is correct.'
+      )
+    }
+    throw e
+  }
+}
+
+export interface AdjustedAmerWarning {
+  code: string
+  message: string
+}
+
+export interface AdjustedAmerHeadline {
+  paidRevenue: number
+  organicRevenue: number
+  unattributedRevenue: number
+  otherRevenue: number
+  totalRevenue: number
+  newCustomerPaidRevenue: number
+  paidSpend: number
+  blendedMER: number | null
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  organicRevShare: number | null
+  paidRevShare: number | null
+  unattributedShare: number | null
+  otherRevShare: number | null
+  netGM2: number | null
+  netGrossProfit2: number
+  netSales: number
+  gp3: number
+  provisional: boolean
+  as_of: string
+  period_end: string
+  year_month?: string
+}
+
+export interface AdjustedAmerChannelMonth {
+  year_month: string
+  channel: string
+  channel_group: string
+  bucket: string
+  revenue_cfa: number
+  revenue_new_mta: number
+  paidSpend: number
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  provisional: boolean
+  as_of: string
+}
+
+export interface AdjustedAmerGroupMonth {
+  year_month: string
+  channel_group: string
+  bucket: string
+  channels: string[]
+  revenue_cfa: number
+  revenue_new_mta: number
+  paidSpend: number
+  adjustedAMER: number | null
+  newCustomerAdjustedAMER: number | null
+  netGM2?: number | null
+  gp3?: number
+  provisional: boolean
+  as_of: string
+}
+
+export interface AdjustedAmerReconciliation {
+  kind: string
+  key: string
+  label: string
+  net_sales: number | null
+  marketing_spend: number | null
+  expected_net_sales: number | null
+  expected_marketing_spend: number | null
+  match: boolean
+  files: string[]
+}
+
+export interface AdjustedAmerResponse {
+  base_week: string
+  week_range: { start: string; end: string; display: string }
+  as_of: string
+  trend_months?: string[]
+  warnings: AdjustedAmerWarning[]
+  missing_files: Record<string, boolean>
+  files: Record<string, Array<{ filename: string; uploaded_at: string }>>
+  ratio_grain?: string
+  taxonomy: {
+    paid_groups: string[]
+    organic_groups: string[]
+    unattributed_groups: string[]
+    observed_groups: Array<{ group: string; bucket: string; channels: string[] }>
+    notes: string
+  }
+  reconciliation?: AdjustedAmerReconciliation[]
+  week: AdjustedAmerHeadline | null
+  monthly: AdjustedAmerHeadline[]
+  monthly_by_channel: AdjustedAmerChannelMonth[]
+  monthly_by_group?: AdjustedAmerGroupMonth[]
+  recruited_vs_dropped: {
+    available: boolean
+    message: string | null
+    months: Array<{ year_month: string; recruited: number; dropped: number; net: number }>
+    order_count?: number
+    customer_count?: number
+    as_of?: string | null
+    files?: Array<{ filename: string; uploaded_at: string }>
+  }
+  footnotes: string[]
+}
+
+export interface RetentionChannelRow {
+  channel_group: string
+  is_backfilled: boolean
+  is_total: boolean
+  customers: number
+  repeat_rate_180d: number | null
+  net_sales_per_customer_180d: number | null
+  full_price_share_lifetime: number | null
+  median_days_to_second_order: number | null
+  repeaters_180d: number
+  full_price_share_n: number
+  second_order_n: number
+}
+
+export interface RetentionByChannelResponse {
+  available: boolean
+  message: string | null
+  attribution: string
+  filter: string
+  channels: RetentionChannelRow[]
+  total: RetentionChannelRow | null
+  files: Array<{ filename: string; uploaded_at: string }>
+  customer_count: number
+  eligible_count: number
+  cohort_min: string | null
+  cohort_max: string | null
+  acquisition_min?: string | null
+  acquisition_max?: string | null
+  as_of: string | null
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export interface CacPaybackChannelRow {
+  channel_group: string
+  spend: number | null
+  new_customers: number | null
+  cac: number | null
+  gp2_first_order: number | null
+  gp2_180d: number | null
+  payback_first_order: number | null
+  payback_180d: number | null
+  payback_low: number | null
+  payback_high: number | null
+}
+
+export interface CacPaybackSegmentRow {
+  channel_group: string
+  segment: string
+  segment_label: string
+  indicative: boolean
+  horizon: string
+  spend: number | null
+  new_customers: number | null
+  repeat_rate: number | null
+  cac: number | null
+  cac_newshare: number | null
+  gp2_per_customer: number | null
+  payback: number | null
+  payback_newshare: number | null
+}
+
+export interface CacPaybackHorizonRow {
+  channel_group: string
+  segment: string
+  segment_label: string
+  is_channel_total: boolean
+  new_customers_180: number | null
+  cac_180: number | null
+  gp2_180: number | null
+  gp2_365: number | null
+  gp2_uplift_pct: number | null
+  payback_180: number | null
+  payback_365: number | null
+}
+
+export interface CacPaybackResponse {
+  available: boolean
+  message: string | null
+  attribution: string
+  period_min: string | null
+  period_max: string | null
+  channels: CacPaybackChannelRow[]
+  segments: CacPaybackSegmentRow[]
+  horizon: CacPaybackHorizonRow[]
+  files: {
+    groups: Array<{ filename: string; uploaded_at: string }>
+    segments: Array<{ filename: string; uploaded_at: string }>
+    horizon: Array<{ filename: string; uploaded_at: string }>
+  }
+  missing_files: { groups: boolean; segments: boolean; horizon: boolean }
+  as_of: string | null
+  caveats: string[]
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export async function getCacPayback(baseWeek: string): Promise<CacPaybackResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/cac-payback?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
+export interface KlaviyoEmailRow {
+  kind: string
+  name: string
+  recipients: number
+  unique_converters: number
+  conversions: number | null
+  conversion_rate: number | null
+  revenue_usd: number
+  revenue_sek: number | null
+  campaign_count: number | null
+  is_newsletter: boolean
+}
+
+export interface KlaviyoEmailResponse {
+  available: boolean
+  message: string | null
+  source: string
+  header_note: string
+  timeframe: string
+  flows: KlaviyoEmailRow[]
+  newsletter: KlaviyoEmailRow | null
+  total: {
+    recipients: number
+    unique_converters: number
+    conversion_rate: number | null
+    revenue_usd: number
+    revenue_sek: number | null
+  } | null
+  fx: {
+    applied: boolean
+    source_currency?: string
+    target_currency?: string
+    provider?: string | null
+    sample_rate?: number | null
+    rate_date?: string | null
+    error?: string | null
+  }
+  klaviyo: { key_configured: boolean; connected: boolean }
+  files: Array<{ filename: string; uploaded_at: string }>
+  as_of: string | null
+  footnotes: string[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export interface KlaviyoStatusResponse {
+  configured: boolean
+  connected: boolean
+  error: string | null
+  scopes_needed: string[]
+}
+
+export async function getKlaviyoEmail(baseWeek: string): Promise<KlaviyoEmailResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/klaviyo-email?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
+export async function getKlaviyoStatus(): Promise<KlaviyoStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/klaviyo-status`)
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(t || response.statusText)
+  }
+  return response.json()
+}
+
+export async function getRetentionByChannel(baseWeek: string): Promise<RetentionByChannelResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/retention-by-channel?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
+      )
+    }
+    throw e
+  }
+}
+
+export async function getAdjustedAmer(baseWeek: string): Promise<AdjustedAmerResponse> {
+  const timeoutMs = 180_000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/adjusted-amer?base_week=${encodeURIComponent(baseWeek)}`,
+      { signal: controller.signal }
+    )
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      const t = await response.text()
+      throw new Error(t || response.statusText)
+    }
+    return response.json()
+  } catch (e: unknown) {
+    clearTimeout(timeoutId)
+    const err = e as { name?: string }
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out after 3 minutes. Confirm Uvicorn is running and NEXT_PUBLIC_API_URL in frontend/.env.local matches it.'
       )
     }
     throw e

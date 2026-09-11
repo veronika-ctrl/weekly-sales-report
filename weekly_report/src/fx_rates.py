@@ -6,6 +6,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -176,3 +177,37 @@ def convert_revenue_over_time_to_sek(
         meta["sample_rate"] = fb
         meta["error"] = str(exc)
         return out, meta
+
+
+def get_latest_usd_sek_rate(data_root: Path) -> Tuple[Optional[float], Dict[str, Any]]:
+    """Latest approximate USD→SEK rate (ECB via Frankfurter), for aggregated totals."""
+    source = _source_currency()
+    target = _target_currency()
+    if _fx_disabled() or source == target:
+        return None, get_fx_metadata(applied=False)
+    cache_file = _cache_path(data_root)
+    cached = _read_cache(cache_file)
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=14)
+    try:
+        rates = _calendar_rates(pd.Timestamp(start), pd.Timestamp(today), cached)
+        for d, rate in rates.dropna().items():
+            cached[d.strftime("%Y-%m-%d")] = float(rate)
+        _write_cache(cache_file, cached)
+        series = rates.dropna()
+        if series.empty:
+            raise ValueError("no USD/SEK rates returned")
+        rate = float(series.iloc[-1])
+        meta = get_fx_metadata(applied=True)
+        meta["sample_rate"] = round(rate, 4)
+        meta["rate_date"] = series.index[-1].strftime("%Y-%m-%d")
+        return rate, meta
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, OSError) as exc:
+        fb = _fallback_rate()
+        if fb is None:
+            return None, get_fx_metadata(applied=False, error=str(exc))
+        meta = get_fx_metadata(applied=True)
+        meta["provider"] = "fallback_env"
+        meta["sample_rate"] = fb
+        meta["error"] = str(exc)
+        return fb, meta

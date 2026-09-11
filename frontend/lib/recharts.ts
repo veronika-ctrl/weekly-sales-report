@@ -8,6 +8,7 @@ import {
   LineChart as RLineChart,
   AreaChart as RAreaChart,
   BarChart as RBarChart,
+  ComposedChart as RComposedChart,
 } from 'recharts'
 
 type CartesianChartExtraProps = {
@@ -24,10 +25,14 @@ export const AreaChart = RAreaChart as React.ForwardRefExoticComponent<
 export const BarChart = RBarChart as React.ForwardRefExoticComponent<
   React.ComponentProps<typeof RBarChart> & CartesianChartExtraProps & React.RefAttributes<SVGSVGElement>
 >
+export const ComposedChart = RComposedChart as React.ForwardRefExoticComponent<
+  React.ComponentProps<typeof RComposedChart> & CartesianChartExtraProps & React.RefAttributes<SVGSVGElement>
+>
 
 export {
   Bar,
   CartesianGrid,
+  Cell,
   LabelList,
   Legend,
   Line,

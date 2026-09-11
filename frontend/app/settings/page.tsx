@@ -16,7 +16,9 @@ import {
   getApiBaseUrl,
   getDiscountsHistoryInfo,
   resetDiscountsHistory,
+  getKlaviyoStatus,
   type DiscountsHistoryInfo,
+  type KlaviyoStatusResponse,
 } from '@/lib/api'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
@@ -37,12 +39,27 @@ export default function Settings() {
   const [discountsHistory, setDiscountsHistory] = useState<DiscountsHistoryInfo | null>(null)
   const [discountsHistoryLoading, setDiscountsHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
+  const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
 
   useEffect(() => {
     import('@/lib/supabase-queries')
       .then((m) => m.getWeeksWithDataFromSupabase())
       .then((weeks) => setWeeksWithData(new Set(weeks)))
+  }, [])
+
+  useEffect(() => {
+    if (!hasBackend) return
+    getKlaviyoStatus()
+      .then(setKlaviyoStatus)
+      .catch(() =>
+        setKlaviyoStatus({
+          configured: false,
+          connected: false,
+          error: 'Could not reach backend',
+          scopes_needed: ['flows:read', 'campaigns:read', 'metrics:read'],
+        })
+      )
   }, [])
 
   // Sync selectedWeek with baseWeek from context
@@ -248,6 +265,65 @@ export default function Settings() {
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
 
+  const amerFileTypes = [
+    {
+      type: 'amer_revenue',
+      label: 'Adjusted aMER — Revenue by channel (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'amer_spend',
+      label: 'Adjusted aMER — Marketing spend (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'amer_gm2',
+      label: 'Adjusted aMER — Net GM2 (Dema agent)',
+      formats: '.csv',
+    },
+    {
+      type: 'shopify_customers',
+      label: 'Adjusted aMER — Shopify customer orders (Orders = 1)',
+      formats: '.csv',
+    },
+  ]
+
+  const retentionFileTypes = [
+    {
+      type: 'retention_customers',
+      label: 'Retention by channel — Dema customer export (last-click)',
+      formats: '.csv',
+    },
+  ]
+
+  const cacPaybackFileTypes = [
+    {
+      type: 'cac_payback_groups',
+      label: 'CAC payback — ChannelGroup (2025-03 to 2026-02)',
+      formats: '.csv',
+    },
+    {
+      type: 'cac_payback_segments',
+      label: 'CAC payback — campaign segments',
+      formats: '.csv',
+    },
+    {
+      type: 'cac_payback_horizon',
+      label: 'CAC payback — 180d vs 365d horizon',
+      formats: '.csv',
+    },
+  ]
+
+  const klaviyoFileTypes = [
+    {
+      type: 'klaviyo_email',
+      label: 'Email Performance — Klaviyo last-12-months CSV (fallback)',
+      formats: '.csv',
+    },
+  ]
+
+  const allStatusFileTypes = [...fileTypes, ...amerFileTypes, ...retentionFileTypes, ...cacPaybackFileTypes, ...klaviyoFileTypes]
+
   return (
     <div className="space-y-8">
       <Card>
@@ -436,6 +512,128 @@ export default function Settings() {
             />
             )}
 
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Adjusted aMER — Dema agent files</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload
+                    both the ISO-week trio and calendar-month trios (upload extra months to
+                    fill the last-24-months charts). Keyed on Channel;ChannelGroup;Country;Day with
+                    production groups: sem, social_ppc, affiliate. Ratios are ChannelGroup
+                    grain only. GP3 = Net gross profit 2 − Marketing spend. Shopify native
+                    customer-order export (Customer ID + Second
+                    timestamp; keep Orders = 1 only) powers recruited vs dropped — CSV is
+                    enough, no Shopify API. If a Monday has no week file, the report warns
+                    instead of using a stale week.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={amerFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Retention by acquisition channel — last-click</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Separate from Adjusted aMER. Upload Retention_customers_*.csv (Dema customer
+                    export). Metrics use last-click AcquisitionChannelGroup and Eligible180d = 1
+                    only. Backfilled stays its own row. Not comparable to CFA headline aMER.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={retentionFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">CAC payback by channel — last-click</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Sibling of Retention by channel, not Adjusted aMER. Upload the three Dema CAC
+                    payback CSVs: ChannelGroup headline, campaign segments (prospecting/retargeting,
+                    branded/non-branded, editorial/coupon), and 180d vs 365d. Net GP2 is derived
+                    from channel margin rates; payback is an average, not a marginal return.
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={cacPaybackFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium">Email Performance (Klaviyo)</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Standalone from Adjusted aMER. Recipient-based attribution — do not sum with
+                    last-click aMER totals. CSV is the fallback until a private API key is set on
+                    the <strong>backend</strong> as <code>KLAVIYO_PRIVATE_API_KEY</code> (never in
+                    this chat, never <code>NEXT_PUBLIC_*</code>). Scopes: flows:read, campaigns:read,
+                    metrics:read.
+                  </p>
+                  <p className="text-xs mt-2">
+                    {klaviyoStatus == null ? (
+                      <span className="text-muted-foreground">Checking Klaviyo connection…</span>
+                    ) : klaviyoStatus.connected ? (
+                      <span className="text-green-700 font-medium">Klaviyo API connected — report will pull last 12 months automatically.</span>
+                    ) : klaviyoStatus.configured ? (
+                      <span className="text-amber-800 font-medium">
+                        Key is set but Klaviyo rejected it{klaviyoStatus.error ? `: ${klaviyoStatus.error}` : ''}.
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">API key not configured — using uploaded CSV.</span>
+                    )}
+                  </p>
+                </div>
+                <BatchFileUpload
+                  fileTypes={klaviyoFileTypes}
+                  currentWeek={selectedWeek}
+                  onUploadComplete={async () => {
+                    await loadMetadata(true)
+                  }}
+                  refreshData={async () => {
+                    await refreshData()
+                  }}
+                  loading={loading}
+                  loadingProgress={loadingProgress}
+                />
+              </div>
+            )}
+
             {/* File Metadata Display */}
             <div className="space-y-4 mt-6">
               <h4 className="text-sm font-medium">Current Files</h4>
@@ -461,7 +659,7 @@ export default function Settings() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {fileTypes.map((ft) => (
+                  {allStatusFileTypes.map((ft) => (
                     <div key={ft.type} className="space-y-2">
                       <div className="text-sm font-medium text-gray-700">{ft.label}</div>
                       {metadata && metadata[ft.type] ? (
@@ -474,7 +672,7 @@ export default function Settings() {
                             rowCount={metadata[ft.type].row_count}
                           />
                           {/* Dimension validation status */}
-                          {dimensions && dimensions[ft.type] && (
+                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">
