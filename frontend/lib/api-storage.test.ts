@@ -59,5 +59,6 @@ describe('getApiStorageWarning', () => {
     assert.equal(w.level, 'warning')
     assert.match(w.body, /ephemeral|persistent disk/i)
     assert.match(w.body, /Current Files/)
+    assert.match(w.body, /one file at a time/i)
   })
 })

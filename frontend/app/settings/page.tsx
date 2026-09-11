@@ -638,7 +638,7 @@ export default function Settings() {
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Reload file metadata to check current file status. Use "Check Dimensions" to validate file structure. After uploading files, click <strong>Refresh All Data</strong> when all files for the week are ready (one file at a time is fine).
+              Reload file metadata to check current file status. Use "Check Dimensions" to validate file structure. After uploading files, click <strong>Refresh All Data</strong> when all files for the week are ready (one file at a time is fine). On production, finish one file before starting another card.
             </p>
           </div>
 
@@ -648,6 +648,15 @@ export default function Settings() {
             <h3 className="text-sm font-medium">
               {selectedWeek ? `Upload Files for Week ${selectedWeek}` : 'Välj en vecka ovan för att ladda upp filer'}
             </h3>
+            {selectedWeek && (
+              <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md p-3 max-w-3xl">
+                Production API is one Render worker. Upload <strong>one small file first</strong> (for example
+                Revenue_by_channel_W36.csv), wait until Current Files lists it, then the next file.
+                Do not send Qlik xlsx together with a stack of CSVs — the first file sits at 99%
+                “processing” and the rest time out (often shown as 0 B). Retention (~4 MB) may need
+                a paid Render timeout or a split export if it still hangs alone.
+              </p>
+            )}
             
             {selectedWeek && (
             <BatchFileUpload

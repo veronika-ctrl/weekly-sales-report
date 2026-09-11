@@ -10,21 +10,35 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
     Extract first date, last date, and row count from data file.
     
     Returns dict with: first_date, last_date, row_count, date_column_name
+
+    Never load a full Excel workbook here. Qlik exports are tens of MB / ~1M rows;
+    pandas.read_excel of the whole file blocks the Render worker for minutes and
+    every other Settings upload waits until the browser 5-minute abort.
     """
     try:
-        # Load file
         if file_path.suffix.lower() == '.xlsx':
-            df = pd.read_excel(file_path, nrows=10000)  # Sample for speed
-        else:
-            # Try semicolon separator first (common in European CSV files)
+            logger.info(
+                f"Skipping full Excel metadata scan for {file_path.name} "
+                "(upload already saved; Settings Current Files lists filename only)"
+            )
+            return {
+                "first_date": None,
+                "last_date": None,
+                "row_count": None,
+                "skipped": True,
+                "reason": "xlsx_full_scan_skipped",
+            }
+
+        # Load file
+        # Try semicolon separator first (common in European CSV files)
+        try:
+            df = pd.read_csv(file_path, sep=';', nrows=10000)
+        except Exception:
+            # Try comma separator
             try:
-                df = pd.read_csv(file_path, sep=';', nrows=10000)
+                df = pd.read_csv(file_path, nrows=10000, quotechar='"')
             except Exception:
-                # Try comma separator
-                try:
-                    df = pd.read_csv(file_path, nrows=10000, quotechar='"')
-                except Exception:
-                    df = pd.read_csv(file_path, nrows=10000)
+                df = pd.read_csv(file_path, nrows=10000)
         
         # Remove quotes from column names if present
         df.columns = df.columns.str.strip('"').str.strip("'")
@@ -78,26 +92,20 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
         
         # Get full row count (not just sample) - use optimized counting
         logger.info(f"Counting rows in {file_path.name}")
-        if file_path.suffix.lower() == '.xlsx':
-            # For Excel files, we need to read the full file
-            full_df = pd.read_excel(file_path)
-            row_count = len(full_df)
-        else:
-            # For CSV files, count lines directly without loading into memory
-            # This is much faster for large files
+        # Never pandas.read_excel the whole workbook. CSV line-count is cheap.
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                row_count = sum(1 for line in f) - 1  # Subtract header
+        except Exception:
+            # Fallback to pandas if line counting fails
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    row_count = sum(1 for line in f) - 1  # Subtract header
+                full_df = pd.read_csv(file_path, sep=';')
             except Exception:
-                # Fallback to pandas if line counting fails
                 try:
-                    full_df = pd.read_csv(file_path, sep=';')
+                    full_df = pd.read_csv(file_path, quotechar='"')
                 except Exception:
-                    try:
-                        full_df = pd.read_csv(file_path, quotechar='"')
-                    except Exception:
-                        full_df = pd.read_csv(file_path)
-                row_count = len(full_df)
+                    full_df = pd.read_csv(file_path)
+            row_count = len(full_df)
         
         return {
             "first_date": first_date,

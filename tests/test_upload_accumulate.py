@@ -273,3 +273,52 @@ def test_upload_endpoint_does_not_reroute_unknown_cac_name(upload_env):
     assert {p.name for p in list_slot_files(slot)} == {"custom_export.csv"}
     groups = data_root / "raw" / WEEK / "cac_payback_groups"
     assert list_slot_files(groups) == []
+
+
+def _upload_bytes(routes, filename: str, file_type: str, body: bytes, week: str = WEEK):
+    from io import BytesIO
+    from starlette.datastructures import Headers, UploadFile
+
+    upload = UploadFile(
+        file=BytesIO(body),
+        filename=filename,
+        headers=Headers({"content-type": "application/octet-stream"}),
+    )
+    return routes.upload_file(file=upload, week=week, file_type=file_type)
+
+
+def test_upload_xlsx_returns_without_pandas_scan(upload_env):
+    """Qlik Excel used to hang POST /api/upload-file on pd.read_excel of the whole workbook."""
+    import asyncio
+
+    routes, data_root = upload_env
+    payload = b"fake-xlsx-bytes"
+
+    async def _run():
+        result = await _upload_bytes(routes, "Qlik W36.xlsx", "qlik", payload)
+        assert result["success"] is True
+        assert result["metadata"]["deferred"] is True
+        assert result["bytes_written"] == len(payload)
+        return await routes.get_file_metadata(week=WEEK)
+
+    listed = json.loads(asyncio.run(_run()).body)
+    saved = data_root / "raw" / WEEK / "qlik" / "Qlik_W36.xlsx"
+    assert saved.exists()
+    assert saved.read_bytes() == payload
+    assert listed["qlik"]["filename"] == "Qlik_W36.xlsx"
+
+
+def test_upload_chunked_persist_writes_full_body(upload_env):
+    import asyncio
+
+    routes, data_root = upload_env
+    body = b"x" * (1024 * 1024 + 50)
+
+    async def _run():
+        result = await _upload_bytes(routes, "Qlik W36.xlsx", "qlik", body)
+        assert result["success"] is True
+        assert result["bytes_written"] == len(body)
+
+    asyncio.run(_run())
+    saved = data_root / "raw" / WEEK / "qlik" / "Qlik_W36.xlsx"
+    assert saved.stat().st_size == len(body)
