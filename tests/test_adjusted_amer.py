@@ -638,3 +638,28 @@ def test_shopify_loader_failure_does_not_drop_dema_headline(tmp_path: Path, monk
     assert rvd["available"] is False
     assert "Dema agent trio is unaffected" in rvd["message"]
     assert rvd["months"] == []
+
+
+def test_adjusted_amer_routes_defer_then_load_shopify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import asyncio
+
+    write_w36_style_fixtures(tmp_path)
+    _write_csv(
+        tmp_path / "raw" / WEEK / SHOPIFY_CUSTOMERS_TYPE / "customers.csv",
+        "Customer ID;Created at",
+        ["a;2025-03-10", "b;2025-09-15"],
+    )
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    from weekly_report.api import routes
+
+    monkeypatch.setattr(routes, "_supabase_enabled", lambda: False)
+
+    headline = asyncio.run(routes.get_adjusted_amer(base_week=WEEK, include_customers=False))
+    assert headline["week"]["adjustedAMER"] == pytest.approx(220 / 140)
+    assert headline["recruited_vs_dropped"]["deferred"] is True
+    assert headline["recruited_vs_dropped"]["available"] is False
+
+    recruited = asyncio.run(routes.get_adjusted_amer_recruited(base_week=WEEK))
+    assert recruited["available"] is True
+    assert recruited["customer_count"] == 2
