@@ -14,7 +14,7 @@ function unauthorized(): NextResponse {
   })
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Applies even when NEXT_PUBLIC_DISABLE_SUPABASE=true (that flag only
   // skips Supabase week-data login, not this gate).
   if (!shouldEnforceBasicAuth()) {
