@@ -27,6 +27,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const page = await browser.newPage()
+    const authorization = request.headers.get('authorization')
+    if (authorization) {
+      await page.setExtraHTTPHeaders({ Authorization: authorization })
+    }
     // Slightly wider than the table to avoid wrapping.
     await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 })
 

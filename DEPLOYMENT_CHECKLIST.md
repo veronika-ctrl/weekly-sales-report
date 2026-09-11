@@ -21,6 +21,8 @@
   - [ ] `NEXT_PUBLIC_API_URL`
   - [ ] `NEXT_PUBLIC_SUPABASE_URL`
   - [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - [ ] `SITE_BASIC_AUTH_USER` (example: `ohjay`)
+  - [ ] `SITE_BASIC_AUTH_PASSWORD` (or `SITE_PASSWORD`) — Production and Preview
 - [ ] Första deployment lyckad
 
 ### Backend Deployment
@@ -59,7 +61,10 @@
 NEXT_PUBLIC_API_URL=https://din-backend-url.com
 NEXT_PUBLIC_SUPABASE_URL=https://ditt-supabase-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=ditt_anon_key
+SITE_BASIC_AUTH_USER=ohjay
+SITE_BASIC_AUTH_PASSWORD=choose-in-vercel-dashboard
 ```
+`SITE_PASSWORD` can replace `SITE_BASIC_AUTH_PASSWORD`. Never commit the real password.
 
 ### Backend (Railway/Render/etc.)
 ```
