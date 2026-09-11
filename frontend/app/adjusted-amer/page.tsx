@@ -6,6 +6,7 @@ import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
 import {
   getAdjustedAmer,
+  getAdjustedAmerRecruited,
   hasBackend,
   type AdjustedAmerChannelMonth,
   type AdjustedAmerGroupMonth,
@@ -208,18 +209,47 @@ export default function AdjustedAmerPage() {
   const [data, setData] = useState<AdjustedAmerResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [rvdLoading, setRvdLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!hasBackend) return
     setLoading(true)
     setErr(null)
+    setRvdLoading(false)
     try {
-      setData(await getAdjustedAmer(weekToLoad))
+      // Dema headline first so a huge Shopify customer CSV cannot blank the page.
+      const headline = await getAdjustedAmer(weekToLoad, { includeCustomers: false })
+      setData(headline)
+      setLoading(false)
+      setRvdLoading(true)
+      try {
+        const recruited = await getAdjustedAmerRecruited(weekToLoad)
+        setData((prev) => (prev ? { ...prev, recruited_vs_dropped: recruited } : prev))
+      } catch (rvdErr: unknown) {
+        const message =
+          rvdErr instanceof Error
+            ? rvdErr.message
+            : 'Shopify recruited vs dropped could not be loaded.'
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                recruited_vs_dropped: {
+                  available: false,
+                  message,
+                  months: [],
+                },
+              }
+            : prev
+        )
+      } finally {
+        setRvdLoading(false)
+      }
     } catch (e: unknown) {
       setData(null)
       setErr(e instanceof Error ? e.message : 'Failed to load Adjusted aMER')
-    } finally {
       setLoading(false)
+      setRvdLoading(false)
     }
   }, [weekToLoad])
 
@@ -733,7 +763,12 @@ export default function AdjustedAmerPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!rvd?.available ? (
+          {!rvd?.available && rvdLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading recruited vs dropped from Shopify customer orders…
+            </div>
+          ) : !rvd?.available ? (
             <div className="rounded-md border border-dashed bg-muted/30 p-6 text-sm text-muted-foreground">
               {rvd?.message ?? 'Upload Shopify customer orders in Settings to compute recruited vs dropped.'}{' '}
               <Link href="/settings" className="underline font-medium text-foreground">

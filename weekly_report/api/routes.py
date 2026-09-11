@@ -39,6 +39,7 @@ from weekly_report.src.metrics.online_kpis import calculate_online_kpis_for_week
 from weekly_report.src.metrics.monthly_veronika_kpis import calculate_monthly_veronika_kpis
 from weekly_report.src.metrics.adjusted_amer import (
     AMER_ALL_FILE_TYPES,
+    build_recruited_vs_dropped_payload,
     calculate_adjusted_amer,
 )
 from weekly_report.src.metrics.retention_by_channel import (
@@ -600,6 +601,7 @@ for part in (os.getenv("CORS_ORIGINS") or "").split(","):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2803,13 +2805,19 @@ async def get_monthly_veronika_kpis_pdf(
 @app.get("/api/adjusted-amer")
 async def get_adjusted_amer(
     base_week: str = Query(..., description="ISO week folder under data/raw for the Dema agent trio"),
+    include_customers: bool = Query(
+        True,
+        description="When false, skip Shopify recruited/dropped so Dema headline ratios still return",
+    ),
 ):
     """Adjusted aMER report (separate from weekly Dema/Shopify/Qlik metrics)."""
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
         config = load_config(week=base_week)
-        return calculate_adjusted_amer(base_week, Path(config.data_root))
+        return calculate_adjusted_amer(
+            base_week, Path(config.data_root), include_customers=include_customers
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
@@ -2818,6 +2826,26 @@ async def get_adjusted_amer(
         import traceback
 
         logger.error(f"Error adjusted-amer {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/adjusted-amer/recruited-vs-dropped")
+async def get_adjusted_amer_recruited(
+    base_week: str = Query(..., description="ISO week folder used to locate data/raw"),
+):
+    """Shopify recruited vs dropped. Isolated from Dema headline Adjusted aMER."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        config = load_config(week=base_week)
+        return build_recruited_vs_dropped_payload(Path(config.data_root))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error adjusted-amer recruited-vs-dropped {base_week}: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 

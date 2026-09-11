@@ -2,16 +2,23 @@ import { NextResponse, type NextRequest } from 'next/server'
 import {
   isBasicAuthAuthorized,
   shouldEnforceBasicAuth,
+  shouldUseWwwAuthenticateChallenge,
 } from '@/lib/site-basic-auth'
 
-function unauthorized(): NextResponse {
-  return new NextResponse('Authentication required', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="Weekly Sales Report", charset="UTF-8"',
-      'Cache-Control': 'no-store',
-    },
-  })
+function unauthorized(request: NextRequest): NextResponse {
+  const headers: Record<string, string> = { 'Cache-Control': 'no-store' }
+  if (
+    shouldUseWwwAuthenticateChallenge({
+      pathname: request.nextUrl.pathname,
+      secFetchDest: request.headers.get('sec-fetch-dest'),
+      accept: request.headers.get('accept'),
+    })
+  ) {
+    headers['WWW-Authenticate'] = 'Basic realm="Weekly Sales Report", charset="UTF-8"'
+    return new NextResponse('Authentication required', { status: 401, headers })
+  }
+  // fetch() + WWW-Authenticate is often TypeError: Failed to fetch, not a 401 body.
+  return NextResponse.json({ detail: 'Authentication required' }, { status: 401, headers })
 }
 
 export function proxy(request: NextRequest) {
@@ -25,7 +32,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  return unauthorized()
+  return unauthorized(request)
 }
 
 export const config = {
