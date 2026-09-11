@@ -18,7 +18,7 @@
 - [ ] Projekt importerat från GitHub
 - [ ] Root Directory satt till `frontend`
 - [ ] Miljövariabler satta i Vercel:
-  - [ ] `NEXT_PUBLIC_API_URL`
+  - [ ] `NEXT_PUBLIC_API_URL` = persistent FastAPI URL (production: `https://weekly-sales-report.onrender.com`, never `same-origin` on Vercel)
   - [ ] `NEXT_PUBLIC_SUPABASE_URL`
   - [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - [ ] `SITE_BASIC_AUTH_USER` (example: `ohjay`)
@@ -70,8 +70,9 @@ SITE_BASIC_AUTH_PASSWORD=choose-in-vercel-dashboard
 ```
 SUPABASE_URL=https://ditt-supabase-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=ditt_service_role_key
-FRONTEND_URL=https://din-vercel-app.vercel.app
+FRONTEND_URL=https://weekly-sales-report-two.vercel.app
 ```
+Render production API: `https://weekly-sales-report.onrender.com`. Attach a persistent disk for `DATA_ROOT` or every deploy wipes CSVs. Confirm `GET /api/supabase/verify` has `client_created: true`.
 
 ## Nästa Steg
 

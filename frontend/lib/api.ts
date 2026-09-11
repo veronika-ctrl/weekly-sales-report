@@ -1086,7 +1086,10 @@ export async function verifySupabase(): Promise<{
       table_row_count: null,
     }
   }
-  const response = await fetch(`${API_BASE_URL}/api/supabase/verify`)
+  const response = await fetch(
+    `${API_BASE_URL}/api/supabase/verify`,
+    withApiCredentials({ cache: 'no-store' })
+  )
   if (!response.ok) throw new Error(`Verify failed: ${response.statusText}`)
   return response.json()
 }
