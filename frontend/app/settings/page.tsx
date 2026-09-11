@@ -104,9 +104,13 @@ export default function Settings() {
     try {
       const controller = new AbortController()
       timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-      const response = await fetch(`${getApiBaseUrl()}/api/file-metadata?week=${selectedWeek}`, {
-        signal: controller.signal
-      })
+      const response = await fetch(
+        `${getApiBaseUrl()}/api/file-metadata?week=${selectedWeek}${clearCache ? `&_=${Date.now()}` : ''}`,
+        {
+          signal: controller.signal,
+          cache: clearCache ? 'no-store' : 'default',
+        }
+      )
       
       if (timeoutId) clearTimeout(timeoutId)
       
@@ -261,30 +265,43 @@ export default function Settings() {
       type: 'discounts',
       label: 'Shopify order lines (full price / sale)',
       formats: '.csv',
+      accumulate: true,
+      hint: 'Successive uploads add to history. Multi-select or upload one after another — later files do not delete earlier ones.',
     },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
+
+  const amerDemaHint =
+    'Keep the ISO-week file and calendar-month file in this same slot. Multi-select both, or upload one then the other — a later upload does not delete the first if the filenames differ (e.g. Revenue_by_channel_W36.csv stays when you add Revenue_by_channel_2026-08.csv). Re-uploading the same filename replaces that file only.'
 
   const amerFileTypes = [
     {
       type: 'amer_revenue',
       label: 'Adjusted aMER — Revenue by channel (Dema agent)',
       formats: '.csv',
+      accumulate: true,
+      hint: amerDemaHint,
     },
     {
       type: 'amer_spend',
       label: 'Adjusted aMER — Marketing spend (Dema agent)',
       formats: '.csv',
+      accumulate: true,
+      hint: amerDemaHint,
     },
     {
       type: 'amer_gm2',
       label: 'Adjusted aMER — Net GM2 (Dema agent)',
       formats: '.csv',
+      accumulate: true,
+      hint: amerDemaHint,
     },
     {
       type: 'shopify_customers',
       label: 'Adjusted aMER — Shopify customer orders (Orders = 1)',
       formats: '.csv',
+      accumulate: true,
+      hint: 'Fourth slot — one Shopify order-history export (Customer ID + timestamp; Orders = 1). Not mixed into the three Dema slots above. A longer export with a new filename is kept alongside; the same filename replaces that file.',
     },
   ]
 
@@ -517,15 +534,16 @@ export default function Settings() {
                 <div>
                   <h4 className="text-sm font-medium">Adjusted aMER — Dema agent files</h4>
                   <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Upload
-                    both the ISO-week trio and calendar-month trios (upload extra months to
-                    fill the last-24-months charts). Keyed on Channel;ChannelGroup;Country;Day with
+                    Separate from the weekly DEMA Marketing Spend / GM2 slots above. Each of the
+                    three Dema slots (Revenue, Spend, Net GM2) accepts <strong>week + month files
+                    together</strong> — multi-select both CSVs, or upload the W36 file then the
+                    August file. Sequential uploads do not wipe siblings. Extra months fill the
+                    last-24-months charts. Keyed on Channel;ChannelGroup;Country;Day with
                     production groups: sem, social_ppc, affiliate. Ratios are ChannelGroup
                     grain only. GP3 = Net gross profit 2 − Marketing spend. Shopify native
-                    customer-order export (Customer ID + Second
-                    timestamp; keep Orders = 1 only) powers recruited vs dropped — CSV is
-                    enough, no Shopify API. If a Monday has no week file, the report warns
-                    instead of using a stale week.
+                    customer-order export is the <strong>fourth slot</strong> (Customer ID + Second
+                    timestamp; keep Orders = 1 only) — one history file, not mixed into the Dema
+                    trio. If a Monday has no week file, the report warns instead of using a stale week.
                   </p>
                 </div>
                 <BatchFileUpload
@@ -664,15 +682,46 @@ export default function Settings() {
                       <div className="text-sm font-medium text-gray-700">{ft.label}</div>
                       {metadata && metadata[ft.type] ? (
                         <>
-                          <FileMetadata
-                            filename={metadata[ft.type].filename}
-                            firstDate={metadata[ft.type].first_date}
-                            lastDate={metadata[ft.type].last_date}
-                            uploadedAt={metadata[ft.type].uploaded_at}
-                            rowCount={metadata[ft.type].row_count}
-                          />
-                          {/* Dimension validation status */}
-                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && (
+                          {(
+                            metadata[ft.type].files?.length
+                              ? metadata[ft.type].files
+                              : [
+                                  {
+                                    filename: metadata[ft.type].filename,
+                                    uploaded_at: metadata[ft.type].uploaded_at,
+                                  },
+                                ]
+                          ).map((entry: { filename: string; uploaded_at: string }) => (
+                            <FileMetadata
+                              key={`${ft.type}-${entry.filename}`}
+                              filename={entry.filename}
+                              firstDate={
+                                entry.filename === metadata[ft.type].filename
+                                  ? metadata[ft.type].first_date
+                                  : undefined
+                              }
+                              lastDate={
+                                entry.filename === metadata[ft.type].filename
+                                  ? metadata[ft.type].last_date
+                                  : undefined
+                              }
+                              uploadedAt={entry.uploaded_at}
+                              rowCount={
+                                entry.filename === metadata[ft.type].filename
+                                  ? metadata[ft.type].row_count
+                                  : undefined
+                              }
+                            />
+                          ))}
+                          {metadata[ft.type].accumulates &&
+                            (metadata[ft.type].files?.length || 0) > 1 && (
+                              <p className="text-xs text-muted-foreground">
+                                {metadata[ft.type].files.length} files kept in this slot (week +
+                                month uploads accumulate).
+                              </p>
+                            )}
+                          {/* Dimension validation: skip types with no Country column. */}
+                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && ft.type !== 'shopify_customers' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">

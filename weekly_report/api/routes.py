@@ -39,7 +39,6 @@ from weekly_report.src.metrics.online_kpis import calculate_online_kpis_for_week
 from weekly_report.src.metrics.monthly_veronika_kpis import calculate_monthly_veronika_kpis
 from weekly_report.src.metrics.adjusted_amer import (
     AMER_ALL_FILE_TYPES,
-    AMER_DEMA_FILE_TYPES,
     calculate_adjusted_amer,
 )
 from weekly_report.src.metrics.retention_by_channel import (
@@ -88,6 +87,11 @@ from weekly_report.src.compute.budget_table1_month import (
     derive_emer_from_budget_components as _derive_emer_from_budget_components,
 )
 from weekly_report.src.utils.file_metadata import extract_file_metadata
+from weekly_report.src.storage.uploads import (
+    is_accumulating_file_type,
+    list_slot_files,
+    prepare_slot_for_upload,
+)
 
 
 # Pydantic models
@@ -4003,34 +4007,12 @@ async def upload_file(
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
         
-        # Create target directory
+        # Create target directory. Replace-on-upload types wipe siblings;
+        # aMER Dema + Shopify customers + discounts keep other files in the slot
+        # (week + month CSVs coexist). Same sanitized filename overwrites that file only.
         config = load_config(week=week)
         target_dir = config.raw_data_path / file_type
-        target_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Delete existing files in the directory (except .DS_Store).
-        # Exception: 'discounts' (Full price vs Sale) and 'shopify_customers'
-        # accumulate history across uploads — we keep prior files and merge at
-        # read time so successive weeks do not wipe earlier data.
-        accumulating_types = {"discounts", "shopify_customers", *AMER_DEMA_FILE_TYPES}
-        if file_type not in accumulating_types:
-            for existing_file in target_dir.glob("*.*"):
-                if not existing_file.name.startswith('.'):
-                    existing_file.unlink()
-                    logger.info(f"Deleted old file: {existing_file}")
-        
-        # Save file (sanitize so em dashes / spaces in Shopify report names are safe)
-        raw_name = Path(file.filename or "upload.csv").name
-        safe_stem = re.sub(r"[^\w.\-]+", "_", Path(raw_name).stem, flags=re.UNICODE).strip("._") or "upload"
-        safe_suffix = Path(raw_name).suffix.lower() or ".csv"
-        target_path = target_dir / f"{safe_stem}{safe_suffix}"
-        # For accumulating slots, avoid overwriting when a prior upload used the
-        # same filename (the read-side dedupes overlapping dates, newest wins).
-        if file_type in accumulating_types and target_path.exists():
-            import time as _time
-            stem = Path(file.filename).stem
-            suffix = Path(file.filename).suffix
-            target_path = target_dir / f"{stem}-{int(_time.time())}{suffix}"
+        target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
         with target_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
@@ -4341,20 +4323,24 @@ async def get_file_metadata(week: str = Query(...)):
         file_hashes = []
         for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
             type_path = raw_path / file_type
-            if type_path.exists():
-                files = list(type_path.glob("*.*"))
-                # Filter out hidden files (.DS_Store, etc.)
-                files = [f for f in files if not f.name.startswith('.')]
-                if files:
-                    # Get the most recently modified file
-                    latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                    # Only return basic file info - don't read the entire file
-                    metadata[file_type] = {
-                        "filename": latest_file.name,
-                        "uploaded_at": datetime.fromtimestamp(latest_file.stat().st_mtime).isoformat()
+            files = list_slot_files(type_path)
+            if files:
+                latest_file = files[-1]
+                file_entries = [
+                    {
+                        "filename": f.name,
+                        "uploaded_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
                     }
-                    # Add file hash for ETag
-                    file_hashes.append(f"{file_type}:{latest_file.name}:{latest_file.stat().st_mtime}")
+                    for f in files
+                ]
+                metadata[file_type] = {
+                    "filename": latest_file.name,
+                    "uploaded_at": datetime.fromtimestamp(latest_file.stat().st_mtime).isoformat(),
+                    "files": file_entries,
+                    "accumulates": is_accumulating_file_type(file_type),
+                }
+                for f in files:
+                    file_hashes.append(f"{file_type}:{f.name}:{f.stat().st_mtime}")
         
         # Generate ETag from file metadata
         etag_content = f"{week}:{':'.join(file_hashes)}"
