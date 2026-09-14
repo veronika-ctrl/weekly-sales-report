@@ -907,7 +907,7 @@ export default function Settings() {
                               </p>
                             )}
                           {/* Dimension validation: skip types with no Country column. */}
-                          {dimensions && dimensions[ft.type] && !ft.skipCountry && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && ft.type !== 'shopify_customers' && (
+                          {dimensions && dimensions[ft.type] && !(ft as { skipCountry?: boolean }).skipCountry && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && ft.type !== 'shopify_customers' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">
