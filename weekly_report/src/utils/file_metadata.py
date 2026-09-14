@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, Any
 from loguru import logger
 
+from weekly_report.src.adapters.csv_util import read_csv_auto
+
 
 def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
     """
@@ -29,16 +31,7 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
                 "reason": "xlsx_full_scan_skipped",
             }
 
-        # Load file
-        # Try semicolon separator first (common in European CSV files)
-        try:
-            df = pd.read_csv(file_path, sep=';', nrows=10000)
-        except Exception:
-            # Try comma separator
-            try:
-                df = pd.read_csv(file_path, nrows=10000, quotechar='"')
-            except Exception:
-                df = pd.read_csv(file_path, nrows=10000)
+        df = read_csv_auto(file_path, nrows=10000)
         
         # Remove quotes from column names if present
         df.columns = df.columns.str.strip('"').str.strip("'")
@@ -100,13 +93,7 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
                 row_count = sum(1 for line in f) - 1  # Subtract header
         except Exception:
             # Fallback to pandas if line counting fails
-            try:
-                full_df = pd.read_csv(file_path, sep=';')
-            except Exception:
-                try:
-                    full_df = pd.read_csv(file_path, quotechar='"')
-                except Exception:
-                    full_df = pd.read_csv(file_path)
+            full_df = read_csv_auto(file_path)
             row_count = len(full_df)
         
         return {

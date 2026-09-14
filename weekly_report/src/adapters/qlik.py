@@ -1,21 +1,11 @@
 """CSV adapters for loading data from different sources."""
 
-import csv
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 from loguru import logger
 
-
-def detect_csv_dialect(file_path: Path) -> csv.Dialect:
-    """Detect CSV dialect from file content."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        sample = f.read(1024)
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(sample)
-        logger.debug(f"Detected CSV dialect for {file_path.name}: delimiter='{dialect.delimiter}', quotechar='{dialect.quotechar}'")
-        return dialect
+from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
 
 
 def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
@@ -53,19 +43,10 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
         try:
             if file_path.suffix.lower() == '.xlsx':
                 # Load Excel file
-                df = pd.read_excel(file_path, na_values=['', 'NULL', 'null', 'N/A', 'n/a'])
+                df = pd.read_excel(file_path, na_values=NA_VALUES)
                 logger.debug(f"Loaded Excel {file_path.name}: {df.shape}")
             else:
-                # Detect dialect for CSV
-                dialect = detect_csv_dialect(file_path)
-                
-                # Load CSV
-                df = pd.read_csv(
-                    file_path,
-                    dialect=dialect,
-                    encoding='utf-8',
-                    na_values=['', 'NULL', 'null', 'N/A', 'n/a']
-                )
+                df = read_csv_auto(file_path, na_values=NA_VALUES)
                 logger.debug(f"Loaded CSV {file_path.name}: {df.shape}")
             
             # Add source file metadata

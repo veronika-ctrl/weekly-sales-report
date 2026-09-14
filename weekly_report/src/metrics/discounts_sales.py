@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from weekly_report.src.adapters.csv_util import read_csv_auto
 from weekly_report.src.fx_rates import convert_revenue_over_time_to_sek
 from weekly_report.src.periods.calculator import get_week_date_range
 
@@ -18,21 +19,7 @@ def _read_csv_flexible(file_path: Path, nrows: Optional[int] = None) -> pd.DataF
     Important: pandas can "succeed" with the wrong separator and return a single giant column.
     We treat that as a parse failure and retry with other separators.
     """
-    # Try common separators/encodings
-    for sep in [";", ","]:
-        for enc in ["utf-8", "latin-1"]:
-            try:
-                df = pd.read_csv(file_path, sep=sep, encoding=enc, nrows=nrows, quotechar='"')
-                # Detect wrong-separator parse (single column with delimiter characters in header)
-                if len(df.columns) == 1:
-                    header = str(df.columns[0])
-                    if (sep == ";" and "," in header) or (sep == "," and ";" in header):
-                        raise ValueError("Likely wrong separator (single column header contains other delimiter)")
-                return df
-            except Exception:
-                pass
-    # Fallback
-    return pd.read_csv(file_path, nrows=nrows, quotechar='"')
+    return read_csv_auto(file_path, nrows=nrows)
 
 
 def _normalize_col(col: str) -> str:

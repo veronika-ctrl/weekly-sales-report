@@ -1,21 +1,11 @@
 """CSV adapters for loading data from different sources."""
 
-import csv
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 from loguru import logger
 
-
-def detect_csv_dialect(file_path: Path) -> csv.Dialect:
-    """Detect CSV dialect from file content."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        sample = f.read(1024)
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(sample)
-        logger.debug(f"Detected CSV dialect for {file_path.name}: delimiter='{dialect.delimiter}', quotechar='{dialect.quotechar}'")
-        return dialect
+from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
 
 
 def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
@@ -39,16 +29,7 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
     dataframes = []
     for csv_file in csv_files:
         try:
-            # Detect dialect
-            dialect = detect_csv_dialect(csv_file)
-            
-            # Load CSV
-            df = pd.read_csv(
-                csv_file,
-                dialect=dialect,
-                encoding='utf-8',
-                na_values=['', 'NULL', 'null', 'N/A', 'n/a']
-            )
+            df = read_csv_auto(csv_file, na_values=NA_VALUES)
             
             # Add source file metadata
             df['_source_file'] = csv_file.name
@@ -75,4 +56,3 @@ def load_data(raw_data_path: Path) -> pd.DataFrame:
     """Load other data from CSV files."""
     source_path = raw_data_path / "other"
     return load_csv_files(source_path, "other")
-
