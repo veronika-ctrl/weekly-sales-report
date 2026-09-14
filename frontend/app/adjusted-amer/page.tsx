@@ -136,12 +136,12 @@ function fmtSek(v: number | null | undefined): string {
 function KpiCard({
   title,
   value,
-  hint,
+  note,
   provisional,
 }: {
   title: string
   value: string
-  hint?: string
+  note?: string
   provisional?: boolean
 }) {
   return (
@@ -158,10 +158,15 @@ function KpiCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-semibold text-gray-900">{value}</div>
-        {hint ? <p className="text-xs text-muted-foreground mt-1">{hint}</p> : null}
+        {note ? <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">{note}</p> : null}
       </CardContent>
     </Card>
   )
+}
+
+function unattributedSpendLabel(week: AdjustedAmerHeadline): string {
+  const spend = Number(week.unattributedSpend ?? 0)
+  return !spend ? 'zero spend' : `${fmtMoney(spend)} spend`
 }
 
 function ShareBar({ week }: { week: AdjustedAmerHeadline }) {
@@ -377,9 +382,10 @@ export default function AdjustedAmerPage() {
         <h2 className="text-lg font-semibold text-gray-900">Adjusted aMER</h2>
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
           Separate from weekly Dema/Shopify/Qlik reports. Upload the scheduled Dema agent trio
-          (Revenue by channel, Marketing spend, Net GM2) in Settings. Headline uses Revenue_CFA;
-          new-customer Adjusted aMER uses Revenue_New_MTA (MTA). Ratios are
-          ChannelGroup grain only (sem / social_ppc / affiliate) — never per Channel.
+          (Revenue by channel, Marketing spend, Net GM2) in Settings. Adjusted aMER (CFA, all
+          customers) is not comparable to new-customer aMER (Dema MTA). Compare new-customer
+          aMER to Adjusted aMER (MTA, all customers) on the same model. Ratios are ChannelGroup
+          grain only (sem / social_ppc / affiliate) — never per Channel.
           {data?.week_range?.display ? ` Week ${data.base_week}: ${data.week_range.display}.` : null}
         </p>
       </div>
@@ -470,22 +476,44 @@ export default function AdjustedAmerPage() {
       ) : null}
 
       {week ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <KpiCard
-            title="Adjusted aMER"
+            title="Adjusted aMER (CFA, all customers)"
             value={fmtRatio(week.adjustedAMER)}
-            hint="Paid Revenue_CFA ÷ paid spend (ChannelGroup)"
+            note={`Paid Revenue_CFA ÷ paid marketing spend (ChannelGroup). CFA attribution, all customers. Numerator: paid channels only. Denominator: paid spend (sem / social_ppc / affiliate). Not comparable to new-customer aMER.`}
             provisional={week.provisional}
           />
           <KpiCard
-            title="New-customer Adjusted aMER"
-            value={fmtRatio(week.newCustomerAdjustedAMER)}
-            hint="MTA-based — paid Revenue_New_MTA ÷ paid spend (ChannelGroup)"
+            title="Adjusted aMER (MTA, all customers)"
+            value={fmtRatio(week.adjustedAMERMTA)}
+            note={`Paid Revenue_MTA ÷ paid marketing spend (ChannelGroup). MTA attribution, all customers — same model and paid spend as new-customer aMER. The comparable base for new-customer aMER.`}
             provisional={week.provisional}
           />
-          <KpiCard title="Blended MER" value={fmtRatio(week.blendedMER)} hint="(Paid + organic + unattributed) CFA ÷ paid spend (ChannelGroup)" />
-          <KpiCard title="Net GM2" value={fmtPct(week.netGM2)} hint="sum(Net gross profit 2) ÷ sum(Net sales)" />
-          <KpiCard title="GP3" value={fmtMoney(week.gp3)} hint="Net gross profit 2 − Marketing spend (KR)" />
+          <KpiCard
+            title="New-customer aMER (Dema MTA)"
+            value={fmtRatio(week.newCustomerAdjustedAMER)}
+            note={
+              week.newCustomerShareOfMtaAMER != null
+                ? `Paid Revenue_New_MTA ÷ paid marketing spend (ChannelGroup). MTA, new customers only. ${fmtPct(week.newCustomerShareOfMtaAMER)} of MTA all-customers aMER (${fmtRatio(week.adjustedAMERMTA)}) — not a share of CFA all-customers aMER (${fmtRatio(week.adjustedAMER)}).`
+                : `Paid Revenue_New_MTA ÷ paid marketing spend (ChannelGroup). MTA, new customers only. Compare to MTA all-customers aMER, not to CFA.`
+            }
+            provisional={week.provisional}
+          />
+          <KpiCard
+            title="Blended MER"
+            value={fmtRatio(week.blendedMER)}
+            note={`(Paid + organic + unattributed) Revenue_CFA ÷ paid spend (ChannelGroup). Backfilled + unknown revenue is ${fmtPct(week.unattributedShare)} of total, with ${unattributedSpendLabel(week)}, and is included in the numerator — it is not organic traffic.`}
+          />
+          <KpiCard
+            title="Net GM2"
+            value={fmtPct(week.netGM2)}
+            note="sum(Net gross profit 2) ÷ sum(Net sales) after aggregate. Company total across ChannelGroups. Row-level Net GM2 % is not averaged."
+          />
+          <KpiCard
+            title="GP3"
+            value={fmtMoney(week.gp3)}
+            note="Net gross profit 2 − Marketing spend (KR). Company total, all ChannelGroups in the Dema Net GM2 file."
+          />
         </div>
       ) : (
         <Card>
@@ -513,16 +541,16 @@ export default function AdjustedAmerPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Monthly Adjusted aMER</CardTitle>
+          <CardTitle>Monthly Adjusted aMER (CFA, all customers)</CardTitle>
           <CardDescription>
-            Company headline: paid Revenue_CFA ÷ paid spend. {demaMonthCaption}
+            Company headline: paid Revenue_CFA ÷ paid spend. Not the MTA all-customers bridge. {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {headlineTrend.length === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series yet — upload the Dema agent files for this week.</p>
           ) : (
-            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER', color: '#111827' } }} className={demaChartClass(headlineTrend.length)}>
+            <ChartContainer config={{ adjustedAMER: { label: 'Adjusted aMER (CFA)', color: '#111827' } }} className={demaChartClass(headlineTrend.length)}>
               <LineChart data={headlineTrend} margin={LINE_CHART_MARGIN} isAnimationActive={chartAnimationsEnabled}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="year_month" {...monthTickProps(headlineTrend.length)} />
@@ -531,7 +559,7 @@ export default function AdjustedAmerPage() {
                 <Legend />
                 <Line
                   dataKey="adjustedAMER"
-                  name="Adjusted aMER"
+                  name="Adjusted aMER (CFA)"
                   type="monotone"
                   stroke="#111827"
                   strokeWidth={2.5}
@@ -590,7 +618,7 @@ export default function AdjustedAmerPage() {
         <CardHeader>
           <CardTitle>Monthly new-customer Adjusted aMER by ChannelGroup (MTA-based)</CardTitle>
           <CardDescription>
-            Paid Revenue_New_MTA ÷ ChannelGroup spend. Not the same methodology as headline Adjusted aMER (CFA). {demaMonthCaption}
+            Paid Revenue_New_MTA ÷ ChannelGroup spend. Same MTA model as the all-customers MTA card; not CFA. {demaMonthCaption}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -686,7 +714,7 @@ export default function AdjustedAmerPage() {
           <CardHeader>
             <CardTitle>Monthly headline table</CardTitle>
             <CardDescription>
-              Company-level ratios plus Net GM2 and GP3 for months with a Dema agent file. {demaMonthCaption}
+              Company-level CFA, MTA all-customers, and new-customer aMER plus Net GM2 and GP3. {demaMonthCaption}
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -694,8 +722,9 @@ export default function AdjustedAmerPage() {
               <thead>
                 <tr className="text-left text-muted-foreground border-b">
                   <th className="py-2 pr-3">Month</th>
-                  <th className="py-2 pr-3 text-right">Adj. aMER</th>
-                  <th className="py-2 pr-3 text-right">NC adj. aMER (MTA)</th>
+                  <th className="py-2 pr-3 text-right">Adj. aMER (CFA)</th>
+                  <th className="py-2 pr-3 text-right">Adj. aMER (MTA)</th>
+                  <th className="py-2 pr-3 text-right">NC aMER (MTA)</th>
                   <th className="py-2 pr-3 text-right">Blended MER</th>
                   <th className="py-2 pr-3 text-right">Net GM2</th>
                   <th className="py-2 text-right">GP3</th>
@@ -706,6 +735,7 @@ export default function AdjustedAmerPage() {
                   <tr key={row.year_month} className="border-b last:border-0">
                     <td className="py-2 pr-3">{row.year_month}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMER)}</td>
+                    <td className="py-2 pr-3 text-right">{fmtRatio(row.adjustedAMERMTA)}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.newCustomerAdjustedAMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtRatio(row.blendedMER)}</td>
                     <td className="py-2 pr-3 text-right">{fmtPct(row.netGM2)}</td>
