@@ -1216,17 +1216,21 @@ export interface FullPriceVsSaleResponse {
   weeks: FullPriceVsSaleWeek[]
 }
 
+const FULL_PRICE_TIMEOUT_MS = 180_000
+
 export async function getFullPriceVsSale(
   baseWeek: string,
   numWeeks: number = 8,
 ): Promise<FullPriceVsSaleResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/discounts/full-price-vs-sale?base_week=${baseWeek}&num_weeks=${numWeeks}`
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    num_weeks: String(numWeeks),
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/full-price-vs-sale',
   )
-  if (!response.ok) {
-    throw new Error(`Failed to fetch full price vs sale: ${response.statusText}`)
-  }
-  return response.json()
 }
 
 interface FullPriceVsSaleBucket {
@@ -1277,13 +1281,16 @@ export async function getFullPriceVsSaleMonthly(
   baseWeek: string,
   months: number = 12,
 ): Promise<FullPriceVsSaleMonthlyResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/discounts/full-price-vs-sale?base_week=${baseWeek}&granularity=month&months=${months}`
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    granularity: 'month',
+    months: String(months),
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/full-price-vs-sale?granularity=month',
   )
-  if (!response.ok) {
-    throw new Error(`Failed to fetch full price vs sale (monthly): ${response.statusText}`)
-  }
-  return response.json()
 }
 
 /** Direct API URL to download Full Price vs Sale Excel (YTD + monthly + weekly). */
@@ -1379,26 +1386,32 @@ export async function getFullPriceVsSaleExclExchanges(
   baseWeek: string,
   numWeeks: number = 8,
 ): Promise<FullPriceExclExchangesResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?base_week=${baseWeek}&num_weeks=${numWeeks}&granularity=week`
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    num_weeks: String(numWeeks),
+    granularity: 'week',
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/full-price-vs-sale-excl-exchanges',
   )
-  if (!response.ok) {
-    throw new Error(`Failed to fetch full price vs sale excl. exchanges: ${response.statusText}`)
-  }
-  return response.json()
 }
 
 export async function getFullPriceVsSaleExclExchangesMonthly(
   baseWeek: string,
   months: number = 13,
 ): Promise<FullPriceExclExchangesResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?base_week=${baseWeek}&granularity=month&months=${months}`
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    granularity: 'month',
+    months: String(months),
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/full-price-vs-sale-excl-exchanges?granularity=month',
   )
-  if (!response.ok) {
-    throw new Error(`Failed to fetch full price vs sale excl. exchanges (monthly): ${response.statusText}`)
-  }
-  return response.json()
 }
 
 export interface ExclExchangesHistoryInfo {

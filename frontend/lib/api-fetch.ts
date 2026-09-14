@@ -58,7 +58,7 @@ export function describeApiFetchFailure(
     const where = opts?.endpoint ? ` ${opts.endpoint}` : ' the API'
     return (
       `Could not reach${where} (Failed to fetch). ` +
-      'This is a network, CORS, or site-password problem — not missing Dema files. ' +
+      'This is a network, CORS, or site-password problem — not missing uploads. ' +
       'Hard-refresh, re-enter the site password if prompted, and retry. ' +
       'If it continues, the API connection was dropped (timeout or restart). Uploaded files stay on the server; you do not need to re-upload them.'
     )
