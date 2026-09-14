@@ -54,6 +54,9 @@ from weekly_report.src.metrics.klaviyo_email import (
     KLAVIYO_EMAIL_TYPE,
     calculate_klaviyo_email,
 )
+from weekly_report.src.metrics.full_price_excl_exchanges import (
+    FILE_TYPE as FULL_PRICE_EXCL_EXCHANGES_TYPE,
+)
 from weekly_report.src.metrics.quarterly_veronika_board import calculate_quarterly_veronika_board_kpis
 from weekly_report.src.pdf.veronika_monthly_pdf import build_veronika_monthly_pdf
 from weekly_report.src.metrics.contribution import calculate_contribution_for_weeks
@@ -4038,7 +4041,8 @@ async def upload_file(
         
         # Validate file_type
         allowed_types = [
-            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget",
+            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts",
+            FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget",
             *AMER_ALL_FILE_TYPES,
             RETENTION_CUSTOMERS_TYPE,
             *CAC_PAYBACK_FILE_TYPES,
@@ -4051,7 +4055,7 @@ async def upload_file(
         file_extension = Path(file.filename).suffix.lower()
         if file_type == "qlik" and file_extension not in ['.xlsx', '.csv']:
             raise HTTPException(status_code=400, detail="Qlik file must be .xlsx or .csv")
-        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
+        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
 
@@ -4073,6 +4077,41 @@ async def upload_file(
         
         logger.info(f"File uploaded: {target_path} ({bytes_written} bytes)")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")
+
+        upload_date_range = None
+        upload_meta_extra: Dict[str, Any] = {"deferred": True}
+        if file_type == FULL_PRICE_EXCL_EXCHANGES_TYPE:
+            from weekly_report.src.metrics.full_price_excl_exchanges import inspect_excl_exchanges_upload
+
+            try:
+                inspected = inspect_excl_exchanges_upload(target_path)
+            except Exception as inspect_error:
+                target_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not read Full Price vs Sale excl. Exchanges CSV: {inspect_error}",
+                )
+            missing = inspected.get("missing_headers") or []
+            if missing:
+                target_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Missing required headers for Full Price vs Sale excl. Exchanges: "
+                        + ", ".join(missing)
+                    ),
+                )
+            if inspected.get("first_date") and inspected.get("last_date"):
+                upload_date_range = {
+                    "start": inspected["first_date"],
+                    "end": inspected["last_date"],
+                }
+            upload_meta_extra = {
+                "first_date": inspected.get("first_date"),
+                "last_date": inspected.get("last_date"),
+                "row_count": inspected.get("row_count"),
+                "date_column": inspected.get("date_column"),
+            }
         
         # Special handling for budget files: save to Supabase for reuse (only when Supabase is enabled)
         if file_type == "budget" and _supabase_enabled():
@@ -4170,15 +4209,18 @@ async def upload_file(
         except Exception as invalidation_error:
             logger.warning(f"Failed to invalidate Supabase cache (non-blocking): {invalidation_error}")
         
-        # File is already on disk. Do not scan it with pandas here — a full Qlik
-        # xlsx read blocks the single Render worker, the UI sits at 99%, and
-        # every other Settings card times out. Current Files uses GET /api/file-metadata.
-        return {
+        # File is already on disk. Do not scan Qlik xlsx with pandas here — that
+        # blocks the single Render worker. Small daily CSVs (excl. exchanges) are
+        # header-validated above and return date_range. Current Files uses GET /api/file-metadata.
+        payload: Dict[str, Any] = {
             "success": True,
             "file_path": str(target_path),
             "bytes_written": bytes_written,
-            "metadata": {"deferred": True},
+            "metadata": upload_meta_extra,
         }
+        if upload_date_range:
+            payload["date_range"] = upload_date_range
+        return payload
         
     except HTTPException:
         raise
@@ -4224,6 +4266,21 @@ def validate_file_dimensions(file_path: Path, file_type: str) -> Dict[str, Any]:
             result["columns"] = df.columns.tolist()
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
+        elif file_type == FULL_PRICE_EXCL_EXCHANGES_TYPE:
+            # Daily pricing-type export has no Country column — skip country UI.
+            try:
+                df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
+            except Exception:
+                try:
+                    df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
+                except Exception:
+                    df = pd.DataFrame()
+            df.columns = df.columns.str.strip().str.replace('"', '')
+            result["columns"] = df.columns.tolist()
+            result["has_country"] = None
+            result["skip_country"] = True
+            result["extra_fields"] = []
+
         elif file_type == "qlik":
             # For Qlik, check if it's CSV or Excel
             if file_path.suffix == '.csv':
@@ -4278,7 +4335,7 @@ async def get_file_dimensions(week: str = Query(...)):
             cached_result = _dimensions_cache[cache_key]
             # Verify files haven't changed
             cache_valid = True
-            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
+            for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
                 type_path = raw_path / file_type
                 if type_path.exists():
                     files = list(type_path.glob("*.*"))
@@ -4307,7 +4364,7 @@ async def get_file_dimensions(week: str = Query(...)):
         file_hashes = []
         
         # Check each file type
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
             type_path = raw_path / file_type
             if type_path.exists():
                 files = list(type_path.glob("*.*"))
@@ -4377,7 +4434,7 @@ async def get_file_metadata(week: str = Query(...)):
         
         metadata = {}
         file_hashes = []
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
             type_path = raw_path / file_type
             files = list_slot_files(type_path)
             if files:
@@ -4395,6 +4452,21 @@ async def get_file_metadata(week: str = Query(...)):
                     "files": file_entries,
                     "accumulates": is_accumulating_file_type(file_type),
                 }
+                if file_type == FULL_PRICE_EXCL_EXCHANGES_TYPE:
+                    try:
+                        from weekly_report.src.metrics.full_price_excl_exchanges import inspect_excl_exchanges_upload
+
+                        inspected = inspect_excl_exchanges_upload(latest_file)
+                        for key in ("first_date", "last_date", "row_count", "date_column"):
+                            if inspected.get(key) is not None:
+                                metadata[file_type][key] = inspected[key]
+                        if inspected.get("first_date") and inspected.get("last_date"):
+                            metadata[file_type]["date_range"] = {
+                                "start": inspected["first_date"],
+                                "end": inspected["last_date"],
+                            }
+                    except Exception as meta_error:
+                        logger.warning(f"Failed to inspect excl-exchanges metadata for {latest_file}: {meta_error}")
                 for f in files:
                     file_hashes.append(f"{file_type}:{f.name}:{f.stat().st_mtime}")
         
@@ -4556,6 +4628,36 @@ async def get_discounts_full_price_vs_sale(
         raise HTTPException(status_code=500, detail="Failed to load full price vs sale")
 
 
+@app.get("/api/discounts/full-price-vs-sale-excl-exchanges")
+async def get_full_price_vs_sale_excl_exchanges(
+    base_week: str = Query(...),
+    num_weeks: int = Query(8),
+    granularity: str = Query("week", description="week or month"),
+    months: int = Query(13),
+):
+    """Daily Full Price vs Sale excluding AfterShip exchanges, plus comparison vs all-orders."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.full_price_excl_exchanges import (
+            calculate_full_price_vs_sale_excl_exchanges,
+        )
+
+        return calculate_full_price_vs_sale_excl_exchanges(
+            base_week,
+            config.data_root,
+            num_weeks=num_weeks,
+            months=months,
+            granularity=granularity,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading full price vs sale excl exchanges: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load exchange-excluded full price vs sale")
+
+
 @app.get("/api/discounts/full-price-vs-sale/excel")
 async def get_discounts_full_price_vs_sale_excel(
     base_week: str = Query(...),
@@ -4649,6 +4751,23 @@ async def get_discounts_history_info(base_week: str = Query(...)):
     except Exception as e:
         logger.error(f"Error loading discounts history info: {e}")
         raise HTTPException(status_code=500, detail="Failed to load discounts history info")
+
+
+@app.get("/api/discounts/full-price-vs-sale-excl-exchanges/history-info")
+async def get_excl_exchanges_history_info(base_week: str = Query(...)):
+    """Summarize accumulated Full Price vs Sale excl. Exchanges daily files across week folders."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.full_price_excl_exchanges import excl_exchanges_history_info
+
+        return excl_exchanges_history_info(config.data_root)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading excl-exchanges history info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load exchange-excluded history info")
 
 
 @app.post("/api/discounts/reset-history")

@@ -2517,8 +2517,22 @@ def calculate_discount_level_for_weeks(
 # exports build up a full history that enables year-over-year comparison.
 # ---------------------------------------------------------------------------
 
+def _has_exchange_impact_columns(df: pd.DataFrame) -> bool:
+    """True if this is the exchange-aware daily export (must not mix into all-orders history)."""
+    return bool(
+        _pick_column(df, ["Exchange Orders", "Exchange orders"])
+        or _pick_column(df, ["Exchange Gross Value", "Exchange Gross"])
+    )
+
+
 def _is_revenue_over_time_format(df: pd.DataFrame) -> bool:
-    """True if the dataframe matches the custom app's daily 'revenue-over-time' export."""
+    """True if the dataframe matches the custom app's daily 'revenue-over-time' export.
+
+    The exchange-excluded daily export also has Date + Full Price + Total, so a file
+    accidentally uploaded into ``*/discounts/*`` must not be treated as all-orders.
+    """
+    if _has_exchange_impact_columns(df):
+        return False
     date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
     full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
     total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
