@@ -15,9 +15,10 @@ Join is a mandatory FULL OUTER JOIN on Channel;ChannelGroup;Country;Day. Unmatch
 revenue or spend is treated as 0. Never left-join from revenue: paid spend without
 revenue would disappear and inflate ratios.
 
-Headline Adjusted aMER uses Revenue_CFA. New-customer Adjusted aMER uses
+Headline Adjusted aMER uses Revenue_CFA (all customers). New-customer aMER uses
 Revenue_New_MTA because CFA is not split by new/returning. Those two ratios are
-not the same methodology.
+not the same methodology. The comparable all-customer number for new-customer
+aMER is paid Revenue_MTA ÷ paid spend (MTA, all customers).
 
 Every ratio that divides revenue by spend is computed at ChannelGroup grain.
 Meta spend is booked to Channel facebook while CFA splits across facebook +
@@ -607,19 +608,29 @@ def _share(part: float, whole: float) -> Optional[float]:
     return safe_ratio(part, whole)
 
 
+def _sum_masked(df: pd.DataFrame, mask: pd.Series, col: str) -> float:
+    if col not in df.columns:
+        return 0.0
+    return float(df.loc[mask, col].sum())
+
+
 def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     """Weekly or monthly headline aggregates. GM2 is sum/sum, never a row-level average."""
     empty = {
         "paidRevenue": 0.0,
+        "paidRevenueMTA": 0.0,
         "organicRevenue": 0.0,
         "unattributedRevenue": 0.0,
         "otherRevenue": 0.0,
         "totalRevenue": 0.0,
         "newCustomerPaidRevenue": 0.0,
         "paidSpend": 0.0,
+        "unattributedSpend": 0.0,
         "blendedMER": None,
         "adjustedAMER": None,
+        "adjustedAMERMTA": None,
         "newCustomerAdjustedAMER": None,
+        "newCustomerShareOfMtaAMER": None,
         "organicRevShare": None,
         "paidRevShare": None,
         "unattributedShare": None,
@@ -637,13 +648,15 @@ def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     unattr = df["bucket"] == "unattributed"
     other = df["bucket"] == "other"
 
-    paid_revenue = float(df.loc[paid, "revenue_cfa"].sum())
-    organic_revenue = float(df.loc[organic, "revenue_cfa"].sum())
-    unattr_revenue = float(df.loc[unattr, "revenue_cfa"].sum())
-    other_revenue = float(df.loc[other, "revenue_cfa"].sum())
+    paid_revenue = _sum_masked(df, paid, "revenue_cfa")
+    organic_revenue = _sum_masked(df, organic, "revenue_cfa")
+    unattr_revenue = _sum_masked(df, unattr, "revenue_cfa")
+    other_revenue = _sum_masked(df, other, "revenue_cfa")
     total_revenue = paid_revenue + organic_revenue + unattr_revenue
-    new_paid = float(df.loc[paid, "revenue_new_mta"].sum())
-    paid_spend = float(df.loc[paid, "marketing_spend"].sum())
+    paid_mta = _sum_masked(df, paid, "revenue_mta")
+    new_paid = _sum_masked(df, paid, "revenue_new_mta")
+    paid_spend = _sum_masked(df, paid, "marketing_spend")
+    unattr_spend = _sum_masked(df, unattr, "marketing_spend")
     gp2 = float(df["net_gross_profit_2"].sum()) if "net_gross_profit_2" in df.columns else 0.0
     net_sales = float(df["net_sales"].sum()) if "net_sales" in df.columns else 0.0
     all_spend = float(df["marketing_spend"].sum()) if "marketing_spend" in df.columns else 0.0
@@ -651,15 +664,19 @@ def aggregate_amer_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     total_cfa_all = total_revenue + other_revenue
     return {
         "paidRevenue": paid_revenue,
+        "paidRevenueMTA": paid_mta,
         "organicRevenue": organic_revenue,
         "unattributedRevenue": unattr_revenue,
         "otherRevenue": other_revenue,
         "totalRevenue": total_revenue,
         "newCustomerPaidRevenue": new_paid,
         "paidSpend": paid_spend,
+        "unattributedSpend": unattr_spend,
         "blendedMER": safe_ratio(total_revenue, paid_spend),
         "adjustedAMER": safe_ratio(paid_revenue, paid_spend),
+        "adjustedAMERMTA": safe_ratio(paid_mta, paid_spend),
         "newCustomerAdjustedAMER": safe_ratio(new_paid, paid_spend),
+        "newCustomerShareOfMtaAMER": safe_ratio(new_paid, paid_mta),
         "organicRevShare": _share(organic_revenue, total_revenue),
         "paidRevShare": _share(paid_revenue, total_revenue),
         "unattributedShare": _share(unattr_revenue, total_revenue),
@@ -817,10 +834,11 @@ def observed_taxonomy(df: pd.DataFrame) -> Dict[str, Any]:
             "(Facebook+Instagram+TikTok+Pinterest), affiliate (CJ+wordseed+klarna+goodonyou). "
             "Organic = direct, organic, email, referral, social_organic. "
             "Unattributed = backfilled, unknown. Anything else is other — shown, not folded "
-            "into organic. Ratios (Adjusted aMER, Blended MER, new-customer aMER) are "
-            "ChannelGroup grain only because Meta spend is booked to facebook while revenue "
-            "splits across facebook+instagram. Known gaps: no display group; TikTok dormant; "
-            "PMax/Shopping not split out of sem. totalRevenue = paid + organic + unattributed."
+            "into organic. Ratios (Adjusted aMER CFA, Adjusted aMER MTA, Blended MER, "
+            "new-customer aMER) are ChannelGroup grain only because Meta spend is booked to "
+            "facebook while revenue splits across facebook+instagram. Known gaps: no display "
+            "group; TikTok dormant; PMax/Shopping not split out of sem. "
+            "totalRevenue = paid + organic + unattributed."
         ),
     }
 
@@ -1255,9 +1273,15 @@ def calculate_adjusted_amer(
 
     warnings: List[Dict[str, str]] = []
     footnotes = [
-        "Headline Adjusted aMER = paid Revenue_CFA ÷ paid marketing spend at ChannelGroup grain.",
-        "New-customer Adjusted aMER = paid Revenue_New_MTA ÷ paid marketing spend (MTA). "
-        "CFA is not split by new/returning, so this ratio is not the same methodology.",
+        "Adjusted aMER (CFA, all customers) = paid Revenue_CFA ÷ paid marketing spend at ChannelGroup grain.",
+        "Adjusted aMER (MTA, all customers) = paid Revenue_MTA ÷ paid marketing spend. "
+        "This is the comparable all-customer number for new-customer aMER on the same model.",
+        "New-customer aMER (Dema MTA) = paid Revenue_New_MTA ÷ paid marketing spend. "
+        "Read it as a share of MTA all-customers aMER, not of CFA all-customers aMER. "
+        "CFA is not split by new/returning.",
+        "Blended MER = (paid + organic + unattributed) Revenue_CFA ÷ paid spend. "
+        "Backfilled + unknown (unattributed) has zero spend and is not organic traffic, "
+        "but it is included in the numerator.",
         "Ratios are never computed per Channel. Meta spend is booked to facebook; "
         "revenue splits across facebook + instagram.",
         "Unattributed revenue is kept separate and is never folded into organic.",

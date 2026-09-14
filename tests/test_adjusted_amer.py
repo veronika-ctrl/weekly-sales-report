@@ -228,13 +228,23 @@ def test_weekly_aggregates_match_manual_recompute(tmp_path: Path):
     assert week["adjustedAMER"] == pytest.approx(220.0 / 140.0)
     assert week["blendedMER"] == pytest.approx(290.0 / 140.0)
     assert week["newCustomerAdjustedAMER"] == pytest.approx(73.0 / 140.0)
+    # Paid MTA: 90+55+44+22+11 = 222 (same paid rows as CFA; Instagram has MTA 55)
+    assert week["paidRevenueMTA"] == pytest.approx(222.0)
+    assert week["adjustedAMERMTA"] == pytest.approx(222.0 / 140.0)
+    assert week["newCustomerShareOfMtaAMER"] == pytest.approx(73.0 / 222.0)
+    assert week["unattributedSpend"] == pytest.approx(0.0)
     assert week["paidRevShare"] == pytest.approx(220.0 / 290.0)
     assert week["organicRevShare"] == pytest.approx(45.0 / 290.0)
     assert week["unattributedShare"] == pytest.approx(25.0 / 290.0)
     assert week["netGM2"] == pytest.approx(150.0 / 370.0)
     assert week["gp3"] == pytest.approx(150.0 - 140.0)
-    # CFA headline ≠ MTA new-customer ratio
+    # CFA headline ≠ MTA all-customers ≠ MTA new-customer
     assert week["adjustedAMER"] != pytest.approx(week["newCustomerAdjustedAMER"])
+    assert week["adjustedAMER"] != pytest.approx(week["adjustedAMERMTA"])
+    assert week["newCustomerAdjustedAMER"] != pytest.approx(week["adjustedAMERMTA"])
+    joined_notes = " ".join(payload["footnotes"])
+    assert "MTA, all customers" in joined_notes
+    assert "not organic traffic" in joined_notes
 
 
 def test_unattributed_not_folded_into_organic():
@@ -252,6 +262,69 @@ def test_unattributed_not_folded_into_organic():
     assert m["organicRevenue"] == 100.0
     assert m["unattributedRevenue"] == 50.0
     assert m["totalRevenue"] == 150.0
+    assert m["unattributedShare"] == pytest.approx(50.0 / 150.0)
+    assert m["unattributedSpend"] == pytest.approx(0.0)
+
+
+def test_mta_all_customers_is_the_comparable_base_for_new_customer_amer():
+    """Dema W37 reading: 1.01 is a share of MTA 1.52, not of CFA 2.32; unattributed is 16.4%."""
+    paid_spend = 1000.0
+    paid_cfa = 2320.0
+    paid_mta = 1520.0
+    new_mta = 1010.0
+    organic_cfa = 500.0
+    unattr_cfa = 0.164 * (paid_cfa + organic_cfa) / (1.0 - 0.164)
+    df = pd.DataFrame(
+        {
+            "bucket": ["paid", "organic", "unattributed"],
+            "revenue_cfa": [paid_cfa, organic_cfa, unattr_cfa],
+            "revenue_mta": [paid_mta, 0.0, 0.0],
+            "revenue_new_mta": [new_mta, 0.0, 0.0],
+            "marketing_spend": [paid_spend, 0.0, 0.0],
+            "net_gross_profit_2": [0.0, 0.0, 0.0],
+            "net_sales": [0.0, 0.0, 0.0],
+        }
+    )
+    m = aggregate_amer_metrics(df)
+    assert m["adjustedAMER"] == pytest.approx(2.32)
+    assert m["adjustedAMERMTA"] == pytest.approx(1.52)
+    assert m["newCustomerAdjustedAMER"] == pytest.approx(1.01)
+    assert m["newCustomerShareOfMtaAMER"] == pytest.approx(1010.0 / 1520.0)
+    assert m["newCustomerShareOfMtaAMER"] == pytest.approx(1.01 / 1.52)
+    assert m["unattributedShare"] == pytest.approx(0.164)
+    assert m["unattributedSpend"] == pytest.approx(0.0)
+    assert m["blendedMER"] == pytest.approx((paid_cfa + organic_cfa + unattr_cfa) / paid_spend)
+    # Misreading new-customer aMER against CFA 2.32 is the bug Dema flagged.
+    assert (m["newCustomerAdjustedAMER"] / m["adjustedAMER"]) == pytest.approx(1.01 / 2.32)
+    assert m["newCustomerShareOfMtaAMER"] != pytest.approx(1.01 / 2.32)
+
+
+def test_w37_display_rounding_matches_dema_flagged_reading():
+    """Production W37 CFA/new/unattributed, with paid MTA = 1.52 × paid spend (Dema's bridge)."""
+    paid_spend = 115_499.567
+    paid_cfa = 268_115.1191
+    new_mta = 116_749.2642
+    paid_mta = 1.52 * paid_spend
+    organic_cfa = 706_291.2987
+    unattr_cfa = 191_229.3932
+    df = pd.DataFrame(
+        {
+            "bucket": ["paid", "organic", "unattributed"],
+            "revenue_cfa": [paid_cfa, organic_cfa, unattr_cfa],
+            "revenue_mta": [paid_mta, 0.0, 0.0],
+            "revenue_new_mta": [new_mta, 0.0, 0.0],
+            "marketing_spend": [paid_spend, 0.0, 0.0],
+            "net_gross_profit_2": [0.0, 0.0, 0.0],
+            "net_sales": [0.0, 0.0, 0.0],
+        }
+    )
+    m = aggregate_amer_metrics(df)
+    assert round(m["adjustedAMER"], 2) == 2.32
+    assert round(m["adjustedAMERMTA"], 2) == 1.52
+    assert round(m["newCustomerAdjustedAMER"], 2) == 1.01
+    assert round(m["newCustomerShareOfMtaAMER"] * 100, 1) == 66.5
+    assert round(m["unattributedShare"] * 100, 1) == 16.4
+    assert m["unattributedSpend"] == pytest.approx(0.0)
 
 
 def test_safe_ratio_guards_divide_by_zero():
@@ -274,8 +347,10 @@ def test_zero_paid_spend_ratios_are_null():
     )
     m = aggregate_amer_metrics(df)
     assert m["adjustedAMER"] is None
+    assert m["adjustedAMERMTA"] is None
     assert m["blendedMER"] is None
     assert m["newCustomerAdjustedAMER"] is None
+    assert m["newCustomerShareOfMtaAMER"] is None
     assert m["netGM2"] is None
     assert m["gp3"] == pytest.approx(10.0)
 

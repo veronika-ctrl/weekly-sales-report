@@ -1903,15 +1903,19 @@ export interface AdjustedAmerWarning {
 
 export interface AdjustedAmerHeadline {
   paidRevenue: number
+  paidRevenueMTA?: number
   organicRevenue: number
   unattributedRevenue: number
   otherRevenue: number
   totalRevenue: number
   newCustomerPaidRevenue: number
   paidSpend: number
+  unattributedSpend?: number
   blendedMER: number | null
   adjustedAMER: number | null
+  adjustedAMERMTA?: number | null
   newCustomerAdjustedAMER: number | null
+  newCustomerShareOfMtaAMER?: number | null
   organicRevShare: number | null
   paidRevShare: number | null
   unattributedShare: number | null
