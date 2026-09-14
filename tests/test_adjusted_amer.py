@@ -46,6 +46,7 @@ from weekly_report.src.metrics.adjusted_amer import (
     classify_channel_group,
     full_outer_join_amer,
     infer_channel_group,
+    infer_source_period,
     is_provisional,
     load_gm2_frame,
     load_revenue_frame,
@@ -53,8 +54,11 @@ from weekly_report.src.metrics.adjusted_amer import (
     monthly_channel_rows,
     monthly_group_rows,
     monthly_headline_rows,
+    period_label,
     recruited_vs_dropped,
+    register_validated_period,
     safe_ratio,
+    validated_totals_path,
 )
 
 
@@ -663,3 +667,108 @@ def test_adjusted_amer_routes_defer_then_load_shopify(tmp_path: Path, monkeypatc
     recruited = asyncio.run(routes.get_adjusted_amer_recruited(base_week=WEEK))
     assert recruited["available"] is True
     assert recruited["customer_count"] == 2
+
+
+W37 = "2026-37"  # Mon 2026-09-07 .. Sun 2026-09-13
+
+
+def _write_w37_agent_files(tmp_path: Path, week_folder: str = W37) -> Path:
+    base = _amer_week_dir(tmp_path, week_folder)
+    _write_csv(
+        base / AMER_REVENUE_TYPE / "Revenue_by_channel_W37.csv",
+        "Channel;ChannelGroup;Country;Day;Revenue_MTA;Revenue_CFA;Revenue_New_MTA;Revenue_Returning_MTA",
+        ["Facebook;social_ppc;Sweden;2026-09-07;1;1;0;1"],
+    )
+    _write_csv(
+        base / AMER_SPEND_TYPE / "Marketing_spend_W37.csv",
+        "Channel;ChannelGroup;Country;Day;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-07;115499.57"],
+    )
+    _write_csv(
+        base / AMER_GM2_TYPE / "Net_GM2_W37.csv",
+        "Channel;ChannelGroup;Country;Day;Net gross profit 2;Net sales;Net gross margin 2;Marketing spend",
+        ["Facebook;social_ppc;Sweden;2026-09-07;100;1164099.09;0.08;115499.57"],
+    )
+    return base
+
+
+def test_period_label_week_and_month():
+    assert period_label("week", "2026-36") == "W36"
+    assert period_label("week", "2026-37") == "W37"
+    assert period_label("month", "2026-08") == "August 2026"
+
+
+def test_infer_source_period_iso_week_from_w37_days(tmp_path: Path):
+    path = tmp_path / "raw" / WEEK / AMER_GM2_TYPE / "Net_GM2_W37.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame({"Day": [pd.Timestamp("2026-09-07"), pd.Timestamp("2026-09-13")]})
+    assert infer_source_period(path, df) == ("week", "2026-37")
+
+
+def test_w37_is_unregistered_until_file_totals_are_saved(tmp_path: Path):
+    _write_w37_agent_files(tmp_path)
+    payload = calculate_adjusted_amer(W37, tmp_path, include_customers=False)
+    by = {(row["kind"], row["key"]): row for row in payload["reconciliation"]}
+    w37 = by[("week", "2026-37")]
+    assert w37["label"] == "W37"
+    assert w37["registered"] is False
+    assert w37["match"] is False
+    assert w37["expected_net_sales"] is None
+    assert w37["expected_marketing_spend"] is None
+    assert w37["net_sales"] == pytest.approx(1_164_099.09)
+    assert w37["marketing_spend"] == pytest.approx(115_499.57)
+    assert w37["can_register"] is True
+    assert not any(w["code"] == "reconciliation_mismatch" for w in payload["warnings"])
+
+
+def test_register_w37_copies_source_file_totals(tmp_path: Path):
+    _write_w37_agent_files(tmp_path)
+    saved = register_validated_period(tmp_path, "week", "2026-37")
+    assert saved["net_sales"] == pytest.approx(1_164_099.09)
+    assert saved["marketing_spend"] == pytest.approx(115_499.57)
+    path = validated_totals_path(tmp_path)
+    assert path.exists()
+    stored = path.read_text(encoding="utf-8")
+    assert "2026-37" in stored
+    assert "2026-36" not in stored
+    payload = calculate_adjusted_amer(W37, tmp_path, include_customers=False)
+    by = {(row["kind"], row["key"]): row for row in payload["reconciliation"]}
+    w37 = by[("week", "2026-37")]
+    assert w37["registered"] is True
+    assert w37["match"] is True
+    assert w37["expected_net_sales"] == pytest.approx(1_164_099.09)
+    assert w37["expected_marketing_spend"] == pytest.approx(115_499.57)
+    assert not any(w["code"] == "reconciliation_mismatch" for w in payload["warnings"])
+
+
+def test_registered_w37_mismatch_warns(tmp_path: Path):
+    _write_w37_agent_files(tmp_path)
+    register_validated_period(tmp_path, "week", "2026-37", net_sales=1_000_000.0, marketing_spend=100_000.0)
+    payload = calculate_adjusted_amer(W37, tmp_path, include_customers=False)
+    by = {(row["kind"], row["key"]): row for row in payload["reconciliation"]}
+    assert by[("week", "2026-37")]["match"] is False
+    assert by[("week", "2026-37")]["registered"] is True
+    assert any(w["code"] == "reconciliation_mismatch" for w in payload["warnings"])
+
+
+def test_validate_period_route_registers_from_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import asyncio
+
+    from weekly_report.api.routes import ValidateAmerPeriodRequest
+
+    write_w36_style_fixtures(tmp_path)
+    _write_w37_agent_files(tmp_path)
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    from weekly_report.api import routes
+
+    monkeypatch.setattr(routes, "_supabase_enabled", lambda: False)
+    result = asyncio.run(
+        routes.post_adjusted_amer_validate_period(
+            ValidateAmerPeriodRequest(base_week=W37, kind="week", key="2026-37")
+        )
+    )
+    by = {(row["kind"], row["key"]): row for row in result["reconciliation"]}
+    assert result["saved"]["key"] == "2026-37"
+    assert result["saved"]["net_sales"] == pytest.approx(1_164_099.09)
+    assert by[("week", "2026-37")]["match"] is True

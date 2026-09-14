@@ -1951,6 +1951,8 @@ export interface AdjustedAmerReconciliation {
   marketing_spend: number | null
   expected_net_sales: number | null
   expected_marketing_spend: number | null
+  registered?: boolean
+  can_register?: boolean
   match: boolean
   files: string[]
 }
@@ -2191,4 +2193,50 @@ export async function getAdjustedAmerRecruited(
     180_000,
     '/api/adjusted-amer/recruited-vs-dropped',
   )
+}
+
+export async function registerAdjustedAmerExpected(params: {
+  baseWeek: string
+  kind: string
+  key: string
+  netSales?: number
+  marketingSpend?: number
+}): Promise<AdjustedAmerResponse> {
+  const body: Record<string, unknown> = {
+    base_week: params.baseWeek,
+    kind: params.kind,
+    key: params.key,
+  }
+  if (params.netSales != null && params.marketingSpend != null) {
+    body.net_sales = params.netSales
+    body.marketing_spend = params.marketingSpend
+  }
+  try {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/adjusted-amer/validate-period`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      180_000,
+    )
+    if (!response.ok) {
+      const t = await response.text()
+      try {
+        const parsed = JSON.parse(t) as { detail?: unknown }
+        if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
+          throw new Error(parsed.detail)
+        }
+      } catch (inner) {
+        if (inner instanceof Error && inner.message && inner.message !== t) throw inner
+      }
+      throw new Error(describeHttpError(response.status, t))
+    }
+    return response.json() as Promise<AdjustedAmerResponse>
+  } catch (e: unknown) {
+    throw new Error(
+      describeApiFetchFailure(e, { endpoint: '/api/adjusted-amer/validate-period', timeoutMs: 180_000 }),
+    )
+  }
 }

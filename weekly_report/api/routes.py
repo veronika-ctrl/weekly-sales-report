@@ -40,6 +40,7 @@ from weekly_report.src.metrics.adjusted_amer import (
     AMER_ALL_FILE_TYPES,
     build_recruited_vs_dropped_payload,
     calculate_adjusted_amer,
+    register_validated_period,
 )
 from weekly_report.src.metrics.retention_by_channel import (
     RETENTION_CUSTOMERS_TYPE,
@@ -116,6 +117,14 @@ class MetricsMtdResponse(BaseModel):
     """Table 1 metrics for month-to-date report: mtd_actual, mtd_last_year, mtd_last_month, ytd_actual, ytd_last_year."""
     periods: Dict[str, Dict[str, Any]]
     date_ranges: Dict[str, Dict[str, str]]
+
+
+class ValidateAmerPeriodRequest(BaseModel):
+    base_week: str
+    kind: str
+    key: str
+    net_sales: Optional[float] = None
+    marketing_spend: Optional[float] = None
 
 
 class GeneratePDFRequest(BaseModel):
@@ -2842,6 +2851,51 @@ async def get_adjusted_amer(
         import traceback
 
         logger.error(f"Error adjusted-amer {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/adjusted-amer/validate-period")
+async def post_adjusted_amer_validate_period(body: ValidateAmerPeriodRequest):
+    """Register Dema-validated expected SEK totals for a week or month.
+
+    Omit net_sales and marketing_spend to copy the current source-file totals.
+    """
+    try:
+        if not validate_iso_week(body.base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {body.base_week}")
+        if (body.net_sales is None) ^ (body.marketing_spend is None):
+            raise HTTPException(
+                status_code=400,
+                detail="Provide both net_sales and marketing_spend, or omit both to copy source-file totals.",
+            )
+        config = load_config(week=body.base_week)
+        saved = register_validated_period(
+            Path(config.data_root),
+            body.kind,
+            body.key,
+            net_sales=body.net_sales,
+            marketing_spend=body.marketing_spend,
+        )
+        payload = calculate_adjusted_amer(
+            body.base_week, Path(config.data_root), include_customers=False
+        )
+        payload["saved"] = {
+            "kind": saved["kind"],
+            "key": saved["key"],
+            "label": saved["label"],
+            "net_sales": saved["net_sales"],
+            "marketing_spend": saved["marketing_spend"],
+        }
+        return payload
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error adjusted-amer validate-period: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
