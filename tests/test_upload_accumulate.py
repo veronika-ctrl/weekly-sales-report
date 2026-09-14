@@ -26,6 +26,22 @@ def _write(path: Path, name: str, body: str = AMER_HEADER) -> Path:
     return dest
 
 
+def test_list_weeks_with_uploads_skips_empty_and_non_week_dirs(tmp_path: Path):
+    from weekly_report.src.storage.uploads import list_weeks_with_uploads
+
+    raw = tmp_path / "raw"
+    (raw / "2026-37" / "qlik").mkdir(parents=True)
+    (raw / "2026-37" / "qlik" / "Qlik_W37.xlsx").write_bytes(b"xl")
+    (raw / "2026-36" / "dema_spend").mkdir(parents=True)
+    (raw / "2026-35" / "qlik").mkdir(parents=True)
+    (raw / "months" / "2026-08").mkdir(parents=True)
+    (raw / "not-a-week" / "qlik").mkdir(parents=True)
+    (raw / "not-a-week" / "qlik" / "x.csv").write_text("a\n", encoding="utf-8")
+
+    weeks = list_weeks_with_uploads(tmp_path)
+    assert weeks == ["2026-37"]
+
+
 def test_amer_shopify_customers_and_cac_accumulate():
     assert is_accumulating_file_type("amer_revenue")
     assert is_accumulating_file_type("amer_spend")

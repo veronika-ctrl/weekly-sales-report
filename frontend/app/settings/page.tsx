@@ -72,9 +72,17 @@ export default function Settings() {
   }, [])
 
   useEffect(() => {
-    import('@/lib/supabase-queries')
-      .then((m) => m.getWeeksWithDataFromSupabase())
-      .then((weeks) => setWeeksWithData(new Set(weeks)))
+    let cancelled = false
+    ;(async () => {
+      const fromDisk = await import('@/lib/api').then((m) => m.getWeeksWithUploads()).catch(() => [] as string[])
+      const fromSupabase = await import('@/lib/supabase-queries')
+        .then((m) => m.getWeeksWithDataFromSupabase())
+        .catch(() => [] as string[])
+      if (!cancelled) setWeeksWithData(new Set([...fromDisk, ...fromSupabase]))
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {

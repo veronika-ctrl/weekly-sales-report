@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useEffect } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
-import LoadingProgress from '@/components/LoadingProgress'
 import { useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Calendar, Settings, Loader2 } from 'lucide-react'
@@ -20,13 +19,22 @@ function LayoutContentInner({
   children: React.ReactNode
   isPdfMode: boolean
 }) {
-  const { loading, loadingProgress, baseWeek, setBaseWeek, hasRestoredWeek, isDataReady, periods } = useDataCache()
+  const { loading, baseWeek, setBaseWeek, hasRestoredWeek, isDataReady, periods } = useDataCache()
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
 
   useEffect(() => {
-    import('@/lib/supabase-queries')
-      .then((m) => m.getWeeksWithDataFromSupabase())
-      .then((weeks) => setWeeksWithData(new Set(weeks)))
+    let cancelled = false
+    ;(async () => {
+      const fromDisk = await import('@/lib/api').then((m) => m.getWeeksWithUploads()).catch(() => [] as string[])
+      const fromSupabase = await import('@/lib/supabase-queries')
+        .then((m) => m.getWeeksWithDataFromSupabase())
+        .catch(() => [] as string[])
+      if (cancelled) return
+      setWeeksWithData(new Set([...fromDisk, ...fromSupabase]))
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
   const pathname = usePathname()
   const isSettings = pathname === '/settings'
@@ -65,11 +73,9 @@ function LayoutContentInner({
     )
   }
 
-  // Don't show loading progress in PDF mode - let the page render even while loading.
-  // Always allow Settings through so users can change week or reach the backend while a report load is in progress.
-  if (loading && loadingProgress && !isPdfMode && !allowWithoutWeek) {
-    return <LoadingProgress progress={loadingProgress} />
-  }
+  // Don't replace the whole app with a spinner. Summary can show its own loading
+  // state; other reports (Full Price vs Sale, Online Summary, aMER) fetch on their
+  // own and must stay usable while Qlik batch compute is running.
 
   // Report pages: show week selector bar so user can change week without going to Settings
   if (baseWeek && !isSettings && !isPdfMode) {
