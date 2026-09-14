@@ -1,11 +1,11 @@
 """CSV adapters for loading Dema spend data."""
 
-import csv
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 from loguru import logger
+
+from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
 
 
 def normalize_dema_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -17,16 +17,6 @@ def normalize_dema_columns(df: pd.DataFrame) -> pd.DataFrame:
     if "Days" not in out.columns and "Day" in out.columns:
         out = out.rename(columns={"Day": "Days"})
     return out
-
-
-def detect_csv_dialect(file_path: Path) -> csv.Dialect:
-    """Detect CSV dialect from file content."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        sample = f.read(1024)
-        sniffer = csv.Sniffer()
-        dialect = sniffer.sniff(sample)
-        logger.debug(f"Detected CSV dialect for {file_path.name}: delimiter='{dialect.delimiter}', quotechar='{dialect.quotechar}'")
-        return dialect
 
 
 def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
@@ -61,25 +51,8 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
     dataframes = []
     for csv_file in csv_files:
         try:
-            # Try semicolon separator first (common in European CSV files)
-            try:
-                df = pd.read_csv(
-                    csv_file,
-                    sep=';',
-                    encoding='utf-8',
-                    na_values=['', 'NULL', 'null', 'N/A', 'n/a']
-                )
-                logger.debug(f"Loaded {csv_file.name} with semicolon separator: {df.shape}")
-            except Exception:
-                # Fallback to auto-detection
-                dialect = detect_csv_dialect(csv_file)
-                df = pd.read_csv(
-                    csv_file,
-                    dialect=dialect,
-                    encoding='utf-8',
-                    na_values=['', 'NULL', 'null', 'N/A', 'n/a']
-                )
-                logger.debug(f"Loaded {csv_file.name} with auto-detected separator: {df.shape}")
+            df = read_csv_auto(csv_file, na_values=NA_VALUES)
+            logger.debug(f"Loaded {csv_file.name}: {df.shape}")
             
             # Add source file metadata
             df['_source_file'] = csv_file.name

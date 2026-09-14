@@ -81,6 +81,7 @@ from weekly_report.src.metrics.contribution_returning_total_per_country import c
 from weekly_report.src.metrics.total_contribution_per_country import calculate_total_contribution_per_country_for_weeks
 from weekly_report.src.metrics.audience_metrics_per_country import calculate_audience_metrics_per_country_for_weeks
 from weekly_report.src.metrics.batch_calculator import calculate_all_metrics
+from weekly_report.src.adapters.csv_util import read_csv_auto
 from weekly_report.src.pdf.table1_builder import build_table1_pdf
 # Note: weekly_reports_builder not available, using Puppeteer-based approach instead
 # from weekly_report.src.pdf.weekly_reports_builder import build_weekly_reports_pdf
@@ -4255,73 +4256,37 @@ def validate_file_dimensions(file_path: Path, file_type: str) -> Dict[str, Any]:
         return result
     
     try:
+        suffix = file_path.suffix.lower()
+        if suffix in {".csv", ".txt"}:
+            df = read_csv_auto(file_path, nrows=1)
+        elif suffix in {".xlsx", ".xls"}:
+            df = pd.read_excel(file_path, nrows=1)
+        else:
+            df = pd.DataFrame()
+        df.columns = df.columns.astype(str).str.strip().str.replace('"', "")
+
         if file_type in ["dema_spend", "dema_gm2", "amer_revenue", "amer_spend", "amer_gm2"]:
-            # Try semicolon first, then comma
-            try:
-                df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
-            except:
-                df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
-            
-            # Strip whitespace and quotes from column names
-            df.columns = df.columns.str.strip().str.replace('"', '')
             result["columns"] = df.columns.tolist()
-            
-            # Check for country dimension (case insensitive)
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
         elif file_type in ("shopify", "discounts", "shopify_customers", RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE):
-            # Try to load the file
-            try:
-                df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
-            except:
-                df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
-            
-            df.columns = df.columns.str.strip().str.replace('"', '')
             result["columns"] = df.columns.tolist()
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
         elif file_type == FULL_PRICE_EXCL_EXCHANGES_TYPE:
             # Daily pricing-type export has no Country column — skip country UI.
-            try:
-                df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
-            except Exception:
-                try:
-                    df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
-                except Exception:
-                    df = pd.DataFrame()
-            df.columns = df.columns.str.strip().str.replace('"', '')
             result["columns"] = df.columns.tolist()
             result["has_country"] = None
             result["skip_country"] = True
             result["extra_fields"] = []
 
         elif file_type == "qlik":
-            # For Qlik, check if it's CSV or Excel
-            if file_path.suffix == '.csv':
-                try:
-                    df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
-                except:
-                    df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
-                df.columns = df.columns.str.strip().str.replace('"', '')
-            else:
-                df = pd.read_excel(file_path, nrows=1)
-            
             result["columns"] = df.columns.tolist()
             result["has_country"] = any("country" in col.lower() for col in df.columns)
         
         elif file_type == "budget":
             # Budget files don't need country dimension - they use Market instead
-            try:
-                df = pd.read_csv(file_path, sep=',', encoding='utf-8', nrows=1, quotechar='"')
-            except:
-                try:
-                    df = pd.read_csv(file_path, sep=';', encoding='utf-8', nrows=1, quotechar='"')
-                except:
-                    df = pd.DataFrame()
-            
-            df.columns = df.columns.str.strip().str.replace('"', '')
             result["columns"] = df.columns.tolist()
-            # Check for Market dimension instead of Country
             result["has_country"] = any("market" in col.lower() for col in df.columns)
     
     except Exception as e:
