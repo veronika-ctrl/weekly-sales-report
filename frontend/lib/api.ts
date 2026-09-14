@@ -1304,12 +1304,19 @@ export interface FullPriceExclComparison {
   full_price_share_incl_pct: number | null
   full_price_share_excl_pct: number | null
   full_price_share_pp_diff: number | null
+  discounted_share_incl_pct?: number | null
+  discounted_share_excl_pct?: number | null
+  discounted_share_pp_diff?: number | null
+  discount_rate_incl_pct?: number | null
+  discount_rate_excl_pct?: number | null
+  discount_rate_pp_diff?: number | null
   total_incl: number | null
   total_excl: number
   discount_incl: number | null
   discount_excl: number
   exchange_gross_share_pct: number | null
   exchange_discount_share_pct: number | null
+  promotional_discount_share_pct?: number | null
   non_exchange_gross_est: number
   gross_context: number
 }

@@ -204,6 +204,19 @@ def _share(num: float, den: Optional[float]) -> Optional[float]:
     return float(num) / float(den) * 100.0
 
 
+def _complement_share(share: Optional[float]) -> Optional[float]:
+    if share is None:
+        return None
+    return 100.0 - float(share)
+
+
+def _discount_rate(discount: Optional[float], total: Optional[float]) -> Optional[float]:
+    """Discount amount as a share of estimated gross (net + discount)."""
+    if discount is None or total is None:
+        return None
+    return _share(float(discount), float(discount) + float(total))
+
+
 def _full_price_share(full: float, total: float, fallback: Optional[float] = None) -> Optional[float]:
     if total > 0:
         return full / total * 100.0
@@ -243,17 +256,43 @@ def compare_incl_excl(
     else:
         disc_den = excl_discount + exchange_discount
     exchange_discount_share_pct = _share(exchange_discount, disc_den)
+    promotional_discount_share_pct = (
+        100.0 - exchange_discount_share_pct if exchange_discount_share_pct is not None else None
+    )
+
+    excl_discounted_share = _complement_share(excl_share)
+    incl_discounted_share = _complement_share(incl_share)
+    discounted_pp_diff = (
+        excl_discounted_share - incl_discounted_share
+        if excl_discounted_share is not None and incl_discounted_share is not None
+        else None
+    )
+
+    excl_discount_rate = _discount_rate(excl_discount, excl_total)
+    incl_discount_rate = _discount_rate(incl_discount, incl_total)
+    discount_rate_pp_diff = (
+        excl_discount_rate - incl_discount_rate
+        if excl_discount_rate is not None and incl_discount_rate is not None
+        else None
+    )
 
     return {
         "full_price_share_incl_pct": incl_share,
         "full_price_share_excl_pct": excl_share,
         "full_price_share_pp_diff": pp_diff,
+        "discounted_share_incl_pct": incl_discounted_share,
+        "discounted_share_excl_pct": excl_discounted_share,
+        "discounted_share_pp_diff": discounted_pp_diff,
+        "discount_rate_incl_pct": incl_discount_rate,
+        "discount_rate_excl_pct": excl_discount_rate,
+        "discount_rate_pp_diff": discount_rate_pp_diff,
         "total_incl": None if incl_total is None else float(incl_total),
         "total_excl": float(excl_total),
         "discount_incl": None if incl_discount is None else float(incl_discount),
         "discount_excl": float(excl_discount),
         "exchange_gross_share_pct": exchange_gross_share_pct,
         "exchange_discount_share_pct": exchange_discount_share_pct,
+        "promotional_discount_share_pct": promotional_discount_share_pct,
         "non_exchange_gross_est": float(non_exchange_gross_est),
         "gross_context": float(gross_context),
     }

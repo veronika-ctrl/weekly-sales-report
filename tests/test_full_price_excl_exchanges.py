@@ -191,6 +191,14 @@ def test_comparison_math():
     assert out["full_price_share_excl_pct"] == pytest.approx(80.0)
     assert out["full_price_share_incl_pct"] == pytest.approx(80.0 / 120.0 * 100.0)
     assert out["full_price_share_pp_diff"] == pytest.approx(80.0 - (80.0 / 120.0 * 100.0))
+    assert out["discounted_share_excl_pct"] == pytest.approx(20.0)
+    assert out["discounted_share_incl_pct"] == pytest.approx(100.0 - (80.0 / 120.0 * 100.0))
+    assert out["discounted_share_pp_diff"] == pytest.approx(-out["full_price_share_pp_diff"])
+    assert out["discount_rate_excl_pct"] == pytest.approx(10.0 / 110.0 * 100.0)
+    assert out["discount_rate_incl_pct"] == pytest.approx(15.0 / 135.0 * 100.0)
+    assert out["discount_rate_pp_diff"] == pytest.approx(
+        (10.0 / 110.0 * 100.0) - (15.0 / 135.0 * 100.0)
+    )
     assert out["total_incl"] == 120.0
     assert out["total_excl"] == 100.0
     assert out["discount_incl"] == 15.0
@@ -198,6 +206,7 @@ def test_comparison_math():
     # non_exchange_gross_est = 100+10=110; gross_context=110+20=130; share=20/130*100
     assert out["exchange_gross_share_pct"] == pytest.approx(20.0 / 130.0 * 100.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(5.0 / 15.0 * 100.0)
+    assert out["promotional_discount_share_pct"] == pytest.approx(10.0 / 15.0 * 100.0)
 
 
 def test_comparison_discount_share_fallback_without_all_orders():
