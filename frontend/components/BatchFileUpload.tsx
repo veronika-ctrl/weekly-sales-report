@@ -30,6 +30,9 @@ interface FileType {
   /** Week + month (or history) files stay in the same slot; input allows multi-select. */
   accumulate?: boolean
   hint?: string
+  /** Skip the Country-dimension check (this file has no Country column). */
+  skipCountry?: boolean
+  extraFields?: string[]
 }
 
 interface UploadStatus {

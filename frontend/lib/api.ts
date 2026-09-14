@@ -1288,6 +1288,119 @@ export function getFullPriceVsSaleExcelUrl(
   return `${API_BASE_URL}/api/discounts/full-price-vs-sale/excel?${params.toString()}`
 }
 
+export interface FullPriceExclComparison {
+  full_price_share_incl_pct: number | null
+  full_price_share_excl_pct: number | null
+  full_price_share_pp_diff: number | null
+  total_incl: number | null
+  total_excl: number
+  discount_incl: number | null
+  discount_excl: number
+  exchange_gross_share_pct: number | null
+  exchange_discount_share_pct: number | null
+  non_exchange_gross_est: number
+  gross_context: number
+}
+
+export interface FullPriceExclMetrics {
+  full_price: number
+  compare_at_price_sale: number
+  discount_code_auto: number
+  both: number
+  price_drop_sale: number
+  total: number
+  discount_amount: number
+  full_price_share_pct: number | null
+  exchange_orders: number
+  exchange_gross_value: number
+  exchange_discount: number
+  exchange_net_revenue: number
+  comparison: FullPriceExclComparison
+}
+
+export interface FullPriceExclDay extends FullPriceExclMetrics {
+  date: string
+  week: string
+}
+
+export interface FullPriceExclWeek extends FullPriceExclMetrics {
+  week: string
+}
+
+export interface FullPriceExclMonth extends FullPriceExclMetrics {
+  month: string
+  start: string
+  end: string
+}
+
+export interface FullPriceExclPeriod extends FullPriceExclMetrics {
+  label: string
+  start: string
+  end: string
+}
+
+export interface FullPriceExclExchangesResponse {
+  base_week: string
+  num_weeks: number
+  months: number
+  granularity: string
+  source: string
+  files_used: string[]
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
+  all_orders_files_used?: string[]
+  history_range?: { start: string; end: string } | null
+  days: FullPriceExclDay[]
+  weeks: FullPriceExclWeek[]
+  months_data: FullPriceExclMonth[]
+  period: FullPriceExclPeriod | null
+}
+
+export async function getFullPriceVsSaleExclExchanges(
+  baseWeek: string,
+  numWeeks: number = 8,
+): Promise<FullPriceExclExchangesResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?base_week=${baseWeek}&num_weeks=${numWeeks}&granularity=week`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch full price vs sale excl. exchanges: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function getFullPriceVsSaleExclExchangesMonthly(
+  baseWeek: string,
+  months: number = 13,
+): Promise<FullPriceExclExchangesResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges?base_week=${baseWeek}&granularity=month&months=${months}`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch full price vs sale excl. exchanges (monthly): ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export interface ExclExchangesHistoryInfo {
+  files: { name: string; week: string; uploaded_at: string }[]
+  count: number
+  matched_files: string[]
+  range: { start: string; end: string } | null
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
+}
+
+export async function getExclExchangesHistoryInfo(baseWeek: string): Promise<ExclExchangesHistoryInfo> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/discounts/full-price-vs-sale-excl-exchanges/history-info?base_week=${baseWeek}`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch excl-exchanges history info: ${response.statusText}`)
+  }
+  return response.json()
+}
+
 export interface DiscountsHistoryInfo {
   files: { name: string; week: string; uploaded_at: string }[]
   count: number

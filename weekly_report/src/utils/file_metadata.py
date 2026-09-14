@@ -55,6 +55,8 @@ def extract_file_metadata(file_path: Path, file_type: str) -> Dict[str, Any]:
             "amer_spend": "Day",
             "amer_gm2": "Day",
             "shopify_customers": "Second",
+            "discounts": "Date",
+            "full_price_vs_sale_excl_exchanges": "Date",
         }
         date_col = date_column_map.get(file_type)
         

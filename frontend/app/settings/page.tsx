@@ -16,9 +16,11 @@ import {
   getApiBaseUrl,
   getDiscountsHistoryInfo,
   resetDiscountsHistory,
+  getExclExchangesHistoryInfo,
   getKlaviyoStatus,
   verifySupabase,
   type DiscountsHistoryInfo,
+  type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
 } from '@/lib/api'
 import { describeApiTarget, getApiStorageWarning } from '@/lib/api-storage'
@@ -48,6 +50,8 @@ export default function Settings() {
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
   const [discountsHistory, setDiscountsHistory] = useState<DiscountsHistoryInfo | null>(null)
   const [discountsHistoryLoading, setDiscountsHistoryLoading] = useState(false)
+  const [exclHistory, setExclHistory] = useState<ExclExchangesHistoryInfo | null>(null)
+  const [exclHistoryLoading, setExclHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
   const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
   const [pageHost, setPageHost] = useState('')
@@ -292,9 +296,27 @@ export default function Settings() {
     }
   }, [selectedWeek])
 
+  const loadExclHistory = useCallback(async () => {
+    if (!selectedWeek || !hasBackend) {
+      setExclHistory(null)
+      return
+    }
+    setExclHistoryLoading(true)
+    try {
+      const info = await getExclExchangesHistoryInfo(selectedWeek)
+      setExclHistory(info)
+    } catch (err) {
+      console.warn('Failed to load excl-exchanges history:', err)
+      setExclHistory(null)
+    } finally {
+      setExclHistoryLoading(false)
+    }
+  }, [selectedWeek])
+
   useEffect(() => {
     loadDiscountsHistory()
-  }, [loadDiscountsHistory])
+    loadExclHistory()
+  }, [loadDiscountsHistory, loadExclHistory])
 
   // Load metadata on mount and when week changes
   useEffect(() => {
@@ -326,6 +348,15 @@ export default function Settings() {
       formats: '.csv',
       accumulate: true,
       hint: 'Successive uploads add to history. Multi-select or upload one after another — later files do not delete earlier ones.',
+    },
+    {
+      type: 'full_price_vs_sale_excl_exchanges',
+      label: 'Full Price vs Sale excl. Exchanges — Daily',
+      formats: '.csv',
+      accumulate: true,
+      skipCountry: true,
+      extraFields: [],
+      hint: 'Shopify “Sales by Pricing Type Adv” daily export (exchange-aware). Date is the primary key — overlapping dates are replaced, new dates are appended. Not mixed with the all-orders slot above.',
     },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
@@ -665,6 +696,7 @@ export default function Settings() {
               onUploadComplete={async () => {
                 await loadMetadata(true)
                 await loadDiscountsHistory()
+                await loadExclHistory()
                 // Don't auto-load dimensions - user can click button if needed
               }}
               refreshData={async () => {
@@ -875,7 +907,7 @@ export default function Settings() {
                               </p>
                             )}
                           {/* Dimension validation: skip types with no Country column. */}
-                          {dimensions && dimensions[ft.type] && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && ft.type !== 'shopify_customers' && (
+                          {dimensions && dimensions[ft.type] && !ft.skipCountry && ft.type !== 'retention_customers' && !ft.type.startsWith('cac_payback') && ft.type !== 'klaviyo_email' && ft.type !== 'shopify_customers' && (
                             <div className="flex items-center gap-2 text-sm">
                               {dimensions[ft.type].has_country === true ? (
                                 <div className="flex items-center gap-1 text-green-600">
@@ -1029,6 +1061,61 @@ export default function Settings() {
                     </Button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {selectedWeek && hasBackend && (
+              <div className="mt-4 rounded-md border bg-muted/30 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-medium">Full Price vs Sale excl. Exchanges — accumulated history</h4>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                      Separate from the all-orders daily export. Date is the primary key: overlapping dates are
+                      replaced, new dates are appended. Newest file wins per calendar date.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={loadExclHistory}
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 shrink-0"
+                    disabled={exclHistoryLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${exclHistoryLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+                <div className="mt-3 text-sm">
+                  {exclHistoryLoading && !exclHistory ? (
+                    <span className="text-gray-500 italic">Loading history…</span>
+                  ) : exclHistory && exclHistory.count > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-700">
+                        <span>
+                          <strong>{exclHistory.count}</strong> file(s) accumulated
+                        </span>
+                        {exclHistory.range && (
+                          <span>
+                            Imported dates <strong>{exclHistory.range.start}</strong> →{' '}
+                            <strong>{exclHistory.range.end}</strong>
+                          </span>
+                        )}
+                      </div>
+                      <ul className="text-xs text-gray-500 list-disc pl-5 max-h-32 overflow-auto">
+                        {exclHistory.files.map((f, i) => (
+                          <li key={`${f.week}-${f.name}-${i}`}>
+                            {f.name} <span className="text-gray-400">({f.week})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">
+                      No exchange-excluded daily files uploaded yet. Use the “Full Price vs Sale excl. Exchanges —
+                      Daily” slot above.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>

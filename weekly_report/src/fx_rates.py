@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 import pandas as pd
 
@@ -119,15 +119,25 @@ def get_fx_metadata(applied: bool, error: Optional[str] = None) -> Dict[str, Any
 def convert_revenue_over_time_to_sek(
     df: pd.DataFrame,
     data_root: Path,
+    extra_money_cols: Optional[Iterable[str]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Convert monetary columns in the revenue-over-time history from USD to SEK using
     the ECB daily USD/SEK rate for each calendar day (weekends use prior publish day).
+
+    ``extra_money_cols`` are converted in addition to the default net-sales columns.
+    Share % and count columns must not be passed here.
     """
     source = _source_currency()
     target = _target_currency()
     if _fx_disabled() or source == target or df.empty:
         return df, get_fx_metadata(applied=False)
+
+    money_cols = list(_MONEY_COLS)
+    if extra_money_cols:
+        for col in extra_money_cols:
+            if col not in money_cols:
+                money_cols.append(col)
 
     out = df.copy()
     start = pd.to_datetime(out["_date"].min(), errors="coerce")
@@ -156,7 +166,7 @@ def convert_revenue_over_time_to_sek(
                 raise ValueError(f"missing FX rate on {missing} day(s)")
             rates = rates.fillna(fb)
 
-        for col in _MONEY_COLS:
+        for col in money_cols:
             if col in out.columns:
                 out[col] = pd.to_numeric(out[col], errors="coerce") * rates.to_numpy()
 
@@ -169,7 +179,7 @@ def convert_revenue_over_time_to_sek(
         fb = _fallback_rate()
         if fb is None:
             return out, get_fx_metadata(applied=False, error=str(exc))
-        for col in _MONEY_COLS:
+        for col in money_cols:
             if col in out.columns:
                 out[col] = pd.to_numeric(out[col], errors="coerce") * fb
         meta = get_fx_metadata(applied=True)

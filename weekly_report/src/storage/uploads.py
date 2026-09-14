@@ -15,6 +15,7 @@ from weekly_report.src.metrics.cac_payback import CAC_PAYBACK_FILE_TYPES
 ACCUMULATING_FILE_TYPES: FrozenSet[str] = frozenset(
     {
         "discounts",
+        "full_price_vs_sale_excl_exchanges",
         SHOPIFY_CUSTOMERS_TYPE,
         *AMER_DEMA_FILE_TYPES,
         *CAC_PAYBACK_FILE_TYPES,

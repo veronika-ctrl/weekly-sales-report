@@ -32,6 +32,7 @@ def test_amer_shopify_customers_and_cac_accumulate():
     assert is_accumulating_file_type("amer_gm2")
     assert is_accumulating_file_type("shopify_customers")
     assert is_accumulating_file_type("discounts")
+    assert is_accumulating_file_type("full_price_vs_sale_excl_exchanges")
     assert is_accumulating_file_type("cac_payback_groups")
     assert is_accumulating_file_type("cac_payback_segments")
     assert is_accumulating_file_type("cac_payback_horizon")

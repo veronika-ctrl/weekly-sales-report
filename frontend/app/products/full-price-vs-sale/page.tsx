@@ -8,13 +8,17 @@ import {
   getFullPriceVsSale,
   getFullPriceVsSaleExcelUrl,
   getFullPriceVsSaleMonthly,
+  getFullPriceVsSaleExclExchanges,
+  getFullPriceVsSaleExclExchangesMonthly,
   type FullPriceVsSaleResponse,
   type FullPriceVsSaleMonthlyResponse,
+  type FullPriceExclExchangesResponse,
 } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
+import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
 
 type View = 'week' | 'month'
 
@@ -58,6 +62,8 @@ export default function FullPriceVsSalePage() {
   const [view, setView] = useState<View>('week')
   const [weekly, setWeekly] = useState<FullPriceVsSaleResponse | null>(null)
   const [monthly, setMonthly] = useState<FullPriceVsSaleMonthlyResponse | null>(null)
+  const [exclWeekly, setExclWeekly] = useState<FullPriceExclExchangesResponse | null>(null)
+  const [exclMonthly, setExclMonthly] = useState<FullPriceExclExchangesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,13 +74,17 @@ export default function FullPriceVsSalePage() {
       setLoading(true)
       setError(null)
       try {
-        const [w, m] = await Promise.all([
+        const [w, m, ew, em] = await Promise.all([
           getFullPriceVsSale(baseWeek, 8),
           getFullPriceVsSaleMonthly(baseWeek, 13),
+          getFullPriceVsSaleExclExchanges(baseWeek, 8),
+          getFullPriceVsSaleExclExchangesMonthly(baseWeek, 13),
         ])
         if (!cancelled) {
           setWeekly(w)
           setMonthly(m)
+          setExclWeekly(ew)
+          setExclMonthly(em)
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load full price vs sale')
@@ -151,7 +161,8 @@ export default function FullPriceVsSalePage() {
           <h2 className="text-lg font-semibold text-gray-900">Full Price vs Sale</h2>
           <p className="text-sm text-muted-foreground">
             Net sales split into full price vs discounted, vs last year. All monetary values are shown in{' '}
-            <strong>SEK</strong> (thousands) to match the rest of this app.
+            <strong>SEK</strong> (thousands) to match the rest of this app. All-orders figures are unchanged;
+            exchange-excluded figures are shown in a separate section below.
           </p>
           {data?.history_range && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -192,6 +203,9 @@ export default function FullPriceVsSalePage() {
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
+
+      <div className="space-y-6">
+        <h3 className="text-base font-semibold text-gray-900">All orders (including exchanges)</h3>
 
       {!loading && !error && data && !hasRows && (
         <div className="rounded-md border bg-muted/40 p-6 text-sm text-muted-foreground">
@@ -492,6 +506,9 @@ export default function FullPriceVsSalePage() {
           </Card>
         </>
       )}
+      </div>
+
+      <FullPriceExclExchangesSection view={view} weekly={exclWeekly} monthly={exclMonthly} />
     </div>
   )
 }
