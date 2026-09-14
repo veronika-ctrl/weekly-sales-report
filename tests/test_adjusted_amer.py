@@ -299,6 +299,34 @@ def test_mta_all_customers_is_the_comparable_base_for_new_customer_amer():
     assert m["newCustomerShareOfMtaAMER"] != pytest.approx(1.01 / 2.32)
 
 
+def test_w37_display_rounding_matches_dema_flagged_reading():
+    """Production W37 CFA/new/unattributed, with paid MTA = 1.52 × paid spend (Dema's bridge)."""
+    paid_spend = 115_499.567
+    paid_cfa = 268_115.1191
+    new_mta = 116_749.2642
+    paid_mta = 1.52 * paid_spend
+    organic_cfa = 706_291.2987
+    unattr_cfa = 191_229.3932
+    df = pd.DataFrame(
+        {
+            "bucket": ["paid", "organic", "unattributed"],
+            "revenue_cfa": [paid_cfa, organic_cfa, unattr_cfa],
+            "revenue_mta": [paid_mta, 0.0, 0.0],
+            "revenue_new_mta": [new_mta, 0.0, 0.0],
+            "marketing_spend": [paid_spend, 0.0, 0.0],
+            "net_gross_profit_2": [0.0, 0.0, 0.0],
+            "net_sales": [0.0, 0.0, 0.0],
+        }
+    )
+    m = aggregate_amer_metrics(df)
+    assert round(m["adjustedAMER"], 2) == 2.32
+    assert round(m["adjustedAMERMTA"], 2) == 1.52
+    assert round(m["newCustomerAdjustedAMER"], 2) == 1.01
+    assert round(m["newCustomerShareOfMtaAMER"] * 100, 1) == 66.5
+    assert round(m["unattributedShare"] * 100, 1) == 16.4
+    assert m["unattributedSpend"] == pytest.approx(0.0)
+
+
 def test_safe_ratio_guards_divide_by_zero():
     assert safe_ratio(10, 0) is None
     assert safe_ratio(10, None) is None
