@@ -52,6 +52,7 @@ export (customer id + order date). Sessions/Qlik cannot substitute.
 from __future__ import annotations
 
 import calendar
+import json
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -117,10 +118,13 @@ CHANNEL_TO_GROUP = {
 }
 
 # Dema-validated file totals (SEK). Used for reconciliation, not as inputs.
+# W36 and August 2026 shipped as built-ins. Later weeks are registered on disk
+# (data/amer_validated_totals.json) after the uploaded files are confirmed in Dema.
 VALIDATED_TOTALS = {
     ("week", "2026-36"): {"net_sales": 1_211_140.23, "marketing_spend": 144_583.25},
     ("month", "2026-08"): {"net_sales": 6_748_620.98, "marketing_spend": 780_010.85},
 }
+VALIDATED_TOTALS_FILENAME = "amer_validated_totals.json"
 W36_DAY_START = date(2026, 8, 31)
 W36_DAY_END = date(2026, 9, 6)
 AUGUST_2026_START = date(2026, 8, 1)
@@ -129,6 +133,7 @@ AUGUST_2026_END = date(2026, 8, 31)
 JOIN_KEYS = ("Channel", "ChannelGroup", "Country", "Day")
 
 _YEAR_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+_WEEK_IN_NAME_RE = re.compile(r"(?:^|_)w(?:eek)?_?(\d{1,2})(?:_|$)")
 
 
 def _norm_group(value: Any) -> str:
@@ -311,6 +316,13 @@ def missing_amer_types(files: Dict[str, List[Path]]) -> List[str]:
     return [k for k, v in files.items() if not v]
 
 
+def _days_span(df: pd.DataFrame) -> Tuple[Optional[date], Optional[date]]:
+    days = df["Day"].dropna() if df is not None and "Day" in df.columns else pd.Series(dtype="datetime64[ns]")
+    if days.empty:
+        return None, None
+    return pd.Timestamp(days.min()).date(), pd.Timestamp(days.max()).date()
+
+
 def infer_source_period(path: Path, df: pd.DataFrame) -> Tuple[str, str]:
     """Return (kind, key) e.g. ('week','2026-36') or ('month','2026-08')."""
     name = _norm_group(path.stem)
@@ -319,24 +331,35 @@ def infer_source_period(path: Path, df: pd.DataFrame) -> Tuple[str, str]:
         idx = parts.index("months")
         if idx + 1 < len(parts):
             return "month", str(parts[idx + 1])
+    dmin, dmax = _days_span(df)
+    folder = path.parent.parent.name
     if "w36" in name or "week36" in name or "week_36" in name:
         return "week", "2026-36"
     if "august" in name or "aug2026" in name or "2026_08" in name or "202608" in name:
         return "month", "2026-08"
-    days = df["Day"].dropna() if "Day" in df.columns else pd.Series(dtype="datetime64[ns]")
-    if not days.empty:
-        dmin = pd.Timestamp(days.min()).date()
-        dmax = pd.Timestamp(days.max()).date()
+    week_from_name = _WEEK_IN_NAME_RE.search(name)
+    if week_from_name:
+        week_n = int(week_from_name.group(1))
+        year: Optional[int] = None
+        if dmin is not None:
+            year = int(dmin.isocalendar()[0])
+        elif validate_iso_week(folder):
+            year = int(folder.split("-")[0])
+        if year is not None:
+            return "week", f"{year}-{week_n:02d}"
+    if dmin is not None and dmax is not None:
         if dmin >= AUGUST_2026_START and dmax <= AUGUST_2026_END:
             return "month", "2026-08"
         if dmin >= W36_DAY_START and dmax <= W36_DAY_END:
             return "week", "2026-36"
         if dmin.month == dmax.month and (dmax - dmin).days >= 27:
             return "month", f"{dmin.year}-{dmin.month:02d}"
-    week_guess = path.parent.parent.name
-    if _YEAR_MONTH_RE.match(week_guess) is None and "-" in week_guess:
-        return "week", week_guess
-    return "week", week_guess
+        if dmin.isocalendar()[:2] == dmax.isocalendar()[:2]:
+            iso_year, iso_week, _ = dmin.isocalendar()
+            return "week", f"{iso_year}-{iso_week:02d}"
+    if _YEAR_MONTH_RE.match(folder) is None and "-" in folder:
+        return "week", folder
+    return "week", folder
 
 
 def _dedup_join_keys(df: pd.DataFrame) -> pd.DataFrame:
@@ -950,31 +973,191 @@ def _money_match(actual: float, expected: float, tol: float = 0.005) -> bool:
     return abs(round(float(actual), 2) - round(float(expected), 2)) <= tol
 
 
+def period_label(kind: str, key: str) -> str:
+    if kind == "week":
+        parts = str(key).split("-")
+        if len(parts) == 2 and parts[1].isdigit():
+            return f"W{int(parts[1])}"
+        return f"week {key}"
+    if kind == "month":
+        try:
+            year_s, month_s = str(key).split("-", 1)
+            return f"{calendar.month_name[int(month_s)]} {int(year_s)}"
+        except (ValueError, IndexError):
+            return f"month {key}"
+    return f"{kind} {key}"
+
+
+def parse_period_identity(kind: str, key: str) -> Tuple[str, str]:
+    kind_n = str(kind or "").strip().lower()
+    key_n = str(key or "").strip()
+    if kind_n == "week":
+        if not validate_iso_week(key_n):
+            raise ValueError(f"Invalid ISO week: {key_n}")
+        year_s, week_s = key_n.split("-", 1)
+        return "week", f"{int(year_s)}-{int(week_s):02d}"
+    if kind_n == "month":
+        if not _YEAR_MONTH_RE.match(key_n):
+            raise ValueError(f"Invalid year-month: {key_n}")
+        return "month", key_n
+    raise ValueError("kind must be week or month")
+
+
+def validated_totals_path(data_root: Path) -> Path:
+    return Path(data_root) / VALIDATED_TOTALS_FILENAME
+
+
+def _parse_stored_totals(raw: Any) -> Dict[Tuple[str, str], Dict[str, float]]:
+    items: List[Any]
+    if isinstance(raw, dict) and isinstance(raw.get("periods"), list):
+        items = raw["periods"]
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+    out: Dict[Tuple[str, str], Dict[str, float]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            ident = parse_period_identity(str(item.get("kind", "")), str(item.get("key", "")))
+            out[ident] = {
+                "net_sales": round(float(item["net_sales"]), 2),
+                "marketing_spend": round(float(item["marketing_spend"]), 2),
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def load_validated_totals(data_root: Optional[Path] = None) -> Dict[Tuple[str, str], Dict[str, float]]:
+    """Built-in W36/August totals, overlaid by registered periods on disk."""
+    merged: Dict[Tuple[str, str], Dict[str, float]] = {
+        ident: dict(vals) for ident, vals in VALIDATED_TOTALS.items()
+    }
+    if data_root is None:
+        return merged
+    path = validated_totals_path(data_root)
+    if not path.exists():
+        return merged
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(f"Could not read {path}: {exc}")
+        return merged
+    merged.update(_parse_stored_totals(raw))
+    return merged
+
+
+def save_validated_period(
+    data_root: Path,
+    kind: str,
+    key: str,
+    net_sales: float,
+    marketing_spend: float,
+) -> Dict[str, float]:
+    ident = parse_period_identity(kind, key)
+    path = validated_totals_path(data_root)
+    stored: Dict[Tuple[str, str], Dict[str, float]] = {}
+    if path.exists():
+        try:
+            stored = _parse_stored_totals(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(f"Could not read {path} before save: {exc}")
+    values = {
+        "net_sales": round(float(net_sales), 2),
+        "marketing_spend": round(float(marketing_spend), 2),
+    }
+    stored[ident] = values
+    payload = {
+        "periods": [
+            {"kind": k, "key": p, "net_sales": vals["net_sales"], "marketing_spend": vals["marketing_spend"]}
+            for (k, p), vals in sorted(stored.items())
+        ]
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return values
+
+
+def _inventory_sum(
+    inventory: List[Dict[str, Any]], ident: Tuple[str, str], field: str
+) -> Optional[float]:
+    total = 0.0
+    found = False
+    for row in inventory:
+        if (row.get("kind"), row.get("key")) != ident:
+            continue
+        value = row.get(field)
+        if value is None:
+            continue
+        total += float(value)
+        found = True
+    return total if found else None
+
+
+def register_validated_period(
+    data_root: Path,
+    kind: str,
+    key: str,
+    net_sales: Optional[float] = None,
+    marketing_spend: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Persist expected SEK totals for a period. Copies source-file sums when omitted."""
+    ident = parse_period_identity(kind, key)
+    files = _merge_amer_file_maps(find_all_week_amer_files(data_root), find_month_amer_files(data_root))
+    _spend, spend_inv = _load_metric_frames(files[AMER_SPEND_TYPE], load_spend_frame)
+    _gm2, gm2_inv = _load_metric_frames(files[AMER_GM2_TYPE], load_gm2_frame)
+    actual_sales = _inventory_sum(gm2_inv, ident, "net_sales")
+    actual_spend = _inventory_sum(spend_inv, ident, "marketing_spend")
+    if net_sales is None or marketing_spend is None:
+        if actual_sales is None or actual_spend is None:
+            raise ValueError(
+                f"Upload Net GM2 and Marketing spend files for {period_label(*ident)} first, "
+                "then register those file totals as expected."
+            )
+        net_sales = actual_sales
+        marketing_spend = actual_spend
+    saved = save_validated_period(data_root, ident[0], ident[1], net_sales, marketing_spend)
+    totals = load_validated_totals(data_root)
+    return {
+        "kind": ident[0],
+        "key": ident[1],
+        "label": period_label(*ident),
+        "net_sales": saved["net_sales"],
+        "marketing_spend": saved["marketing_spend"],
+        "reconciliation": build_reconciliation(spend_inv, gm2_inv, totals),
+    }
+
+
 def build_reconciliation(
     spend_inventory: List[Dict[str, Any]],
     gm2_inventory: List[Dict[str, Any]],
+    validated_totals: Optional[Dict[Tuple[str, str], Dict[str, float]]] = None,
 ) -> List[Dict[str, Any]]:
     """Compare source-file totals to Dema-validated SEK figures."""
+    expected_by = validated_totals if validated_totals is not None else VALIDATED_TOTALS
     spend_by: Dict[Tuple[str, str], float] = {}
     gm2_by: Dict[Tuple[str, str], float] = {}
     files_by: Dict[Tuple[str, str], List[str]] = {}
     for row in spend_inventory:
-        key = (row["kind"], row["key"])
-        spend_by[key] = spend_by.get(key, 0.0) + float(row.get("marketing_spend") or 0.0)
-        files_by.setdefault(key, []).append(row["filename"])
+        ident = (row["kind"], row["key"])
+        spend_by[ident] = spend_by.get(ident, 0.0) + float(row.get("marketing_spend") or 0.0)
+        files_by.setdefault(ident, []).append(row["filename"])
     for row in gm2_inventory:
-        key = (row["kind"], row["key"])
-        gm2_by[key] = gm2_by.get(key, 0.0) + float(row.get("net_sales") or 0.0)
-        files_by.setdefault(key, []).append(row["filename"])
+        ident = (row["kind"], row["key"])
+        gm2_by[ident] = gm2_by.get(ident, 0.0) + float(row.get("net_sales") or 0.0)
+        files_by.setdefault(ident, []).append(row["filename"])
 
-    keys = sorted(set(VALIDATED_TOTALS) | set(spend_by) | set(gm2_by))
+    keys = sorted(set(expected_by) | set(spend_by) | set(gm2_by))
     out: List[Dict[str, Any]] = []
     for kind, key in keys:
-        expected = VALIDATED_TOTALS.get((kind, key))
+        expected = expected_by.get((kind, key))
         actual_sales = gm2_by.get((kind, key))
         actual_spend = spend_by.get((kind, key))
+        registered = expected is not None
         match = False
-        if expected is not None and actual_sales is not None and actual_spend is not None:
+        if registered and actual_sales is not None and actual_spend is not None:
             match = _money_match(actual_sales, expected["net_sales"]) and _money_match(
                 actual_spend, expected["marketing_spend"]
             )
@@ -982,14 +1165,14 @@ def build_reconciliation(
             {
                 "kind": kind,
                 "key": key,
-                "label": f"W36" if (kind, key) == ("week", "2026-36") else (
-                    "August 2026" if (kind, key) == ("month", "2026-08") else f"{kind} {key}"
-                ),
+                "label": period_label(kind, key),
                 "net_sales": actual_sales,
                 "marketing_spend": actual_spend,
                 "expected_net_sales": expected["net_sales"] if expected else None,
                 "expected_marketing_spend": expected["marketing_spend"] if expected else None,
+                "registered": registered,
                 "match": match,
+                "can_register": actual_sales is not None and actual_spend is not None,
                 "files": sorted(set(files_by.get((kind, key), []))),
             }
         )
@@ -1107,14 +1290,20 @@ def calculate_adjusted_amer(
     revenue, rev_inv = _load_metric_frames(files[AMER_REVENUE_TYPE], load_revenue_frame)
     spend, spend_inv = _load_metric_frames(files[AMER_SPEND_TYPE], load_spend_frame)
     gm2, gm2_inv = _load_metric_frames(files[AMER_GM2_TYPE], load_gm2_frame)
-    reconciliation = build_reconciliation(spend_inv, gm2_inv)
+    validated_totals = load_validated_totals(data_root)
+    reconciliation = build_reconciliation(spend_inv, gm2_inv, validated_totals)
     if reconciliation and not all(
-        row["match"] for row in reconciliation if (row["kind"], row["key"]) in VALIDATED_TOTALS
+        row["match"]
+        for row in reconciliation
+        if (row["kind"], row["key"]) in validated_totals
+        and (row["net_sales"] is not None or row["marketing_spend"] is not None)
     ):
         unmatched = [
             row["label"]
             for row in reconciliation
-            if (row["kind"], row["key"]) in VALIDATED_TOTALS and not row["match"]
+            if (row["kind"], row["key"]) in validated_totals
+            and not row["match"]
+            and (row["net_sales"] is not None or row["marketing_spend"] is not None)
         ]
         if unmatched:
             warnings.append(

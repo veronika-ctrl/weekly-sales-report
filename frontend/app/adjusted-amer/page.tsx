@@ -8,12 +8,14 @@ import {
   getAdjustedAmer,
   getAdjustedAmerRecruited,
   hasBackend,
+  registerAdjustedAmerExpected,
   type AdjustedAmerChannelMonth,
   type AdjustedAmerGroupMonth,
   type AdjustedAmerHeadline,
   type AdjustedAmerReconciliation,
   type AdjustedAmerResponse,
 } from '@/lib/api'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import {
@@ -210,6 +212,8 @@ export default function AdjustedAmerPage() {
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [rvdLoading, setRvdLoading] = useState(false)
+  const [registering, setRegistering] = useState<string | null>(null)
+  const [registerErr, setRegisterErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!hasBackend) return
@@ -252,6 +256,32 @@ export default function AdjustedAmerPage() {
       setRvdLoading(false)
     }
   }, [weekToLoad])
+
+  const registerPeriod = useCallback(
+    async (row: AdjustedAmerReconciliation) => {
+      if (!hasBackend) return
+      const id = `${row.kind}-${row.key}`
+      setRegistering(id)
+      setRegisterErr(null)
+      try {
+        const next = await registerAdjustedAmerExpected({
+          baseWeek: weekToLoad,
+          kind: row.kind,
+          key: row.key,
+        })
+        setData((prev) =>
+          prev
+            ? { ...next, recruited_vs_dropped: prev.recruited_vs_dropped }
+            : next
+        )
+      } catch (e: unknown) {
+        setRegisterErr(e instanceof Error ? e.message : 'Could not register expected totals')
+      } finally {
+        setRegistering(null)
+      }
+    },
+    [weekToLoad]
+  )
 
   useEffect(() => {
     void load()
@@ -375,10 +405,16 @@ export default function AdjustedAmerPage() {
           <CardHeader>
             <CardTitle>Dema file reconciliation</CardTitle>
             <CardDescription>
-              Source-file Net sales and Marketing spend vs the validated W36 and August 2026 totals.
+              Source-file Net sales and Marketing spend vs Dema-validated expected totals.
+              W36 and August 2026 are already registered. For a later week, confirm the uploaded
+              files against Dema, then register those file totals as expected — Match is that check,
+              not a second upload.
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="overflow-x-auto space-y-3">
+            {registerErr ? (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">{registerErr}</div>
+            ) : null}
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b">
@@ -391,20 +427,42 @@ export default function AdjustedAmerPage() {
                 </tr>
               </thead>
               <tbody>
-                {data!.reconciliation!.map((row: AdjustedAmerReconciliation) => (
-                  <tr key={`${row.kind}-${row.key}`} className="border-b last:border-0">
+                {data!.reconciliation!.map((row: AdjustedAmerReconciliation) => {
+                  const rowId = `${row.kind}-${row.key}`
+                  const registered = row.registered ?? row.expected_net_sales != null
+                  const canRegister = row.can_register ?? (row.net_sales != null && row.marketing_spend != null)
+                  return (
+                  <tr key={rowId} className="border-b last:border-0">
                     <td className="py-2 pr-3">{row.label}</td>
                     <td className="py-2 pr-3 text-right">{fmtSek(row.net_sales)}</td>
                     <td className="py-2 pr-3 text-right">{fmtSek(row.expected_net_sales)}</td>
                     <td className="py-2 pr-3 text-right">{fmtSek(row.marketing_spend)}</td>
                     <td className="py-2 pr-3 text-right">{fmtSek(row.expected_marketing_spend)}</td>
                     <td className="py-2">
-                      <span className={row.match ? 'text-green-700 font-medium' : 'text-amber-800 font-medium'}>
-                        {row.match ? 'Match' : 'Not matched'}
-                      </span>
+                      {row.match ? (
+                        <span className="text-green-700 font-medium">Match</span>
+                      ) : registered ? (
+                        <span className="text-amber-800 font-medium">Not matched</span>
+                      ) : (
+                        <div className="flex flex-col items-start gap-1.5">
+                          <span className="text-amber-800 font-medium">Not registered</span>
+                          {canRegister ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={registering === rowId}
+                              onClick={() => void registerPeriod(row)}
+                            >
+                              {registering === rowId ? 'Registering…' : 'Register file totals as expected'}
+                            </Button>
+                          ) : null}
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </CardContent>
