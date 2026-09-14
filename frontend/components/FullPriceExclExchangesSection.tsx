@@ -5,7 +5,9 @@ import type {
   FullPriceExclExchangesResponse,
   FullPriceExclMetrics,
 } from '@/lib/api'
+import type { SectionViewState } from '@/lib/full-price-vs-sale-load'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Loader2 } from 'lucide-react'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -311,14 +313,17 @@ export default function FullPriceExclExchangesSection({
   view,
   weekly,
   monthly,
+  state,
+  error,
 }: {
   view: View
   weekly: FullPriceExclExchangesResponse | null
   monthly: FullPriceExclExchangesResponse | null
+  state: SectionViewState
+  error: string | null
 }) {
   const data = view === 'week' ? weekly : monthly
   const period = data?.period
-  const hasDays = (data?.days?.length || 0) > 0
   const periodRows =
     view === 'week'
       ? (weekly?.weeks || []).map((w) => ({
@@ -361,7 +366,16 @@ export default function FullPriceExclExchangesSection({
         )}
       </div>
 
-      {!data || (!hasDays && !period) ? (
+      {state === 'loading' ? (
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading exchange-excluded daily export…</p>
+        </div>
+      ) : state === 'error' ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error || 'Could not load exchange-excluded full price vs sale.'}
+        </div>
+      ) : state === 'empty' ? (
         <div className="rounded-md border bg-muted/40 p-6 text-sm text-muted-foreground">
           No exchange-excluded daily export yet. Upload “Full Price vs Sale excl. Exchanges — Daily” in
           Settings (separate from the all-orders slot).
@@ -459,7 +473,7 @@ export default function FullPriceExclExchangesSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {(data.days || []).map((d) => {
+                  {(data?.days || []).map((d) => {
                     const comparison = normalizeComparison(d.comparison)
                     return (
                     <tr key={d.date} className="border-b last:border-0">

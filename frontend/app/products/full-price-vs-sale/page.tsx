@@ -14,6 +14,11 @@ import {
   type FullPriceVsSaleMonthlyResponse,
   type FullPriceExclExchangesResponse,
 } from '@/lib/api'
+import {
+  allOrdersSectionState,
+  exclExchangesSectionState,
+  settleLoad,
+} from '@/lib/full-price-vs-sale-load'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
@@ -64,34 +69,87 @@ export default function FullPriceVsSalePage() {
   const [monthly, setMonthly] = useState<FullPriceVsSaleMonthlyResponse | null>(null)
   const [exclWeekly, setExclWeekly] = useState<FullPriceExclExchangesResponse | null>(null)
   const [exclMonthly, setExclMonthly] = useState<FullPriceExclExchangesResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [allOrdersLoading, setAllOrdersLoading] = useState({ weekly: false, monthly: false })
+  const [exclLoading, setExclLoading] = useState({ weekly: false, monthly: false })
+  const [allOrdersErrors, setAllOrdersErrors] = useState<{ weekly: string | null; monthly: string | null }>({
+    weekly: null,
+    monthly: null,
+  })
+  const [exclErrors, setExclErrors] = useState<{ weekly: string | null; monthly: string | null }>({
+    weekly: null,
+    monthly: null,
+  })
 
   useEffect(() => {
     if (!baseWeek) return
     let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const [w, m, ew, em] = await Promise.all([
-          getFullPriceVsSale(baseWeek, 8),
-          getFullPriceVsSaleMonthly(baseWeek, 13),
-          getFullPriceVsSaleExclExchanges(baseWeek, 8),
-          getFullPriceVsSaleExclExchangesMonthly(baseWeek, 13),
-        ])
-        if (!cancelled) {
-          setWeekly(w)
-          setMonthly(m)
-          setExclWeekly(ew)
-          setExclMonthly(em)
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load full price vs sale')
-      } finally {
-        if (!cancelled) setLoading(false)
+    setWeekly(null)
+    setMonthly(null)
+    setExclWeekly(null)
+    setExclMonthly(null)
+    setAllOrdersErrors({ weekly: null, monthly: null })
+    setExclErrors({ weekly: null, monthly: null })
+    setAllOrdersLoading({ weekly: true, monthly: true })
+    setExclLoading({ weekly: true, monthly: true })
+
+    const loadAllOrders = async () => {
+      const weeklyResult = await settleLoad(
+        () => getFullPriceVsSale(baseWeek, 8),
+        '/api/discounts/full-price-vs-sale',
+        180_000,
+      )
+      if (cancelled) return
+      if (weeklyResult.ok) setWeekly(weeklyResult.value)
+      else {
+        setWeekly(null)
+        setAllOrdersErrors((prev) => ({ ...prev, weekly: weeklyResult.error }))
       }
-    })()
+      setAllOrdersLoading((prev) => ({ ...prev, weekly: false }))
+
+      const monthlyResult = await settleLoad(
+        () => getFullPriceVsSaleMonthly(baseWeek, 13),
+        '/api/discounts/full-price-vs-sale?granularity=month',
+        180_000,
+      )
+      if (cancelled) return
+      if (monthlyResult.ok) setMonthly(monthlyResult.value)
+      else {
+        setMonthly(null)
+        setAllOrdersErrors((prev) => ({ ...prev, monthly: monthlyResult.error }))
+      }
+      setAllOrdersLoading((prev) => ({ ...prev, monthly: false }))
+    }
+
+    const loadExcl = async () => {
+      const weeklyResult = await settleLoad(
+        () => getFullPriceVsSaleExclExchanges(baseWeek, 8),
+        '/api/discounts/full-price-vs-sale-excl-exchanges',
+        180_000,
+      )
+      if (cancelled) return
+      if (weeklyResult.ok) setExclWeekly(weeklyResult.value)
+      else {
+        setExclWeekly(null)
+        setExclErrors((prev) => ({ ...prev, weekly: weeklyResult.error }))
+      }
+      setExclLoading((prev) => ({ ...prev, weekly: false }))
+
+      const monthlyResult = await settleLoad(
+        () => getFullPriceVsSaleExclExchangesMonthly(baseWeek, 13),
+        '/api/discounts/full-price-vs-sale-excl-exchanges?granularity=month',
+        180_000,
+      )
+      if (cancelled) return
+      if (monthlyResult.ok) setExclMonthly(monthlyResult.value)
+      else {
+        setExclMonthly(null)
+        setExclErrors((prev) => ({ ...prev, monthly: monthlyResult.error }))
+      }
+      setExclLoading((prev) => ({ ...prev, monthly: false }))
+    }
+
+    // Two streams, not four parallel pandas jobs on a single Render worker.
+    void Promise.all([loadAllOrders(), loadExcl()])
     return () => {
       cancelled = true
     }
@@ -153,6 +211,23 @@ export default function FullPriceVsSalePage() {
   const ytd = monthly?.ytd || null
   const ytdDateRange =
     ytd?.fy_start && ytd?.end ? `${ytd.fy_start} → ${ytd.end}` : null
+  const allOrdersError = view === 'week' ? allOrdersErrors.weekly : allOrdersErrors.monthly
+  const allOrdersBusy = view === 'week' ? allOrdersLoading.weekly : allOrdersLoading.monthly
+  const allOrdersState = allOrdersSectionState({
+    hasRows,
+    loading: allOrdersBusy,
+    error: allOrdersError,
+    data,
+  })
+  const exclError = view === 'week' ? exclErrors.weekly : exclErrors.monthly
+  const exclBusy = view === 'week' ? exclLoading.weekly : exclLoading.monthly
+  const exclState = exclExchangesSectionState({
+    view,
+    weekly: exclWeekly,
+    monthly: exclMonthly,
+    loading: exclBusy,
+    error: exclError,
+  })
 
   return (
     <div className="space-y-6">
@@ -194,26 +269,25 @@ export default function FullPriceVsSalePage() {
         </div>
       </div>
 
-      {loading && (
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading full price vs sale...</p>
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
-      )}
-
       <div className="space-y-6">
         <h3 className="text-base font-semibold text-gray-900">All orders (including exchanges)</h3>
 
-      {!loading && !error && data && !hasRows && (
+      {allOrdersState === 'loading' && (
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading all-orders full price vs sale…</p>
+        </div>
+      )}
+      {allOrdersState === 'error' && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{allOrdersError}</div>
+      )}
+      {allOrdersState === 'empty' && (
         <div className="rounded-md border bg-muted/40 p-6 text-sm text-muted-foreground">
           No revenue-over-time data found yet. Upload the daily &quot;Full price vs Sale&quot; export in Settings.
         </div>
       )}
 
-      {!loading && !error && data && hasRows && (
+      {allOrdersState === 'ready' && data && (
         <>
           {!data.has_last_year && (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -508,7 +582,13 @@ export default function FullPriceVsSalePage() {
       )}
       </div>
 
-      <FullPriceExclExchangesSection view={view} weekly={exclWeekly} monthly={exclMonthly} />
+      <FullPriceExclExchangesSection
+        view={view}
+        weekly={exclWeekly}
+        monthly={exclMonthly}
+        state={exclState}
+        error={exclError}
+      />
     </div>
   )
 }
