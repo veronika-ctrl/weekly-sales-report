@@ -406,34 +406,70 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         }))
       }
 
-      // Uploaded files live on the API disk. Supabase is only a cache — a newly
-      // uploaded week (e.g. 2026-37) often has no Supabase row yet. Always fall
-      // back to one batch compute instead of exiting with metrics=null (infinite spinner).
+      // Uploaded files live on the API disk. Supabase is only a cache.
+      // Do NOT call /api/batch/all-metrics here: that recomputes ~20 Qlik reports
+      // in one request and OOMs the 2GB Render instance (service restart / 502).
+      // Summary only needs table1 (one Qlik load). Other pages fetch themselves.
       if (!batchData && hasBackend) {
         setLoadingProgress((prev) => ({
           step: 'metrics',
           stepNumber: 1,
-          totalSteps: 3,
-          message:
-            'Computing metrics from uploaded files (large Qlik exports can take a few minutes)...',
-          percentage: 15,
-          supabaseStatus: prev?.supabaseStatus ?? (SUPABASE_DISABLED ? 'Supabase: Disabled (API only)' : 'Supabase: no week cache — using API'),
+          totalSteps: 2,
+          message: 'Loading Summary metrics from uploaded files…',
+          percentage: 20,
+          supabaseStatus:
+            prev?.supabaseStatus ??
+            (SUPABASE_DISABLED ? 'Supabase: Disabled (API only)' : 'Supabase: no week cache — using API'),
         }))
         try {
-          batchData = await getBatchMetrics(week, 8)
-          batchMode = true
-          setLoadingProgress((prev) => ({
-            step: 'metrics',
-            stepNumber: 2,
-            totalSteps: 3,
-            message: 'Metrics computed — loading budget data...',
-            percentage: 85,
-            supabaseStatus: prev?.supabaseStatus,
-          }))
-        } catch (batchErr) {
-          console.warn('Batch metrics failed, falling back to step-by-step API:', batchErr)
-          batchMode = false
-          batchData = null
+          const periodsData = await getPeriods(week)
+          setPeriods(periodsData)
+          const metricsData = await getTable1Metrics(week, ['actual', 'last_week', 'last_year'], true)
+          setMetrics(metricsData)
+          setIsDataReady(true)
+          saveCache(week, {
+            periods: periodsData,
+            metrics: metricsData,
+            markets: null,
+            kpis: null,
+            contribution: null,
+            gender_sales: null,
+            men_category_sales: null,
+            women_category_sales: null,
+            sessions_per_country: null,
+            conversion_per_country: null,
+            new_customers_per_country: null,
+            returning_customers_per_country: null,
+            aov_new_customers_per_country: null,
+            aov_returning_customers_per_country: null,
+            marketing_spend_per_country: null,
+            ncac_per_country: null,
+            contribution_new_per_country: null,
+            contribution_new_total_per_country: null,
+            contribution_returning_per_country: null,
+            contribution_returning_total_per_country: null,
+            total_contribution_per_country: null,
+            budget_general: null,
+            actuals_general: null,
+            budget_raw: null,
+            actuals_markets: null,
+            actuals_markets_detailed: null,
+            timestamp: Date.now(),
+          })
+          setLoading(false)
+          setLoadingProgress(null)
+          return
+        } catch (summaryErr) {
+          console.warn('Summary table1 load failed:', summaryErr)
+          setError(
+            summaryErr instanceof Error
+              ? summaryErr.message
+              : 'Failed to load Summary metrics from uploaded files'
+          )
+          setIsDataReady(false)
+          setLoading(false)
+          setLoadingProgress(null)
+          return
         }
       }
 
