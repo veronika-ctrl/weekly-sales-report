@@ -110,7 +110,7 @@ export default function MetricsPreview({
     return (
       <div className="flex items-center justify-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading metrics...</span>
+        <span className="ml-3 text-gray-600">Loading metrics from uploaded files… this can take a few minutes for a large Qlik export.</span>
       </div>
     )
   }

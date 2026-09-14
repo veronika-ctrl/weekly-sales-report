@@ -913,12 +913,24 @@ export interface BatchMetricsResponse {
 /** Same order of magnitude as Table 1: batch recomputes all metrics from raw files. */
 const BATCH_METRICS_TIMEOUT_MS = 600_000
 
+export async function getWeeksWithUploads(): Promise<string[]> {
+  if (!hasBackend) return []
+  try {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/weeks-with-uploads`)
+    if (!response.ok) return []
+    const body = (await response.json()) as { weeks?: string[] }
+    return Array.isArray(body.weeks) ? body.weeks.filter((w) => typeof w === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 export async function getBatchMetrics(baseWeek: string, numWeeks: number = 8): Promise<BatchMetricsResponse> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), BATCH_METRICS_TIMEOUT_MS)
   const url = `${API_BASE_URL}/api/batch/all-metrics?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`
   try {
-    const response = await fetch(url, { signal: controller.signal })
+    const response = await fetch(url, withApiCredentials({ signal: controller.signal }))
     if (!response.ok) {
       const errBody = await response.json().catch(() => ({}))
       const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText

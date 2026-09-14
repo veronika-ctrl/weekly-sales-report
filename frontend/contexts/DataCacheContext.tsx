@@ -406,16 +406,18 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         }))
       }
 
-      // API-only: one batch request loads raw files once on the server (much faster than 27 sequential calls).
-      if (SUPABASE_DISABLED && hasBackend) {
+      // Uploaded files live on the API disk. Supabase is only a cache — a newly
+      // uploaded week (e.g. 2026-37) often has no Supabase row yet. Always fall
+      // back to one batch compute instead of exiting with metrics=null (infinite spinner).
+      if (!batchData && hasBackend) {
         setLoadingProgress((prev) => ({
           step: 'metrics',
           stepNumber: 1,
           totalSteps: 3,
           message:
-            'Computing all metrics from uploaded files (large Qlik exports can take 3–8 minutes — please wait)...',
+            'Computing metrics from uploaded files (large Qlik exports can take a few minutes)...',
           percentage: 15,
-          supabaseStatus: prev?.supabaseStatus ?? 'Supabase: Disabled (API only)',
+          supabaseStatus: prev?.supabaseStatus ?? (SUPABASE_DISABLED ? 'Supabase: Disabled (API only)' : 'Supabase: no week cache — using API'),
         }))
         try {
           batchData = await getBatchMetrics(week, 8)
@@ -433,19 +435,17 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
           batchMode = false
           batchData = null
         }
-      } else if (SUPABASE_DISABLED) {
-        batchMode = false
-        batchData = null
       }
 
-      // Supabase is primary but no data for this week – error already set above; load periods only and exit
-      if (!batchData && !SUPABASE_DISABLED) {
+      // No API and no Supabase row: show empty state, do not mark the dashboard ready.
+      if (!batchData && !hasBackend) {
         try {
           const periodsData = await getPeriods(week)
           setPeriods(periodsData)
         } catch (_) {}
         setLoading(false)
         setLoadingProgress(null)
+        setIsDataReady(false)
         return
       }
       
@@ -469,6 +469,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         setMetrics(batchData.metrics)
         setMarkets(batchData.markets)
         marketsToSave = batchData.markets
+        setIsDataReady(true)
         // Refresh markets with recalculate=true so Y/Y for last-year weeks (2024-50, 2024-51, 2024-52) is filled
         try {
           const freshMarkets = await getTopMarkets(week, 8, true)
@@ -598,6 +599,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
           timestamp: Date.now()
         })
         
+        setIsDataReady(true)
         setLoading(false)
         return
       }
@@ -923,16 +925,17 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         actuals_markets_detailed: actualsMarketsDetailedData2,
         timestamp: Date.now()
       })
+      setIsDataReady(true)
       } // End of if (!batchMode) block for individual calls
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
       console.error('Error loading dashboard data:', err)
+      setIsDataReady(false)
     } finally {
       if (loadInFlightRef.current === week) {
         loadInFlightRef.current = null
       }
       setLoading(false)
-      setIsDataReady(true)
       // Clear progress after a short delay
       setTimeout(() => setLoadingProgress(null), 500)
     }

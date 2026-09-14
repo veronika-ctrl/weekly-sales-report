@@ -2548,6 +2548,20 @@ async def health_check():
     return {"status": "healthy", "service": "weekly-report-api"}
 
 
+@app.get("/api/weeks-with-uploads")
+async def get_weeks_with_uploads():
+    """ISO weeks that have at least one file on the API disk (not Supabase)."""
+    try:
+        from weekly_report.src.storage.uploads import list_weeks_with_uploads
+
+        config = load_config()
+        weeks = list_weeks_with_uploads(Path(config.data_root))
+        return {"weeks": weeks}
+    except Exception as e:
+        logger.warning(f"weeks-with-uploads failed: {e}")
+        return {"weeks": []}
+
+
 @app.get("/api/debug/markets")
 async def debug_markets(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
