@@ -236,7 +236,15 @@ def compare_incl_excl(
     incl_total: Optional[float],
     incl_discount: Optional[float],
 ) -> Dict[str, Any]:
-    """Comparison metrics between all-orders and exchange-excluded figures."""
+    """Comparison metrics between all-orders and exchange-excluded figures.
+
+    Also emits the 100% sales mix (share of sales, not share of discount)::
+
+        denom = excl_total + exchange_gross
+        full  = excl_full / denom
+        exch  = exchange_gross / denom
+        promo = (excl_total - excl_full) / denom
+    """
     excl_share = _full_price_share(excl_full, excl_total)
     incl_share = (
         _full_price_share(float(incl_full), float(incl_total))
@@ -250,6 +258,14 @@ def compare_incl_excl(
     non_exchange_gross_est = excl_total + excl_discount
     gross_context = non_exchange_gross_est + exchange_gross
     exchange_gross_share_pct = _share(exchange_gross, gross_context)
+
+    # 100% sales mix (share of sales, not share of discount amount).
+    # AfterShip size-swaps have ~0 net, so a net-only mix hides them.
+    # Identity: excl_full + exchange_gross + (excl_total - excl_full) = excl_total + exchange_gross.
+    sales_mix_denom = float(excl_total) + float(exchange_gross)
+    sales_mix_full_price_pct = _share(excl_full, sales_mix_denom)
+    sales_mix_exchange_pct = _share(exchange_gross, sales_mix_denom)
+    sales_mix_promo_pct = _share(float(excl_total) - float(excl_full), sales_mix_denom)
 
     if incl_discount is not None and incl_discount > 0:
         disc_den: Optional[float] = float(incl_discount)
@@ -306,6 +322,10 @@ def compare_incl_excl(
         "promotional_discount_share_pct": promotional_discount_share_pct,
         "non_exchange_gross_est": float(non_exchange_gross_est),
         "gross_context": float(gross_context),
+        "sales_mix_denom": float(sales_mix_denom),
+        "sales_mix_full_price_pct": sales_mix_full_price_pct,
+        "sales_mix_exchange_pct": sales_mix_exchange_pct,
+        "sales_mix_promo_pct": sales_mix_promo_pct,
     }
 
 

@@ -211,6 +211,16 @@ def test_comparison_math():
     assert out["exchange_gross_share_pct"] == pytest.approx(20.0 / 130.0 * 100.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(5.0 / 15.0 * 100.0)
     assert out["promotional_discount_share_pct"] == pytest.approx(10.0 / 15.0 * 100.0)
+    # 100% sales mix: denom = excl. Total + exchange gross (not net, not discount amount).
+    assert out["sales_mix_denom"] == pytest.approx(120.0)
+    assert out["sales_mix_full_price_pct"] == pytest.approx(80.0 / 120.0 * 100.0)
+    assert out["sales_mix_exchange_pct"] == pytest.approx(20.0 / 120.0 * 100.0)
+    assert out["sales_mix_promo_pct"] == pytest.approx(20.0 / 120.0 * 100.0)
+    assert (
+        out["sales_mix_full_price_pct"]
+        + out["sales_mix_exchange_pct"]
+        + out["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)
 
 
 def test_comparison_discount_share_fallback_without_all_orders():
@@ -231,6 +241,13 @@ def test_comparison_discount_share_fallback_without_all_orders():
     assert out["discounted_excl"] == pytest.approx(50.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(4.0 / (8.0 + 4.0) * 100.0)
     assert out["exchange_gross_share_pct"] == pytest.approx(12.0 / (100.0 + 8.0 + 12.0) * 100.0)
+    assert out["sales_mix_denom"] == pytest.approx(112.0)
+    assert out["sales_mix_exchange_pct"] == pytest.approx(12.0 / 112.0 * 100.0)
+    assert (
+        out["sales_mix_full_price_pct"]
+        + out["sales_mix_exchange_pct"]
+        + out["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)
 
 
 def test_period_and_daily_report(tmp_path: Path):
@@ -393,6 +410,51 @@ def test_weekly_series_period_total_is_not_latest_week_and_mix_stays_flat(tmp_pa
     assert w37["comparison"]["full_excl"] == pytest.approx(40.0)
     assert w37["comparison"]["discounted_incl"] == pytest.approx(60.0)
     assert w37["comparison"]["discounted_excl"] == pytest.approx(60.0)
+    # 100% sales mix: exchange gross is in the mix even though net is 0.
+    assert w37["exchange_net_revenue"] == pytest.approx(0.0)
+    assert w37["exchange_gross_value"] == pytest.approx(20.0)
+    mix = w37["comparison"]
+    assert mix["sales_mix_denom"] == pytest.approx(120.0)
+    assert mix["sales_mix_full_price_pct"] == pytest.approx(40.0 / 120.0 * 100.0)
+    assert mix["sales_mix_exchange_pct"] == pytest.approx(20.0 / 120.0 * 100.0)
+    assert mix["sales_mix_promo_pct"] == pytest.approx(60.0 / 120.0 * 100.0)
+    assert mix["sales_mix_exchange_pct"] > 0
+    assert (
+        mix["sales_mix_full_price_pct"]
+        + mix["sales_mix_exchange_pct"]
+        + mix["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)
+    # Window: excl full 120, excl total 200, exchange gross 25 → denom 225.
+    period_mix = period["comparison"]
+    assert period_mix["sales_mix_denom"] == pytest.approx(225.0)
+    assert (
+        period_mix["sales_mix_full_price_pct"]
+        + period_mix["sales_mix_exchange_pct"]
+        + period_mix["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)
+
+
+def test_sales_mix_is_share_of_sales_not_share_of_discount():
+    """Exchange credits can dominate discount amount while remaining a small sales slice."""
+    out = compare_incl_excl(
+        excl_full=848927.0,
+        excl_total=1320856.0,
+        excl_discount=19524.0,
+        exchange_gross=27516.0,
+        exchange_discount=27516.0,
+        incl_full=848927.0,
+        incl_total=1320856.0,
+        incl_discount=47040.0,
+    )
+    assert out["exchange_discount_share_pct"] == pytest.approx(27516.0 / 47040.0 * 100.0)
+    assert out["exchange_discount_share_pct"] > 50
+    assert out["sales_mix_exchange_pct"] == pytest.approx(27516.0 / (1320856.0 + 27516.0) * 100.0)
+    assert out["sales_mix_exchange_pct"] < 5
+    assert (
+        out["sales_mix_full_price_pct"]
+        + out["sales_mix_exchange_pct"]
+        + out["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)
 
 
 def test_monthly_before_after_series(tmp_path: Path):
@@ -422,3 +484,9 @@ def test_monthly_before_after_series(tmp_path: Path):
     assert by_month["2026-09"]["comparison"]["full_price_share_excl_pct"] == pytest.approx(50.0)
     # Aug+Sep window ≠ September alone.
     assert payload["period"]["comparison"]["full_price_share_incl_pct"] == pytest.approx(60.0)
+    sep = by_month["2026-09"]["comparison"]
+    assert sep["sales_mix_exchange_pct"] == pytest.approx(9.0 / 109.0 * 100.0)
+    assert sep["sales_mix_exchange_pct"] > 0
+    assert (
+        sep["sales_mix_full_price_pct"] + sep["sales_mix_exchange_pct"] + sep["sales_mix_promo_pct"]
+    ) == pytest.approx(100.0)

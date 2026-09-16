@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import type { FullPriceExclExchangesResponse } from './api'
 import {
   buildBeforeAfterSeries,
+  buildDiscountShareChartData,
   mixIsEssentiallyFlat,
   monthLabel,
   periodVsLatest,
@@ -39,7 +40,7 @@ const comparison = (over: {
 
 const metrics = (
   weekOrMonth: { week?: string; month?: string },
-  over: Parameters<typeof comparison>[0] & { orders?: number; net?: number },
+  over: Parameters<typeof comparison>[0] & { orders?: number; net?: number; gross?: number },
 ) => ({
   full_price: over.fullExcl,
   compare_at_price_sale: 0,
@@ -50,7 +51,7 @@ const metrics = (
   discount_amount: over.discountExcl,
   full_price_share_pct: over.exclShare,
   exchange_orders: over.orders ?? 0,
-  exchange_gross_value: 0,
+  exchange_gross_value: over.gross ?? 0,
   exchange_discount: over.discountIncl - over.discountExcl,
   exchange_net_revenue: over.net ?? 0,
   comparison: comparison(over),
@@ -92,6 +93,8 @@ const weeklyPayload: FullPriceExclExchangesResponse = {
         discountIncl: 47040,
         discountExcl: 19524,
         exchDiscShare: 58.5,
+        gross: 27516,
+        net: 0,
       },
     ),
   ],
@@ -111,6 +114,7 @@ const weeklyPayload: FullPriceExclExchangesResponse = {
         exchDiscShare: 12.84,
         orders: 46,
         net: 1306,
+        gross: 171195,
       },
     ),
     label: '2026-07-20 → 2026-09-13 (last 8 weeks)',
@@ -219,3 +223,123 @@ describe('labels', () => {
     assert.match(monthLabel('2026-09'), /Sep/)
   })
 })
+
+describe('buildDiscountShareChartData', () => {
+  it('maps each week’s exchange-credit share of recorded discount, not the window 12.8%', () => {
+    const rows = buildDiscountShareChartData(buildBeforeAfterSeries(weeklyPayload, 'week'))
+    assert.deepEqual(
+      rows.map((r) => r.label),
+      ['W36', 'W37'],
+    )
+    assert.equal(rows[0].exchange, 50)
+    assert.equal(rows[0].promotional, 50)
+    assert.equal(rows[1].exchange, 58.5)
+    assert.ok(Math.abs((rows[1].promotional || 0) - 41.5) < 0.01)
+    assert.notEqual(rows[1].exchange, weeklyPayload.period?.comparison.exchange_discount_share_pct)
+  })
+
+  it('keeps the period total as the 8-week mix (≈12.8%), separate from W37', () => {
+    const note = periodVsLatest(weeklyPayload, 'week')
+    assert.ok(note)
+    assert.ok(Math.abs((note.exchangeDiscountSharePct || 0) - 12.84) < 0.01)
+    assert.ok(Math.abs((note.promotionalDiscountSharePct || 0) - (100 - 12.84)) < 0.01)
+    const latest = buildDiscountShareChartData(buildBeforeAfterSeries(weeklyPayload, 'week')).at(-1)
+    assert.equal(latest?.exchange, 58.5)
+    assert.notEqual(latest?.exchange, note.exchangeDiscountSharePct)
+  })
+
+  it('reverses monthly discount-share rows oldest → newest', () => {
+    const monthly: FullPriceExclExchangesResponse = {
+      ...weeklyPayload,
+      granularity: 'month',
+      weeks: [],
+      months_data: [
+        {
+          ...metrics(
+            { month: '2026-09' },
+            {
+              inclShare: 65.5,
+              exclShare: 65.5,
+              fullIncl: 1600,
+              fullExcl: 1600,
+              totalIncl: 2443,
+              totalExcl: 2443,
+              discountIncl: 80,
+              discountExcl: 44,
+              exchDiscShare: 45,
+            },
+          ),
+          start: '2026-09-01',
+          end: '2026-09-13',
+        },
+        {
+          ...metrics(
+            { month: '2026-08' },
+            {
+              inclShare: 66.8,
+              exclShare: 66.8,
+              fullIncl: 5100,
+              fullExcl: 5100,
+              totalIncl: 7663,
+              totalExcl: 7663,
+              discountIncl: 400,
+              discountExcl: 353,
+              exchDiscShare: 11.8,
+            },
+          ),
+          start: '2026-08-01',
+          end: '2026-08-31',
+        },
+      ],
+    }
+    const rows = buildDiscountShareChartData(buildBeforeAfterSeries(monthly, 'month'))
+    assert.deepEqual(
+      rows.map((r) => [r.label, r.exchange]),
+      [
+        [monthLabel('2026-08'), 11.8],
+        [monthLabel('2026-09'), 45],
+      ],
+    )
+    assert.ok(Math.abs((rows[0].promotional || 0) - 88.2) < 0.01)
+  })
+
+  it('fills promotional share as 100 − exchange when the API omits it', () => {
+    const points = buildBeforeAfterSeries(weeklyPayload, 'week').map((p) => ({
+      ...p,
+      promotionalDiscountSharePct: null,
+    }))
+    const rows = buildDiscountShareChartData(points)
+    assert.equal(rows[0].promotional, 50)
+    assert.ok(Math.abs((rows[1].promotional || 0) - 41.5) < 0.01)
+  })
+})
+
+describe('sales mix on period vs latest', () => {
+  it('attaches a 100% sales mix even when exchange net is ~0', () => {
+    const note = periodVsLatest(weeklyPayload, 'week')
+    assert.ok(note?.salesMix)
+    assert.equal(note.exchangeNet, 1306)
+    assert.ok((note.salesMix.exchangePct || 0) > 0)
+    assert.ok(
+      Math.abs(
+        (note.salesMix.fullPricePct || 0) +
+          (note.salesMix.exchangePct || 0) +
+          (note.salesMix.promoPct || 0) -
+          100,
+      ) < 0.05,
+    )
+    const w37 = buildBeforeAfterSeries(weeklyPayload, 'week')[1]
+    assert.equal(w37.exchangeGross, 27516)
+    assert.equal(w37.exchangeDiscountSharePct, 58.5)
+  })
+
+  it('does not treat exchange credits ÷ discount as the sales mix', () => {
+    const w37 = buildBeforeAfterSeries(weeklyPayload, 'week')[1]
+    assert.equal(w37.exchangeDiscountSharePct, 58.5)
+    const mixShare = (w37.exchangeGross / (w37.totalExcl + w37.exchangeGross)) * 100
+    assert.ok(mixShare > 0)
+    assert.ok(mixShare < 5)
+    assert.notEqual(Math.round(mixShare), Math.round(w37.exchangeDiscountSharePct || 0))
+  })
+})
+

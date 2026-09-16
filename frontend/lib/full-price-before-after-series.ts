@@ -3,6 +3,7 @@ import type {
   FullPriceExclExchangesResponse,
   FullPriceExclMetrics,
 } from './api'
+import { computeSalesMix, type SalesMixShares } from './sales-mix'
 
 export type BeforeAfterView = 'week' | 'month'
 
@@ -18,9 +19,21 @@ export type BeforeAfterPoint = {
   discIncl: number | null
   fullExcl: number
   discExcl: number
+  totalExcl: number
   discountIncl: number | null
   discountExcl: number
+  exchangeDiscount: number
+  exchangeGross: number
+  /** AfterShip credits ÷ all-orders recorded discount. */
   exchangeDiscountSharePct: number | null
+  /** 100 − exchange share; promotional markdowns. */
+  promotionalDiscountSharePct: number | null
+}
+
+export type DiscountShareChartRow = {
+  label: string
+  exchange: number | null
+  promotional: number | null
 }
 
 export type PeriodVsLatest = {
@@ -37,8 +50,10 @@ export type PeriodVsLatest = {
   /** True when excluding exchanges does not move full-price share of net. */
   mixUnchanged: boolean
   exchangeDiscountSharePct: number | null
+  promotionalDiscountSharePct: number | null
   exchangeOrders: number
   exchangeNet: number
+  salesMix: SalesMixShares | null
 }
 
 const SHARE_PP_EPS = 0.15
@@ -77,9 +92,14 @@ function splitAmounts(metrics: FullPriceExclMetrics, comparison?: FullPriceExclC
   return { fullIncl, discIncl, fullExcl, discExcl }
 }
 
+function complementShare(share: number | null | undefined) {
+  return share == null ? null : 100 - share
+}
+
 function toPoint(key: string, label: string, metrics: FullPriceExclMetrics): BeforeAfterPoint {
   const c = metrics.comparison
   const amounts = splitAmounts(metrics, c)
+  const exchangeShare = c?.exchange_discount_share_pct ?? null
   return {
     key,
     label,
@@ -90,10 +110,23 @@ function toPoint(key: string, label: string, metrics: FullPriceExclMetrics): Bef
     discIncl: amounts.discIncl,
     fullExcl: amounts.fullExcl,
     discExcl: amounts.discExcl,
+    totalExcl: c?.total_excl ?? metrics.total,
     discountIncl: c?.discount_incl ?? null,
     discountExcl: c?.discount_excl ?? metrics.discount_amount,
-    exchangeDiscountSharePct: c?.exchange_discount_share_pct ?? null,
+    exchangeDiscount: metrics.exchange_discount,
+    exchangeGross: metrics.exchange_gross_value,
+    exchangeDiscountSharePct: exchangeShare,
+    promotionalDiscountSharePct: c?.promotional_discount_share_pct ?? complementShare(exchangeShare),
   }
+}
+
+/** Stacked 100% share of recorded discount: exchange credits vs promotional. */
+export function buildDiscountShareChartData(points: BeforeAfterPoint[]): DiscountShareChartRow[] {
+  return points.map((p) => ({
+    label: p.label,
+    exchange: p.exchangeDiscountSharePct,
+    promotional: p.promotionalDiscountSharePct ?? complementShare(p.exchangeDiscountSharePct),
+  }))
 }
 
 /** Oldest → newest points for the before/after charts. */
@@ -143,7 +176,15 @@ export function periodVsLatest(
     mixUnchanged:
       approxEqual(latest.before, latest.after) && approxEqual(periodBefore, periodAfter),
     exchangeDiscountSharePct: period.comparison?.exchange_discount_share_pct ?? null,
+    promotionalDiscountSharePct:
+      period.comparison?.promotional_discount_share_pct ??
+      complementShare(period.comparison?.exchange_discount_share_pct),
     exchangeOrders: period.exchange_orders,
     exchangeNet: period.exchange_net_revenue,
+    salesMix: computeSalesMix({
+      exclFull: period.full_price,
+      exclTotal: period.total,
+      exchangeGross: period.exchange_gross_value,
+    }),
   }
 }
