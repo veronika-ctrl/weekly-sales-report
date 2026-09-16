@@ -29,18 +29,23 @@ function ExchangeShareLabel({
   x,
   y,
   width,
-  payload,
+  value,
+  viewBox,
 }: {
   x?: number
   y?: number
   width?: number
-  payload?: { exchange?: number | null }
+  value?: number | string
+  viewBox?: { x?: number; y?: number; width?: number }
 }) {
-  if (x == null || y == null || payload?.exchange == null) return null
-  const cx = x + (width ?? 0) / 2
+  const px = x ?? viewBox?.x
+  const py = y ?? viewBox?.y
+  const pw = width ?? viewBox?.width
+  const n = typeof value === 'number' ? value : Number(value)
+  if (px == null || py == null || !Number.isFinite(n)) return null
   return (
-    <text x={cx} y={y - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#9A3412">
-      {pct(payload.exchange)}
+    <text x={px + (pw ?? 0) / 2} y={py - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#9A3412">
+      {pct(n)}
     </text>
   )
 }
@@ -114,7 +119,7 @@ export default function ExchangeDiscountShareChart({
               name="Promotional markdowns"
               isAnimationActive={isAnimationActive}
             >
-              <LabelList position="top" content={ExchangeShareLabel} />
+              <LabelList dataKey="exchange" position="top" content={ExchangeShareLabel} />
             </Bar>
           </BarChart>
         </ChartContainer>
