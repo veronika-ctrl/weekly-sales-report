@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, XAxis, YAxis } from '@/lib/recharts'
 import { Loader2 } from 'lucide-react'
+import type { LabelProps } from 'recharts'
 
 const mixConfig = {
   fullPrice: { label: 'Full price', color: '#0F766E' },
@@ -22,26 +23,26 @@ const mixConfig = {
 const pct = (value: number | null | undefined) =>
   value == null ? '–' : `${value.toFixed(1)}%`
 
-function ExchangeSliceLabel({
-  x,
-  y,
-  width,
-  value,
-  viewBox,
-}: {
-  x?: number
-  y?: number
-  width?: number
-  value?: number | string
-  viewBox?: { x?: number; y?: number; width?: number }
-}) {
-  const px = x ?? viewBox?.x
-  const py = y ?? viewBox?.y
-  const pw = width ?? viewBox?.width
+function cartesianBox(viewBox: LabelProps['viewBox']) {
+  return viewBox && 'x' in viewBox ? viewBox : undefined
+}
+
+function ExchangeSliceLabel({ x, y, width, value, viewBox }: LabelProps) {
+  const box = cartesianBox(viewBox)
+  const px = Number(x ?? box?.x)
+  const py = Number(y ?? box?.y)
+  const pw = Number(width ?? box?.width)
   const n = typeof value === 'number' ? value : Number(value)
-  if (px == null || py == null || !Number.isFinite(n) || n <= 0) return null
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(n) || n <= 0) return null
   return (
-    <text x={px + (pw ?? 0) / 2} y={py - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#9A3412">
+    <text
+      x={px + (Number.isFinite(pw) ? pw : 0) / 2}
+      y={py - 8}
+      textAnchor="middle"
+      fontSize={11}
+      fontWeight={600}
+      fill="#9A3412"
+    >
       {pct(n)}
     </text>
   )
