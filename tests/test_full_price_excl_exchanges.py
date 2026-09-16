@@ -201,6 +201,10 @@ def test_comparison_math():
     )
     assert out["total_incl"] == 120.0
     assert out["total_excl"] == 100.0
+    assert out["full_incl"] == 80.0
+    assert out["full_excl"] == 80.0
+    assert out["discounted_incl"] == pytest.approx(40.0)
+    assert out["discounted_excl"] == pytest.approx(20.0)
     assert out["discount_incl"] == 15.0
     assert out["discount_excl"] == 10.0
     # non_exchange_gross_est = 100+10=110; gross_context=110+20=130; share=20/130*100
@@ -221,6 +225,10 @@ def test_comparison_discount_share_fallback_without_all_orders():
         incl_discount=None,
     )
     assert out["full_price_share_incl_pct"] is None
+    assert out["full_incl"] is None
+    assert out["full_excl"] == pytest.approx(50.0)
+    assert out["discounted_incl"] is None
+    assert out["discounted_excl"] == pytest.approx(50.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(4.0 / (8.0 + 4.0) * 100.0)
     assert out["exchange_gross_share_pct"] == pytest.approx(12.0 / (100.0 + 8.0 + 12.0) * 100.0)
 
@@ -311,3 +319,106 @@ def test_upload_accepts_valid_headers_and_returns_date_range(tmp_path: Path, mon
     assert result["date_range"] == {"start": "2026-09-01", "end": "2026-09-03"}
     saved = tmp_path / "raw" / "2026-36" / FILE_TYPE / "full-price-vs-sale-excl-exchanges-2026-09-01-to-2026-09-07.csv"
     assert saved.exists()
+
+
+def test_weekly_series_period_total_is_not_latest_week_and_mix_stays_flat(tmp_path: Path):
+    """8-week (here: 2-week) window share ≠ latest week; excluding 0-net exchanges does not lift FP%."""
+    # ISO 2026-36 = Mon 2026-08-31; 2026-37 = Mon 2026-09-07.
+    dest = tmp_path / "raw" / "2026-37" / FILE_TYPE / "excl.csv"
+    _write_csv(
+        dest,
+        [
+            # W36: 80% full price, no exchange net
+            _row(
+                "2026-09-01",
+                full="80",
+                total="100",
+                discount="5",
+                share="80",
+                orders="2",
+                egross="5",
+                edisc="5",
+                enet="0",
+            ),
+            # W37: 40% full price; AfterShip credit is in Discount Amount of all-orders,
+            # but exchange net is 0 so dropping the order does not change mix.
+            _row(
+                "2026-09-08",
+                full="40",
+                total="100",
+                discount="10",
+                share="40",
+                orders="3",
+                egross="20",
+                edisc="20",
+                enet="0",
+            ),
+        ],
+    )
+    all_orders = tmp_path / "raw" / "2026-37" / "discounts" / "all.csv"
+    all_orders.parent.mkdir(parents=True, exist_ok=True)
+    all_orders.write_text(
+        "Date,Full Price,Total,Discount Amount\n"
+        "2026-09-01,80,100,10\n"
+        "2026-09-08,40,100,30\n",
+        encoding="utf-8",
+    )
+
+    payload = calculate_full_price_vs_sale_excl_exchanges(
+        "2026-37", tmp_path, num_weeks=2, granularity="week"
+    )
+    weeks = {w["week"]: w for w in payload["weeks"]}
+    w36 = weeks["2026-36"]
+    w37 = weeks["2026-37"]
+    period = payload["period"]
+    assert period is not None
+
+    assert w36["comparison"]["full_price_share_incl_pct"] == pytest.approx(80.0)
+    assert w36["comparison"]["full_price_share_excl_pct"] == pytest.approx(80.0)
+    assert w37["comparison"]["full_price_share_incl_pct"] == pytest.approx(40.0)
+    assert w37["comparison"]["full_price_share_excl_pct"] == pytest.approx(40.0)
+    # Window total 120/200 = 60%, not the latest week's 40%.
+    assert period["comparison"]["full_price_share_incl_pct"] == pytest.approx(60.0)
+    assert period["comparison"]["full_price_share_excl_pct"] == pytest.approx(60.0)
+    assert period["comparison"]["full_price_share_incl_pct"] != pytest.approx(
+        w37["comparison"]["full_price_share_incl_pct"]
+    )
+    # Mix is unchanged (exchange net = 0); discount amount is what exchanges distort.
+    assert w37["comparison"]["full_price_share_pp_diff"] == pytest.approx(0.0)
+    assert period["comparison"]["discount_incl"] == pytest.approx(40.0)
+    assert period["comparison"]["discount_excl"] == pytest.approx(15.0)
+    assert period["comparison"]["exchange_discount_share_pct"] == pytest.approx(25.0 / 40.0 * 100.0)
+    # Split amounts for the before/after bar chart.
+    assert w37["comparison"]["full_incl"] == pytest.approx(40.0)
+    assert w37["comparison"]["full_excl"] == pytest.approx(40.0)
+    assert w37["comparison"]["discounted_incl"] == pytest.approx(60.0)
+    assert w37["comparison"]["discounted_excl"] == pytest.approx(60.0)
+
+
+def test_monthly_before_after_series(tmp_path: Path):
+    dest = tmp_path / "raw" / "2026-37" / FILE_TYPE / "excl.csv"
+    _write_csv(
+        dest,
+        [
+            _row("2026-08-15", full="70", total="100", discount="5", share="70", orders="1", egross="8", edisc="8", enet="0"),
+            _row("2026-09-08", full="50", total="100", discount="6", share="50", orders="1", egross="9", edisc="9", enet="0"),
+        ],
+    )
+    all_orders = tmp_path / "raw" / "2026-37" / "discounts" / "all.csv"
+    all_orders.parent.mkdir(parents=True, exist_ok=True)
+    all_orders.write_text(
+        "Date,Full Price,Total,Discount Amount\n"
+        "2026-08-15,70,100,5\n"
+        "2026-09-08,50,100,15\n",
+        encoding="utf-8",
+    )
+    payload = calculate_full_price_vs_sale_excl_exchanges(
+        "2026-37", tmp_path, months=2, granularity="month"
+    )
+    by_month = {m["month"]: m for m in payload["months_data"]}
+    assert by_month["2026-08"]["comparison"]["full_price_share_incl_pct"] == pytest.approx(70.0)
+    assert by_month["2026-08"]["comparison"]["full_price_share_excl_pct"] == pytest.approx(70.0)
+    assert by_month["2026-09"]["comparison"]["full_price_share_incl_pct"] == pytest.approx(50.0)
+    assert by_month["2026-09"]["comparison"]["full_price_share_excl_pct"] == pytest.approx(50.0)
+    # Aug+Sep window ≠ September alone.
+    assert payload["period"]["comparison"]["full_price_share_incl_pct"] == pytest.approx(60.0)

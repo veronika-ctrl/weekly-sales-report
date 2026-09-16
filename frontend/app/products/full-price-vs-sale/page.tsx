@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
+import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
 
 type View = 'week' | 'month'
@@ -343,6 +344,13 @@ export default function FullPriceVsSalePage() {
                 %</strong> compares the same metric to last year.
               </li>
               <li>
+                <strong>Including vs excluding exchanges</strong> charts sit next to the YoY charts. Gray = all-orders
+                mix (AfterShip size-swaps included). Teal = the excl. daily export (those orders dropped). A size change
+                is still a full-price product; the AfterShip custom discount is not a promo. The excl. file does not
+                reclassify that order as full price — it removes it. If the two lines overlap, exchange net is ~0 and
+                the mix of remaining sales does not move; discount amount is what exchanges inflate.
+              </li>
+              <li>
                 <strong>Download Excel</strong> exports fiscal YTD summary, monthly detail (last 13 months), and weekly
                 detail (last 8 weeks) with full SEK amounts for CFO analysis.
               </li>
@@ -499,6 +507,15 @@ export default function FullPriceVsSalePage() {
               </CardContent>
             </Card>
           </div>
+
+          <FullPriceBeforeAfterCharts
+            view={view}
+            weekly={exclWeekly}
+            monthly={exclMonthly}
+            state={exclState}
+            error={exclError}
+            isAnimationActive={isAnimationActive}
+          />
 
           <Card>
             <CardHeader>

@@ -1317,6 +1317,10 @@ export interface FullPriceExclComparison {
   discount_rate_incl_pct?: number | null
   discount_rate_excl_pct?: number | null
   discount_rate_pp_diff?: number | null
+  full_incl?: number | null
+  full_excl?: number
+  discounted_incl?: number | null
+  discounted_excl?: number
   total_incl: number | null
   total_excl: number
   discount_incl: number | null
