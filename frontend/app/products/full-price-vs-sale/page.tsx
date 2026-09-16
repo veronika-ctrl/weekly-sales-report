@@ -23,7 +23,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
-import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
 import SalesMixChart from '@/components/SalesMixChart'
 
@@ -352,13 +351,6 @@ export default function FullPriceVsSalePage() {
                 excluding-exchanges section).
               </li>
               <li>
-                <strong>Including vs excluding exchanges</strong> charts sit next to the YoY charts. Gray = all-orders
-                mix (AfterShip size-swaps included). Teal = the excl. daily export (those orders dropped). A size change
-                is still a full-price product; the AfterShip custom discount is not a promo. The excl. file does not
-                reclassify that order as full price — it removes it. If the two lines overlap, exchange net is ~0 and
-                the mix of remaining sales does not move; discount amount is what exchanges inflate.
-              </li>
-              <li>
                 <strong>Share of recorded discount</strong> (in Excluding AfterShip exchanges) is exchange credits ÷
                 all-orders discount, per week or month. The large orange % is the window total — not full-price share of
                 net, which stays almost flat.
@@ -526,15 +518,6 @@ export default function FullPriceVsSalePage() {
             weekly={exclWeekly}
             monthly={exclMonthly}
             state={exclState}
-            isAnimationActive={isAnimationActive}
-          />
-
-          <FullPriceBeforeAfterCharts
-            view={view}
-            weekly={exclWeekly}
-            monthly={exclMonthly}
-            state={exclState}
-            error={exclError}
             isAnimationActive={isAnimationActive}
           />
 

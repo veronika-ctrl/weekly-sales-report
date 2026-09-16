@@ -206,7 +206,7 @@ describe('discount share UI wiring', () => {
 })
 
 describe('sales mix UI wiring', () => {
-  it('places 100% sales-mix stacks on the page and in the exchanges section', () => {
+  it('places 100% sales-mix stacks once on the page, not duplicated in the exchanges section', () => {
     const page = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), '../app/products/full-price-vs-sale/page.tsx'),
       'utf8',
@@ -225,7 +225,11 @@ describe('sales mix UI wiring', () => {
     )
     assert.match(page, /SalesMixChart/)
     assert.match(page, /100% sales mix/)
-    assert.match(section, /SalesMixChart/)
+    assert.doesNotMatch(section, /SalesMixChart/)
+    assert.doesNotMatch(page, /FullPriceBeforeAfterCharts/)
+    assert.doesNotMatch(section, /FullPriceBeforeAfterCharts/)
+    assert.doesNotMatch(section, /BeforeAfterTable/)
+    assert.doesNotMatch(section, /Weekly totals — before vs after/)
     assert.match(chart, /data-testid="sales-mix-chart"/)
     assert.match(chart, /data-testid="sales-mix-period-callout"/)
     assert.match(chart, /dataKey="fullPrice"/)
