@@ -11,9 +11,9 @@ describe('computeSalesMix', () => {
     // User example shape: 55 full price, 12 exchange gross, 33 promo net on 88 excl. total.
     const mix = computeSalesMix({ exclFull: 55, exclTotal: 88, exchangeGross: 12 })
     assert.equal(mix.denom, 100)
-    assert.equal(mix.fullPricePct, 55)
-    assert.equal(mix.exchangePct, 12)
-    assert.equal(mix.promoPct, 33)
+    assert.ok(Math.abs((mix.fullPricePct || 0) - 55) < 1e-9)
+    assert.ok(Math.abs((mix.exchangePct || 0) - 12) < 1e-9)
+    assert.ok(Math.abs((mix.promoPct || 0) - 33) < 1e-9)
     assert.equal(salesMixSumsTo100(mix), true)
   })
 

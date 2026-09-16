@@ -117,7 +117,6 @@ const weeklyPayload: FullPriceExclExchangesResponse = {
         gross: 171195,
       },
     ),
-    ),
     label: '2026-07-20 → 2026-09-13 (last 8 weeks)',
     start: '2026-07-20',
     end: '2026-09-13',
