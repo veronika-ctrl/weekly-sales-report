@@ -3,6 +3,15 @@ import type {
   FullPriceExclExchangesResponse,
   FullPriceExclMetrics,
 } from './api'
+import {
+  buildDiscountShareChartData as buildDiscountAmountChartRows,
+  computeDiscountedNetByType,
+  computeRecordedDiscountShare,
+  type DiscountShareChartRow,
+  type DiscountedNetChartRow,
+  type DiscountedNetTypeShare,
+  type RecordedDiscountShare,
+} from './discount-share'
 import { computeSalesMix, type SalesMixShares } from './sales-mix'
 
 export type BeforeAfterView = 'week' | 'month'
@@ -24,17 +33,19 @@ export type BeforeAfterPoint = {
   discountExcl: number
   exchangeDiscount: number
   exchangeGross: number
-  /** AfterShip credits ÷ all-orders recorded discount. */
+  compareAt: number
+  discountCode: number
+  both: number
+  priceDrop: number
+  /** AfterShip credits ÷ (excl. Discount Amount + Exchange Discount). */
   exchangeDiscountSharePct: number | null
-  /** 100 − exchange share; promotional markdowns. */
+  /** excl. Discount Amount ÷ same denom; promotional markdowns. */
   promotionalDiscountSharePct: number | null
+  discountShare: RecordedDiscountShare
+  discountedNetTypes: DiscountedNetTypeShare
 }
 
-export type DiscountShareChartRow = {
-  label: string
-  exchange: number | null
-  promotional: number | null
-}
+export type { DiscountShareChartRow, DiscountedNetChartRow }
 
 export type PeriodVsLatest = {
   latestLabel: string
@@ -51,6 +62,8 @@ export type PeriodVsLatest = {
   mixUnchanged: boolean
   exchangeDiscountSharePct: number | null
   promotionalDiscountSharePct: number | null
+  discountShare: RecordedDiscountShare | null
+  discountedNetTypes: DiscountedNetTypeShare | null
   exchangeOrders: number
   exchangeNet: number
   salesMix: SalesMixShares | null
@@ -99,7 +112,18 @@ function complementShare(share: number | null | undefined) {
 function toPoint(key: string, label: string, metrics: FullPriceExclMetrics): BeforeAfterPoint {
   const c = metrics.comparison
   const amounts = splitAmounts(metrics, c)
-  const exchangeShare = c?.exchange_discount_share_pct ?? null
+  const discountExcl = c?.discount_excl ?? metrics.discount_amount
+  const discountShare = computeRecordedDiscountShare({
+    exchangeDiscount: metrics.exchange_discount,
+    promotionalDiscount: discountExcl,
+  })
+  const discountedNetTypes = computeDiscountedNetByType({
+    compareAt: metrics.compare_at_price_sale,
+    discountCode: metrics.discount_code_auto,
+    both: metrics.both,
+    priceDrop: metrics.price_drop_sale,
+  })
+  const exchangeShare = discountShare.exchangePct ?? c?.exchange_discount_share_pct ?? null
   return {
     key,
     label,
@@ -112,21 +136,47 @@ function toPoint(key: string, label: string, metrics: FullPriceExclMetrics): Bef
     discExcl: amounts.discExcl,
     totalExcl: c?.total_excl ?? metrics.total,
     discountIncl: c?.discount_incl ?? null,
-    discountExcl: c?.discount_excl ?? metrics.discount_amount,
+    discountExcl,
     exchangeDiscount: metrics.exchange_discount,
     exchangeGross: metrics.exchange_gross_value,
+    compareAt: metrics.compare_at_price_sale,
+    discountCode: metrics.discount_code_auto,
+    both: metrics.both,
+    priceDrop: metrics.price_drop_sale,
     exchangeDiscountSharePct: exchangeShare,
-    promotionalDiscountSharePct: c?.promotional_discount_share_pct ?? complementShare(exchangeShare),
+    promotionalDiscountSharePct: discountShare.promotionalPct ?? c?.promotional_discount_share_pct ?? complementShare(exchangeShare),
+    discountShare,
+    discountedNetTypes,
   }
 }
 
-/** Stacked 100% share of recorded discount: exchange credits vs promotional. */
+/** Stacked 100% share of recorded discount: slice array (exchange vs promotional, plus later types). */
 export function buildDiscountShareChartData(points: BeforeAfterPoint[]): DiscountShareChartRow[] {
-  return points.map((p) => ({
-    label: p.label,
-    exchange: p.exchangeDiscountSharePct,
-    promotional: p.promotionalDiscountSharePct ?? complementShare(p.exchangeDiscountSharePct),
-  }))
+  return buildDiscountAmountChartRows(
+    points.map((p) => ({
+      label: p.label,
+      exchangeDiscount: p.exchangeDiscount,
+      promotionalDiscount: p.discountExcl,
+    })),
+  )
+}
+
+export function buildDiscountedNetTypeChartDataFromPoints(
+  points: BeforeAfterPoint[],
+): DiscountedNetChartRow[] {
+  return points.map((p) => {
+    const row: DiscountedNetChartRow = {
+      label: p.label,
+      compareAt: null,
+      discountCode: null,
+      both: null,
+      priceDrop: null,
+    }
+    for (const slice of p.discountedNetTypes.slices) {
+      row[slice.id] = slice.pct
+    }
+    return row
+  })
 }
 
 /** Oldest → newest points for the before/after charts. */
@@ -163,6 +213,16 @@ export function periodVsLatest(
   if (!latest) return null
   const periodBefore = period.comparison?.full_price_share_incl_pct ?? null
   const periodAfter = period.comparison?.full_price_share_excl_pct ?? period.full_price_share_pct
+  const discountShare = computeRecordedDiscountShare({
+    exchangeDiscount: period.exchange_discount,
+    promotionalDiscount: period.comparison?.discount_excl ?? period.discount_amount,
+  })
+  const discountedNetTypes = computeDiscountedNetByType({
+    compareAt: period.compare_at_price_sale,
+    discountCode: period.discount_code_auto,
+    both: period.both,
+    priceDrop: period.price_drop_sale,
+  })
   return {
     latestLabel: latest.label,
     latestBefore: latest.before,
@@ -175,10 +235,14 @@ export function periodVsLatest(
     latestDiffersFromPeriod: !approxEqual(latest.before, periodBefore),
     mixUnchanged:
       approxEqual(latest.before, latest.after) && approxEqual(periodBefore, periodAfter),
-    exchangeDiscountSharePct: period.comparison?.exchange_discount_share_pct ?? null,
+    exchangeDiscountSharePct:
+      discountShare.exchangePct ?? period.comparison?.exchange_discount_share_pct ?? null,
     promotionalDiscountSharePct:
+      discountShare.promotionalPct ??
       period.comparison?.promotional_discount_share_pct ??
       complementShare(period.comparison?.exchange_discount_share_pct),
+    discountShare,
+    discountedNetTypes,
     exchangeOrders: period.exchange_orders,
     exchangeNet: period.exchange_net_revenue,
     salesMix: computeSalesMix({

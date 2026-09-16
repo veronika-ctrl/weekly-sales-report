@@ -211,6 +211,9 @@ def test_comparison_math():
     assert out["exchange_gross_share_pct"] == pytest.approx(20.0 / 130.0 * 100.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(5.0 / 15.0 * 100.0)
     assert out["promotional_discount_share_pct"] == pytest.approx(10.0 / 15.0 * 100.0)
+    assert out["discount_share_denom"] == pytest.approx(15.0)
+    assert [s["id"] for s in out["discount_share_slices"]] == ["exchange", "promotional"]
+    assert out["discount_share_slices"][0]["pct"] + out["discount_share_slices"][1]["pct"] == pytest.approx(100.0)
     # 100% sales mix: denom = excl. Total + exchange gross (not net, not discount amount).
     assert out["sales_mix_denom"] == pytest.approx(120.0)
     assert out["sales_mix_full_price_pct"] == pytest.approx(80.0 / 120.0 * 100.0)
@@ -240,6 +243,8 @@ def test_comparison_discount_share_fallback_without_all_orders():
     assert out["discounted_incl"] is None
     assert out["discounted_excl"] == pytest.approx(50.0)
     assert out["exchange_discount_share_pct"] == pytest.approx(4.0 / (8.0 + 4.0) * 100.0)
+    assert out["promotional_discount_share_pct"] == pytest.approx(8.0 / (8.0 + 4.0) * 100.0)
+    assert out["discount_share_denom"] == pytest.approx(12.0)
     assert out["exchange_gross_share_pct"] == pytest.approx(12.0 / (100.0 + 8.0 + 12.0) * 100.0)
     assert out["sales_mix_denom"] == pytest.approx(112.0)
     assert out["sales_mix_exchange_pct"] == pytest.approx(12.0 / 112.0 * 100.0)
@@ -447,6 +452,8 @@ def test_sales_mix_is_share_of_sales_not_share_of_discount():
         incl_discount=47040.0,
     )
     assert out["exchange_discount_share_pct"] == pytest.approx(27516.0 / 47040.0 * 100.0)
+    assert out["promotional_discount_share_pct"] == pytest.approx(19524.0 / 47040.0 * 100.0)
+    assert out["exchange_discount_share_pct"] + out["promotional_discount_share_pct"] == pytest.approx(100.0)
     assert out["exchange_discount_share_pct"] > 50
     assert out["sales_mix_exchange_pct"] == pytest.approx(27516.0 / (1320856.0 + 27516.0) * 100.0)
     assert out["sales_mix_exchange_pct"] < 5
@@ -455,6 +462,59 @@ def test_sales_mix_is_share_of_sales_not_share_of_discount():
         + out["sales_mix_exchange_pct"]
         + out["sales_mix_promo_pct"]
     ) == pytest.approx(100.0)
+
+
+def test_recorded_discount_share_uses_excl_plus_exchange_not_mismatched_incl():
+    """Identity denom is excl. Discount Amount + Exchange Discount even if all-orders differs."""
+    out = compare_incl_excl(
+        excl_full=80.0,
+        excl_total=100.0,
+        excl_discount=10.0,
+        exchange_gross=20.0,
+        exchange_discount=5.0,
+        incl_full=80.0,
+        incl_total=120.0,
+        incl_discount=20.0,
+    )
+    assert out["discount_incl"] == 20.0
+    assert out["discount_share_denom"] == pytest.approx(15.0)
+    assert out["exchange_discount_share_pct"] == pytest.approx(5.0 / 15.0 * 100.0)
+    assert out["promotional_discount_share_pct"] == pytest.approx(10.0 / 15.0 * 100.0)
+    assert (
+        out["exchange_discount_share_pct"] + out["promotional_discount_share_pct"]
+    ) == pytest.approx(100.0)
+
+
+def test_live_w37_and_8_week_discount_share_identity():
+    """Live 2026-37: week ~58.5% AfterShip of discount $; last 8 weeks ~12.8%."""
+    w37 = compare_incl_excl(
+        excl_full=848927.0,
+        excl_total=1320856.0,
+        excl_discount=19524.282138,
+        exchange_gross=27516.0,
+        exchange_discount=27516.033,
+        incl_full=848927.0,
+        incl_total=1320856.0,
+        incl_discount=47040.315138,
+    )
+    assert (19524.282138 + 27516.033) == pytest.approx(47040.315138)
+    assert w37["exchange_discount_share_pct"] == pytest.approx(58.494576, abs=0.01)
+    assert w37["promotional_discount_share_pct"] == pytest.approx(41.505424, abs=0.01)
+
+    window = compare_incl_excl(
+        excl_full=8266779.914202999,
+        excl_total=12959922.613242999,
+        excl_discount=1153587.615884,
+        exchange_gross=171195.480952,
+        exchange_discount=169889.7959,
+        incl_full=8267654.0,
+        incl_total=12961228.0,
+        incl_discount=1323477.411784,
+    )
+    assert (1153587.615884 + 169889.7959) == pytest.approx(1323477.411784)
+    assert window["exchange_discount_share_pct"] == pytest.approx(12.836622, abs=0.01)
+    assert window["promotional_discount_share_pct"] == pytest.approx(87.163378, abs=0.01)
+    assert w37["exchange_discount_share_pct"] != pytest.approx(window["exchange_discount_share_pct"], abs=1.0)
 
 
 def test_monthly_before_after_series(tmp_path: Path):

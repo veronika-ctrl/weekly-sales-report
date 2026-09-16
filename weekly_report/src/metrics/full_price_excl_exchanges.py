@@ -238,12 +238,20 @@ def compare_incl_excl(
 ) -> Dict[str, Any]:
     """Comparison metrics between all-orders and exchange-excluded figures.
 
-    Also emits the 100% sales mix (share of sales, not share of discount)::
+    Also emits:
+
+    * 100% sales mix (share of sales, not share of discount)::
 
         denom = excl_total + exchange_gross
         full  = excl_full / denom
         exch  = exchange_gross / denom
         promo = (excl_total - excl_full) / denom
+
+    * 100% recorded-discount mix (share of discount $)::
+
+        denom = excl_discount + exchange_discount   # ≈ all-orders Discount Amount
+        AfterShip % = exchange_discount / denom
+        promotional % = excl_discount / denom
     """
     excl_share = _full_price_share(excl_full, excl_total)
     incl_share = (
@@ -267,14 +275,27 @@ def compare_incl_excl(
     sales_mix_exchange_pct = _share(exchange_gross, sales_mix_denom)
     sales_mix_promo_pct = _share(float(excl_total) - float(excl_full), sales_mix_denom)
 
-    if incl_discount is not None and incl_discount > 0:
-        disc_den: Optional[float] = float(incl_discount)
-    else:
-        disc_den = excl_discount + exchange_discount
+    # 100% of recorded discount $ (not share of sales).
+    # Identity: all_orders_discount ≈ excl. Discount Amount + Exchange Discount.
+    # Use that sum as denom so AfterShip % + promotional % always add to 100.
+    # Compare-at / code / both / price drop are discounted net by type, not discount $.
+    disc_den = float(excl_discount) + float(exchange_discount)
     exchange_discount_share_pct = _share(exchange_discount, disc_den)
-    promotional_discount_share_pct = (
-        100.0 - exchange_discount_share_pct if exchange_discount_share_pct is not None else None
-    )
+    promotional_discount_share_pct = _share(excl_discount, disc_den)
+    discount_share_slices = [
+        {
+            "id": "exchange",
+            "label": "AfterShip exchange credits",
+            "amount": float(exchange_discount),
+            "pct": exchange_discount_share_pct,
+        },
+        {
+            "id": "promotional",
+            "label": "Promotional markdowns",
+            "amount": float(excl_discount),
+            "pct": promotional_discount_share_pct,
+        },
+    ]
 
     excl_discounted_share = _complement_share(excl_share)
     incl_discounted_share = _complement_share(incl_share)
@@ -320,6 +341,8 @@ def compare_incl_excl(
         "exchange_gross_share_pct": exchange_gross_share_pct,
         "exchange_discount_share_pct": exchange_discount_share_pct,
         "promotional_discount_share_pct": promotional_discount_share_pct,
+        "discount_share_denom": float(disc_den) if disc_den > 0 else None,
+        "discount_share_slices": discount_share_slices,
         "non_exchange_gross_est": float(non_exchange_gross_est),
         "gross_context": float(gross_context),
         "sales_mix_denom": float(sales_mix_denom),

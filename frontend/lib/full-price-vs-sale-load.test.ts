@@ -192,15 +192,15 @@ describe('discount share UI wiring', () => {
     )
     assert.match(section, /ExchangeDiscountShareChart/)
     assert.match(section, /exchange-discount-share-block/)
-    assert.match(section, /of all-orders discount is AfterShip exchange credits/)
-    assert.match(
-      chart,
-      /AfterShip size-swap custom discount is not a promo; this is exchange credits ÷ all-orders discount/,
-    )
+    assert.match(section, /Of recorded discount this window/)
+    assert.match(section, /AfterShip/)
+    assert.match(section, /promotional/)
     assert.match(chart, /data-testid="exchange-discount-share-chart"/)
-    assert.match(chart, /Share of recorded discount that is AfterShip exchange credits/)
-    assert.match(chart, /dataKey="exchange"/)
-    assert.match(chart, /dataKey="promotional"/)
+    assert.match(chart, /data-testid="discount-amount-period-callout"/)
+    assert.match(chart, /Of recorded discount this window/)
+    assert.match(chart, /data-testid="discounted-net-type-chart"/)
+    assert.match(chart, /sales mix, not discount/)
+    assert.match(chart, /dataKey=\{slice\.id\}/)
     assert.doesNotMatch(chart, /full_price_share/)
   })
 })

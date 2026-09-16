@@ -13,6 +13,7 @@ import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 import ExchangeDiscountShareChart from '@/components/ExchangeDiscountShareChart'
 import SalesMixChart from '@/components/SalesMixChart'
 import { computeSalesMix } from '@/lib/sales-mix'
+import { computeRecordedDiscountShare } from '@/lib/discount-share'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -67,6 +68,8 @@ function normalizeComparison(c: FullPriceExclComparison | undefined): FullPriceE
     exchange_gross_share_pct: null,
     exchange_discount_share_pct: null,
     promotional_discount_share_pct: null,
+    discount_share_denom: null,
+    discount_share_slices: [],
     non_exchange_gross_est: 0,
     gross_context: 0,
     sales_mix_denom: null,
@@ -367,12 +370,18 @@ export default function FullPriceExclExchangesSection({
           }
         })
 
-  const exchDiscShare = period?.comparison
-    ? normalizeComparison(period.comparison).exchange_discount_share_pct
+  const periodDiscountShare = period
+    ? computeRecordedDiscountShare({
+        exchangeDiscount: period.exchange_discount,
+        promotionalDiscount: period.comparison?.discount_excl ?? period.discount_amount,
+      })
     : null
-  const promoDiscShare = period?.comparison
-    ? normalizeComparison(period.comparison).promotional_discount_share_pct
-    : null
+  const exchDiscShare =
+    periodDiscountShare?.exchangePct ??
+    (period?.comparison ? normalizeComparison(period.comparison).exchange_discount_share_pct : null)
+  const promoDiscShare =
+    periodDiscountShare?.promotionalPct ??
+    (period?.comparison ? normalizeComparison(period.comparison).promotional_discount_share_pct : null)
   const periodComparison = period ? normalizeComparison(period.comparison) : null
 
   return (
@@ -384,7 +393,8 @@ export default function FullPriceExclExchangesSection({
           discount — exchanges stay in the mix (gross, because net is ≈ 0). Non-exchange revenue
           still comes from the daily “Sales by Pricing Type Adv” export. Charts below also compare
           each {view === 'week' ? 'week' : 'month'} including vs excluding those orders, and (separately)
-          exchange credits as a share of recorded discount. Amounts in SEK thousands.
+          100% of recorded discount $ (AfterShip vs promotional), plus discounted net by pricing type.
+          Amounts in SEK thousands.
         </p>
         {data?.history_range && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -427,37 +437,40 @@ export default function FullPriceExclExchangesSection({
               <div className="space-y-4" data-testid="exchange-discount-share-block">
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-5 text-orange-950" data-testid="exchange-discount-period-callout">
                 <p className="text-xs font-medium uppercase tracking-wide text-orange-800/80">
-                  Exchange credits inside recorded discount
+                  Of recorded discount this window
                 </p>
                 <div className="mt-2 flex flex-wrap items-end gap-x-8 gap-y-3">
                   <div>
-                    <div className="text-4xl font-semibold tabular-nums tracking-tight">
-                      {pct(exchDiscShare)}
-                    </div>
-                    <p className="mt-1 max-w-xl text-sm leading-snug">
-                      of all-orders discount is AfterShip exchange credits, not promotional markdowns.
-                      This is share of recorded discount — not the 100% sales mix above.
+                    <p className="text-sm leading-snug" data-testid="discount-window-share-copy">
+                      Of recorded discount this window:{' '}
+                      <span className="font-semibold tabular-nums">{pct(exchDiscShare)} AfterShip</span>,{' '}
+                      <span className="font-semibold tabular-nums">{pct(promoDiscShare)} promotional</span>
+                    </p>
+                    <p className="mt-1 max-w-xl text-xs leading-snug text-orange-900/80">
+                      Denominator = excl. Discount Amount + Exchange Discount (≈ all-orders Discount Amount).
+                      This is share of recorded discount $ — not the 100% sales mix above. Weekly bars below
+                      show each week&apos;s own AfterShip %.
                     </p>
                   </div>
                   <div className="min-w-[220px] flex-1">
                     <div className="flex h-4 overflow-hidden rounded-full bg-white/80 ring-1 ring-orange-200">
                       <div
-                        className="bg-gray-700"
-                        style={{ width: `${Math.max(0, Math.min(100, promoDiscShare ?? 0))}%` }}
-                      />
-                      <div
                         className="bg-orange-500"
                         style={{ width: `${Math.max(0, Math.min(100, exchDiscShare ?? 0))}%` }}
+                      />
+                      <div
+                        className="bg-gray-700"
+                        style={{ width: `${Math.max(0, Math.min(100, promoDiscShare ?? 0))}%` }}
                       />
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                       <span>
-                        <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-gray-700 align-middle" />
-                        Promotional {pct(promoDiscShare)} · {money(periodComparison?.discount_excl)} SEK ’000
+                        <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-orange-500 align-middle" />
+                        AfterShip {pct(exchDiscShare)} · {thousands(period.exchange_discount)} SEK ’000
                       </span>
                       <span>
-                        <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-orange-500 align-middle" />
-                        Exchange credits {pct(exchDiscShare)} · {thousands(period.exchange_discount)} SEK ’000
+                        <span className="mr-1 inline-block h-2 w-2 rounded-sm bg-gray-700 align-middle" />
+                        Promotional {pct(promoDiscShare)} · {money(periodComparison?.discount_excl)} SEK ’000
                       </span>
                     </div>
                   </div>
@@ -467,7 +480,8 @@ export default function FullPriceExclExchangesSection({
                   {money(periodComparison?.discount_excl)} after exclusion.{' '}
                   {period.exchange_orders.toLocaleString('sv-SE')} exchange orders · gross{' '}
                   {thousands(period.exchange_gross_value)} · net {thousands(period.exchange_net_revenue)} (SEK
-                  ’000). Gross share of activity {pct(periodComparison?.exchange_gross_share_pct)}.
+                  ’000). Compare-at / code / both / price drop are discounted net by type, not a split of
+                  Discount Amount — see the companion chart.
                 </p>
               </div>
 

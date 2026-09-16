@@ -359,9 +359,10 @@ export default function FullPriceVsSalePage() {
                 the mix of remaining sales does not move; discount amount is what exchanges inflate.
               </li>
               <li>
-                <strong>Share of recorded discount</strong> (in Excluding AfterShip exchanges) is exchange credits ÷
-                all-orders discount, per week or month. The large orange % is the window total — not full-price share of
-                net, which stays almost flat.
+                <strong>Share of recorded discount</strong> (in Excluding AfterShip exchanges) is 100% of
+                discount $: AfterShip Exchange Discount vs promotional Discount Amount. Each week/month uses
+                its own AfterShip % — do not read the window total as last week. Compare-at / code / both /
+                price drop are discounted net by type, not a split of Discount Amount.
               </li>
               <li>
                 <strong>Download Excel</strong> exports fiscal YTD summary, monthly detail (last 13 months), and weekly

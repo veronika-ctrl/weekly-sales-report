@@ -1328,6 +1328,14 @@ export interface FullPriceExclComparison {
   exchange_gross_share_pct: number | null
   exchange_discount_share_pct: number | null
   promotional_discount_share_pct?: number | null
+  /** excl. Discount Amount + Exchange Discount. Two discount-$ shares use this denom. */
+  discount_share_denom?: number | null
+  discount_share_slices?: Array<{
+    id: string
+    label: string
+    amount: number
+    pct: number | null
+  }>
   non_exchange_gross_est: number
   gross_context: number
   /** excl. Total + Exchange Gross Value. Three sales-mix %s use this denom. */
