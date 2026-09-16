@@ -1330,6 +1330,11 @@ export interface FullPriceExclComparison {
   promotional_discount_share_pct?: number | null
   non_exchange_gross_est: number
   gross_context: number
+  /** excl. Total + Exchange Gross Value. Three sales-mix %s use this denom. */
+  sales_mix_denom?: number | null
+  sales_mix_full_price_pct?: number | null
+  sales_mix_exchange_pct?: number | null
+  sales_mix_promo_pct?: number | null
 }
 
 export interface FullPriceExclMetrics {

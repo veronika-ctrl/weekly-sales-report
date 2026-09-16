@@ -3,6 +3,7 @@ import type {
   FullPriceExclExchangesResponse,
   FullPriceExclMetrics,
 } from './api'
+import { computeSalesMix, type SalesMixShares } from './sales-mix'
 
 export type BeforeAfterView = 'week' | 'month'
 
@@ -18,9 +19,11 @@ export type BeforeAfterPoint = {
   discIncl: number | null
   fullExcl: number
   discExcl: number
+  totalExcl: number
   discountIncl: number | null
   discountExcl: number
   exchangeDiscount: number
+  exchangeGross: number
   /** AfterShip credits ÷ all-orders recorded discount. */
   exchangeDiscountSharePct: number | null
   /** 100 − exchange share; promotional markdowns. */
@@ -50,6 +53,7 @@ export type PeriodVsLatest = {
   promotionalDiscountSharePct: number | null
   exchangeOrders: number
   exchangeNet: number
+  salesMix: SalesMixShares | null
 }
 
 const SHARE_PP_EPS = 0.15
@@ -106,9 +110,11 @@ function toPoint(key: string, label: string, metrics: FullPriceExclMetrics): Bef
     discIncl: amounts.discIncl,
     fullExcl: amounts.fullExcl,
     discExcl: amounts.discExcl,
+    totalExcl: c?.total_excl ?? metrics.total,
     discountIncl: c?.discount_incl ?? null,
     discountExcl: c?.discount_excl ?? metrics.discount_amount,
     exchangeDiscount: metrics.exchange_discount,
+    exchangeGross: metrics.exchange_gross_value,
     exchangeDiscountSharePct: exchangeShare,
     promotionalDiscountSharePct: c?.promotional_discount_share_pct ?? complementShare(exchangeShare),
   }
@@ -175,5 +181,10 @@ export function periodVsLatest(
       complementShare(period.comparison?.exchange_discount_share_pct),
     exchangeOrders: period.exchange_orders,
     exchangeNet: period.exchange_net_revenue,
+    salesMix: computeSalesMix({
+      exclFull: period.full_price,
+      exclTotal: period.total,
+      exchangeGross: period.exchange_gross_value,
+    }),
   }
 }

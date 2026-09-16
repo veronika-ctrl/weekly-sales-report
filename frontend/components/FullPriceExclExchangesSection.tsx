@@ -11,6 +11,8 @@ import { Loader2 } from 'lucide-react'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
 import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 import ExchangeDiscountShareChart from '@/components/ExchangeDiscountShareChart'
+import SalesMixChart from '@/components/SalesMixChart'
+import { computeSalesMix } from '@/lib/sales-mix'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -67,6 +69,10 @@ function normalizeComparison(c: FullPriceExclComparison | undefined): FullPriceE
     promotional_discount_share_pct: null,
     non_exchange_gross_est: 0,
     gross_context: 0,
+    sales_mix_denom: null,
+    sales_mix_full_price_pct: null,
+    sales_mix_exchange_pct: null,
+    sales_mix_promo_pct: null,
   }
   if (!c) return empty
   const fpIncl = c.full_price_share_incl_pct
@@ -146,6 +152,9 @@ function MetricTable({
               <th className="py-2 px-3 font-medium text-right">Discount before</th>
               <th className="py-2 px-3 font-medium text-right">Discount after</th>
               <th className="py-2 px-3 font-medium text-right">Exch. disc. %</th>
+              <th className="py-2 px-3 font-medium text-right">Sales mix FP %</th>
+              <th className="py-2 px-3 font-medium text-right">Sales mix exch. %</th>
+              <th className="py-2 px-3 font-medium text-right">Sales mix promo %</th>
               <th className="py-2 px-3 font-medium text-right">Exch. orders</th>
               <th className="py-2 px-3 font-medium text-right">Exch. gross</th>
               <th className="py-2 pl-3 font-medium text-right">Exch. net</th>
@@ -154,6 +163,11 @@ function MetricTable({
           <tbody>
             {rows.map((row) => {
               const comparison = normalizeComparison(row.comparison)
+              const mix = computeSalesMix({
+                exclFull: row.full_price,
+                exclTotal: row.total,
+                exchangeGross: row.exchange_gross_value,
+              })
               return (
               <tr key={row.key} className="border-b last:border-0">
                 <td className="py-2 pr-4 font-medium text-gray-900">{row.label}</td>
@@ -168,6 +182,11 @@ function MetricTable({
                 <td className="py-2 px-3 text-right tabular-nums font-medium text-orange-800">
                   {pct(comparison.exchange_discount_share_pct)}
                 </td>
+                <td className="py-2 px-3 text-right tabular-nums">{pct(mix.fullPricePct)}</td>
+                <td className="py-2 px-3 text-right tabular-nums font-medium text-orange-800">
+                  {pct(mix.exchangePct)}
+                </td>
+                <td className="py-2 px-3 text-right tabular-nums">{pct(mix.promoPct)}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{row.exchange_orders.toLocaleString('sv-SE')}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{thousands(row.exchange_gross_value)}</td>
                 <td className="py-2 pl-3 text-right tabular-nums">{thousands(row.exchange_net_revenue)}</td>
@@ -361,11 +380,11 @@ export default function FullPriceExclExchangesSection({
       <div>
         <h3 className="text-base font-semibold text-gray-900">Excluding AfterShip exchanges</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Non-exchange revenue from the daily “Sales by Pricing Type Adv” export. Exchange orders,
-          gross, discount, and net are AfterShip impact and are <strong>not</strong> included in the
-          excl. Total or treated as ordinary full-price revenue. Charts below compare each{' '}
-          {view === 'week' ? 'week' : 'month'} including vs excluding those orders. Amounts in SEK
-          thousands.
+          Primary view: 100% sales mix of full price, AfterShip size-swaps, and real promotional
+          discount — exchanges stay in the mix (gross, because net is ≈ 0). Non-exchange revenue
+          still comes from the daily “Sales by Pricing Type Adv” export. Charts below also compare
+          each {view === 'week' ? 'week' : 'month'} including vs excluding those orders, and (separately)
+          exchange credits as a share of recorded discount. Amounts in SEK thousands.
         </p>
         {data?.history_range && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -397,6 +416,14 @@ export default function FullPriceExclExchangesSection({
                 Reporting period {period.start} → {period.end}. {period.label}.
               </p>
 
+              <SalesMixChart
+                view={view}
+                weekly={weekly}
+                monthly={monthly}
+                state={state}
+                isAnimationActive={isAnimationActive}
+              />
+
               <div className="space-y-4" data-testid="exchange-discount-share-block">
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-5 text-orange-950" data-testid="exchange-discount-period-callout">
                 <p className="text-xs font-medium uppercase tracking-wide text-orange-800/80">
@@ -409,6 +436,7 @@ export default function FullPriceExclExchangesSection({
                     </div>
                     <p className="mt-1 max-w-xl text-sm leading-snug">
                       of all-orders discount is AfterShip exchange credits, not promotional markdowns.
+                      This is share of recorded discount — not the 100% sales mix above.
                     </p>
                   </div>
                   <div className="min-w-[220px] flex-1">

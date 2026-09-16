@@ -205,6 +205,40 @@ describe('discount share UI wiring', () => {
   })
 })
 
+describe('sales mix UI wiring', () => {
+  it('places 100% sales-mix stacks on the page and in the exchanges section', () => {
+    const page = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../app/products/full-price-vs-sale/page.tsx'),
+      'utf8',
+    )
+    const section = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/FullPriceExclExchangesSection.tsx'),
+      'utf8',
+    )
+    const chart = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/SalesMixChart.tsx'),
+      'utf8',
+    )
+    const formula = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'sales-mix.ts'),
+      'utf8',
+    )
+    assert.match(page, /SalesMixChart/)
+    assert.match(page, /100% sales mix/)
+    assert.match(section, /SalesMixChart/)
+    assert.match(chart, /data-testid="sales-mix-chart"/)
+    assert.match(chart, /data-testid="sales-mix-period-callout"/)
+    assert.match(chart, /dataKey="fullPrice"/)
+    assert.match(chart, /dataKey="exchange"/)
+    assert.match(chart, /dataKey="promo"/)
+    assert.match(chart, /AfterShip exchanges/)
+    assert.match(chart, /Promotional discount/)
+    assert.match(formula, /excl\. Total \+ Exchange Gross Value/)
+    assert.match(formula, /share of sales, not exchange credits/)
+    assert.doesNotMatch(chart, /exchange credits ÷ all-orders discount/)
+  })
+})
+
 describe('full price API client', () => {
   const apiSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'api.ts'), 'utf8')
 

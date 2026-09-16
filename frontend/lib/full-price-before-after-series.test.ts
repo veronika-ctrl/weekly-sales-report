@@ -40,7 +40,7 @@ const comparison = (over: {
 
 const metrics = (
   weekOrMonth: { week?: string; month?: string },
-  over: Parameters<typeof comparison>[0] & { orders?: number; net?: number },
+  over: Parameters<typeof comparison>[0] & { orders?: number; net?: number; gross?: number },
 ) => ({
   full_price: over.fullExcl,
   compare_at_price_sale: 0,
@@ -51,7 +51,7 @@ const metrics = (
   discount_amount: over.discountExcl,
   full_price_share_pct: over.exclShare,
   exchange_orders: over.orders ?? 0,
-  exchange_gross_value: 0,
+  exchange_gross_value: over.gross ?? 0,
   exchange_discount: over.discountIncl - over.discountExcl,
   exchange_net_revenue: over.net ?? 0,
   comparison: comparison(over),
@@ -93,6 +93,8 @@ const weeklyPayload: FullPriceExclExchangesResponse = {
         discountIncl: 47040,
         discountExcl: 19524,
         exchDiscShare: 58.5,
+        gross: 27516,
+        net: 0,
       },
     ),
   ],
@@ -112,7 +114,9 @@ const weeklyPayload: FullPriceExclExchangesResponse = {
         exchDiscShare: 12.84,
         orders: 46,
         net: 1306,
+        gross: 171195,
       },
+    ),
     ),
     label: '2026-07-20 → 2026-09-13 (last 8 weeks)',
     start: '2026-07-20',
@@ -308,6 +312,35 @@ describe('buildDiscountShareChartData', () => {
     const rows = buildDiscountShareChartData(points)
     assert.equal(rows[0].promotional, 50)
     assert.ok(Math.abs((rows[1].promotional || 0) - 41.5) < 0.01)
+  })
+})
+
+describe('sales mix on period vs latest', () => {
+  it('attaches a 100% sales mix even when exchange net is ~0', () => {
+    const note = periodVsLatest(weeklyPayload, 'week')
+    assert.ok(note?.salesMix)
+    assert.equal(note.exchangeNet, 1306)
+    assert.ok((note.salesMix.exchangePct || 0) > 0)
+    assert.ok(
+      Math.abs(
+        (note.salesMix.fullPricePct || 0) +
+          (note.salesMix.exchangePct || 0) +
+          (note.salesMix.promoPct || 0) -
+          100,
+      ) < 0.05,
+    )
+    const w37 = buildBeforeAfterSeries(weeklyPayload, 'week')[1]
+    assert.equal(w37.exchangeGross, 27516)
+    assert.equal(w37.exchangeDiscountSharePct, 58.5)
+  })
+
+  it('does not treat exchange credits ÷ discount as the sales mix', () => {
+    const w37 = buildBeforeAfterSeries(weeklyPayload, 'week')[1]
+    assert.equal(w37.exchangeDiscountSharePct, 58.5)
+    const mixShare = (w37.exchangeGross / (w37.totalExcl + w37.exchangeGross)) * 100
+    assert.ok(mixShare > 0)
+    assert.ok(mixShare < 5)
+    assert.notEqual(Math.round(mixShare), Math.round(w37.exchangeDiscountSharePct || 0))
   })
 })
 

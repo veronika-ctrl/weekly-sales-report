@@ -25,6 +25,7 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
 import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
+import SalesMixChart from '@/components/SalesMixChart'
 
 type View = 'week' | 'month'
 
@@ -344,6 +345,13 @@ export default function FullPriceVsSalePage() {
                 %</strong> compares the same metric to last year.
               </li>
               <li>
+                <strong>100% sales mix</strong> (below the YoY charts) is how exchanges sit in sales:
+                full price + AfterShip size-swaps + real promotional discount, weekly or monthly.
+                Denominator = excl. Total + exchange gross — not net, because AfterShip net is ≈ 0.
+                This is not exchange credits ÷ recorded discount (that secondary chart stays in the
+                excluding-exchanges section).
+              </li>
+              <li>
                 <strong>Including vs excluding exchanges</strong> charts sit next to the YoY charts. Gray = all-orders
                 mix (AfterShip size-swaps included). Teal = the excl. daily export (those orders dropped). A size change
                 is still a full-price product; the AfterShip custom discount is not a promo. The excl. file does not
@@ -512,6 +520,14 @@ export default function FullPriceVsSalePage() {
               </CardContent>
             </Card>
           </div>
+
+          <SalesMixChart
+            view={view}
+            weekly={exclWeekly}
+            monthly={exclMonthly}
+            state={exclState}
+            isAnimationActive={isAnimationActive}
+          />
 
           <FullPriceBeforeAfterCharts
             view={view}
