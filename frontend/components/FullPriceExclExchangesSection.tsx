@@ -8,6 +8,8 @@ import type {
 import type { SectionViewState } from '@/lib/full-price-vs-sale-load'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -181,9 +183,11 @@ function MetricTable({
 function BeforeAfterTable({
   comparison,
   exchangeOrders,
+  grain,
 }: {
   comparison: FullPriceExclComparison
   exchangeOrders: number
+  grain: 'week' | 'month'
 }) {
   const rows: Array<{
     label: string
@@ -239,8 +243,9 @@ function BeforeAfterTable({
           Full price vs discount — before and after excluding exchanges
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Before = all-orders export (exchanges mixed in). After = promotional sales only. {exchangeOrders.toLocaleString('sv-SE')}{' '}
-          AfterShip exchange orders in this window.
+          These bars are the <strong>whole reporting window</strong> (every day in the selected weeks or months), not
+          the latest {grain} alone. Before = all-orders export (exchanges mixed in). After = promotional sales only —{' '}
+          {exchangeOrders.toLocaleString('sv-SE')} AfterShip exchange orders in this window.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -322,6 +327,7 @@ export default function FullPriceExclExchangesSection({
   state: SectionViewState
   error: string | null
 }) {
+  const isAnimationActive = useChartAnimations()
   const data = view === 'week' ? weekly : monthly
   const period = data?.period
   const periodRows =
@@ -356,7 +362,9 @@ export default function FullPriceExclExchangesSection({
         <p className="text-sm text-muted-foreground mt-1">
           Non-exchange revenue from the daily “Sales by Pricing Type Adv” export. Exchange orders,
           gross, discount, and net are AfterShip impact and are <strong>not</strong> included in the
-          excl. Total or treated as ordinary full-price revenue. Amounts in SEK thousands.
+          excl. Total or treated as ordinary full-price revenue. Charts below compare each{' '}
+          {view === 'week' ? 'week' : 'month'} including vs excluding those orders. Amounts in SEK
+          thousands.
         </p>
         {data?.history_range && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -434,7 +442,22 @@ export default function FullPriceExclExchangesSection({
               </div>
 
               {periodComparison && (
-                <BeforeAfterTable comparison={periodComparison} exchangeOrders={period.exchange_orders} />
+                <>
+                  <FullPriceBeforeAfterCharts
+                    view={view}
+                    weekly={weekly}
+                    monthly={monthly}
+                    state={state}
+                    error={error}
+                    isAnimationActive={isAnimationActive}
+                    showPeriodCallout
+                  />
+                  <BeforeAfterTable
+                    comparison={periodComparison}
+                    exchangeOrders={period.exchange_orders}
+                    grain={view}
+                  />
+                </>
               )}
             </div>
           )}

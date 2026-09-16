@@ -276,6 +276,13 @@ def compare_incl_excl(
         else None
     )
 
+    full_incl = None if incl_full is None else float(incl_full)
+    full_excl = float(excl_full)
+    discounted_incl = (
+        float(incl_total) - full_incl if full_incl is not None and incl_total is not None else None
+    )
+    discounted_excl = float(excl_total) - full_excl
+
     return {
         "full_price_share_incl_pct": incl_share,
         "full_price_share_excl_pct": excl_share,
@@ -286,6 +293,10 @@ def compare_incl_excl(
         "discount_rate_incl_pct": incl_discount_rate,
         "discount_rate_excl_pct": excl_discount_rate,
         "discount_rate_pp_diff": discount_rate_pp_diff,
+        "full_incl": full_incl,
+        "full_excl": full_excl,
+        "discounted_incl": discounted_incl,
+        "discounted_excl": discounted_excl,
         "total_incl": None if incl_total is None else float(incl_total),
         "total_excl": float(excl_total),
         "discount_incl": None if incl_discount is None else float(incl_discount),
