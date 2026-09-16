@@ -351,6 +351,11 @@ export default function FullPriceVsSalePage() {
                 the mix of remaining sales does not move; discount amount is what exchanges inflate.
               </li>
               <li>
+                <strong>Share of recorded discount</strong> (in Excluding AfterShip exchanges) is exchange credits ÷
+                all-orders discount, per week or month. The large orange % is the window total — not full-price share of
+                net, which stays almost flat.
+              </li>
+              <li>
                 <strong>Download Excel</strong> exports fiscal YTD summary, monthly detail (last 13 months), and weekly
                 detail (last 8 weeks) with full SEK amounts for CFO analysis.
               </li>

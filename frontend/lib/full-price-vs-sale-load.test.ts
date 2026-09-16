@@ -180,6 +180,30 @@ describe('settleLoad', () => {
   })
 })
 
+describe('discount share UI wiring', () => {
+  it('renders a share chart next to the period exchange-credit callout', () => {
+    const section = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/FullPriceExclExchangesSection.tsx'),
+      'utf8',
+    )
+    const chart = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/ExchangeDiscountShareChart.tsx'),
+      'utf8',
+    )
+    assert.match(section, /ExchangeDiscountShareChart/)
+    assert.match(section, /of all-orders discount is AfterShip exchange credits/)
+    assert.match(
+      chart,
+      /AfterShip size-swap custom discount is not a promo; this is exchange credits ÷ all-orders discount/,
+    )
+    assert.match(chart, /data-testid="exchange-discount-share-chart"/)
+    assert.match(chart, /Share of recorded discount that is AfterShip exchange credits/)
+    assert.match(chart, /dataKey="exchange"/)
+    assert.match(chart, /dataKey="promotional"/)
+    assert.doesNotMatch(chart, /full_price_share/)
+  })
+})
+
 describe('full price API client', () => {
   const apiSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'api.ts'), 'utf8')
 

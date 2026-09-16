@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
 import FullPriceBeforeAfterCharts from '@/components/FullPriceBeforeAfterCharts'
+import ExchangeDiscountShareChart from '@/components/ExchangeDiscountShareChart'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -443,6 +444,13 @@ export default function FullPriceExclExchangesSection({
 
               {periodComparison && (
                 <>
+                  <ExchangeDiscountShareChart
+                    view={view}
+                    weekly={weekly}
+                    monthly={monthly}
+                    state={state}
+                    isAnimationActive={isAnimationActive}
+                  />
                   <FullPriceBeforeAfterCharts
                     view={view}
                     weekly={weekly}
