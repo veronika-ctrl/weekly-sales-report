@@ -86,23 +86,24 @@ export default function ExchangeDiscountShareChart({
               fill="#F97316"
               name="Exchange credits"
               isAnimationActive={isAnimationActive}
-            >
-              <LabelList
-                position="top"
-                offset={8}
-                fontSize={12}
-                fontWeight={600}
-                fill="#9A3412"
-                formatter={(v: unknown) => (v == null ? '' : pct(Number(v)))}
-              />
-            </Bar>
+            />
             <Bar
               dataKey="promotional"
               stackId="share"
               fill="#4B5563"
               name="Promotional markdowns"
               isAnimationActive={isAnimationActive}
-            />
+            >
+              <LabelList
+                dataKey="exchange"
+                position="top"
+                offset={8}
+                fontSize={11}
+                fontWeight={600}
+                fill="#9A3412"
+                formatter={(v: unknown) => (v == null ? '' : pct(Number(v)))}
+              />
+            </Bar>
           </BarChart>
         </ChartContainer>
         <p className="text-xs text-muted-foreground leading-relaxed">
