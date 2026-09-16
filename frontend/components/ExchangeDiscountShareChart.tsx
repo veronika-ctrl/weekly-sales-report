@@ -139,7 +139,7 @@ export default function ExchangeDiscountShareChart({
             <BarChart data={chartData} margin={{ top: 36, right: 12, left: 12, bottom: 8 }} barCategoryGap="18%">
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} width={48} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
+              <YAxis tick={{ fontSize: 11 }} width={48} domain={[0, 100]} tickFormatter={(v: number) => `${Math.round(Number(v))}%`} />
               <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(Number(v ?? 0))} />} />
               <Legend />
               {periodShare != null && (
@@ -192,7 +192,7 @@ export default function ExchangeDiscountShareChart({
               <BarChart data={netTypeData} margin={{ top: 16, right: 12, left: 12, bottom: 8 }} barCategoryGap="18%">
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={48} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
+                <YAxis tick={{ fontSize: 11 }} width={48} domain={[0, 100]} tickFormatter={(v: number) => `${Math.round(Number(v))}%`} />
                 <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(Number(v ?? 0))} />} />
                 <Legend />
                 {DISCOUNTED_NET_SLICES.map((slice) => (
