@@ -397,7 +397,8 @@ export default function FullPriceExclExchangesSection({
                 Reporting period {period.start} → {period.end}. {period.label}.
               </p>
 
-              <div className="rounded-xl border border-orange-200 bg-orange-50 p-5 text-orange-950">
+              <div className="space-y-4" data-testid="exchange-discount-share-block">
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-5 text-orange-950" data-testid="exchange-discount-period-callout">
                 <p className="text-xs font-medium uppercase tracking-wide text-orange-800/80">
                   Exchange credits inside recorded discount
                 </p>
@@ -442,8 +443,6 @@ export default function FullPriceExclExchangesSection({
                 </p>
               </div>
 
-              {periodComparison && (
-                <>
                   <ExchangeDiscountShareChart
                     view={view}
                     weekly={weekly}
@@ -451,6 +450,10 @@ export default function FullPriceExclExchangesSection({
                     state={state}
                     isAnimationActive={isAnimationActive}
                   />
+              </div>
+
+              {periodComparison && (
+                <>
                   <FullPriceBeforeAfterCharts
                     view={view}
                     weekly={weekly}

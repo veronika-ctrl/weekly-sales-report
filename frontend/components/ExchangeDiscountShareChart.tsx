@@ -99,7 +99,7 @@ export default function ExchangeDiscountShareChart({
                 ifOverflow="extendDomain"
                 label={{
                   value: `Period ${pct(periodShare)}`,
-                  position: 'insideTopRight',
+                  position: 'insideBottomLeft',
                   fontSize: 11,
                   fill: '#9A3412',
                 }}

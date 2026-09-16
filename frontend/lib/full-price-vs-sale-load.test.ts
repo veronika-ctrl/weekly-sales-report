@@ -191,6 +191,7 @@ describe('discount share UI wiring', () => {
       'utf8',
     )
     assert.match(section, /ExchangeDiscountShareChart/)
+    assert.match(section, /exchange-discount-share-block/)
     assert.match(section, /of all-orders discount is AfterShip exchange credits/)
     assert.match(
       chart,
