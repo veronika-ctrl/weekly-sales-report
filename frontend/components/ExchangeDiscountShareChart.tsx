@@ -92,18 +92,7 @@ export default function ExchangeDiscountShareChart({
             <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(Number(v ?? 0))} />} />
             <Legend />
             {periodShare != null && (
-              <ReferenceLine
-                y={periodShare}
-                stroke="#9A3412"
-                strokeDasharray="4 3"
-                ifOverflow="extendDomain"
-                label={{
-                  value: `Period ${pct(periodShare)}`,
-                  position: 'insideBottomLeft',
-                  fontSize: 11,
-                  fill: '#9A3412',
-                }}
-              />
+              <ReferenceLine y={periodShare} stroke="#9A3412" strokeDasharray="4 3" ifOverflow="extendDomain" />
             )}
             <Bar
               dataKey="exchange"
