@@ -25,6 +25,26 @@ const SHARE_SUBTITLE =
 
 const SHARE_PP_EPS = 0.15
 
+function ExchangeShareLabel({
+  x,
+  y,
+  width,
+  payload,
+}: {
+  x?: number
+  y?: number
+  width?: number
+  payload?: { exchange?: number | null }
+}) {
+  if (x == null || y == null || payload?.exchange == null) return null
+  const cx = x + (width ?? 0) / 2
+  return (
+    <text x={cx} y={y - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#9A3412">
+      {pct(payload.exchange)}
+    </text>
+  )
+}
+
 export default function ExchangeDiscountShareChart({
   view,
   weekly,
@@ -94,15 +114,7 @@ export default function ExchangeDiscountShareChart({
               name="Promotional markdowns"
               isAnimationActive={isAnimationActive}
             >
-              <LabelList
-                dataKey="exchange"
-                position="top"
-                offset={8}
-                fontSize={11}
-                fontWeight={600}
-                fill="#9A3412"
-                formatter={(v: unknown) => (v == null ? '' : pct(Number(v)))}
-              />
+              <LabelList position="top" content={ExchangeShareLabel} />
             </Bar>
           </BarChart>
         </ChartContainer>
