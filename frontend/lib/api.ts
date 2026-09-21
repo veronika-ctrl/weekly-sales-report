@@ -350,35 +350,14 @@ export async function getTable1Metrics(baseWeek: string, periods: string[], incl
 
 export async function getTable1Mtd(baseWeek: string): Promise<MetricsMtdResponse> {
   const key = `table1-mtd:${baseWeek}`
-  return withShortCache(key, async () => {
-    const endpoint = `/api/metrics/table1-mtd?base_week=${encodeURIComponent(baseWeek)}`
-    const primaryUrl = `${API_BASE_URL}${endpoint}`
-
-    const load = async (url: string): Promise<MetricsMtdResponse> => {
-      const response = await fetch(url)
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}))
-        const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
-        throw new Error(detail)
-      }
-      return response.json()
-    }
-
-    try {
-      return await load(primaryUrl)
-    } catch (err) {
-      // Local dev guard: some environments resolve localhost and 127.0.0.1 differently.
-      try {
-        const u = new URL(API_BASE_URL)
-        const altHost = u.hostname === '127.0.0.1' ? 'localhost' : u.hostname === 'localhost' ? '127.0.0.1' : null
-        if (!altHost) throw err
-        const fallbackBase = `${u.protocol}//${altHost}${u.port ? `:${u.port}` : ''}`
-        return await load(`${fallbackBase}${endpoint}`)
-      } catch {
-        throw err
-      }
-    }
-  })
+  const endpoint = `/api/metrics/table1-mtd?base_week=${encodeURIComponent(baseWeek)}`
+  return withShortCache(key, () =>
+    fetchJsonWithTimeout<MetricsMtdResponse>(
+      `${API_BASE_URL}${endpoint}`,
+      HEAVY_METRICS_TIMEOUT_MS,
+      '/api/metrics/table1-mtd',
+    ),
+  )
 }
 
 export async function getTopMarkets(
