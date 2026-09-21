@@ -1,16 +1,24 @@
 'use client'
 
-import { useContribution } from '@/contexts/DataCacheContext'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import { getContribution, type ContributionData, type ContributionResponse } from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
+import ReportLoadState from '@/components/ReportLoadState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { CartesianGrid, LabelList, Line, LineChart, XAxis } from '@/lib/recharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
 
 export default function Contribution() {
-  const { contributions } = useContribution()
+  const { baseWeek, contribution: cached } = useDataCache()
   const isAnimationActive = useChartAnimations()
+  const { data, loading, error, retry } = useWeekSeriesLoad<ContributionResponse>({
+    baseWeek,
+    load: (week) => getContribution(week, 8),
+    cached,
+    hasRows: (payload) => normalizeNamedSeries<ContributionData>(payload, 'contributions').length > 0,
+  })
 
   const contributionLabels = [
     { key: 'gross_revenue_new', label: 'Gross Revenue New Customer', format: (val: number) => Math.round(val / 1000).toString() },
@@ -31,45 +39,33 @@ export default function Contribution() {
     contributionLabels[3], // Total Returning Customer Contribution
   ]
 
-  // Normalize contributions structure - handle both { contributions: [...] } and direct array
-  let contributionData: any[] = []
-  if (contributions) {
-    if (Array.isArray(contributions)) {
-      // Structure: direct array
-      contributionData = contributions
-    } else if (contributions.contributions && Array.isArray(contributions.contributions)) {
-      // Structure: { contributions: [...] }
-      contributionData = contributions.contributions
-    } else if (typeof contributions === 'object') {
-      // Structure: { contributions: {...} } - might be an object instead of array
-      contributionData = Object.values(contributions.contributions || {}) as any[]
-    }
-  }
+  const contributionData = normalizeNamedSeries<ContributionData>(data, 'contributions')
 
-  if (!contributions || contributionData.length === 0) {
+  if (loading || error || contributionData.length === 0) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Loading Contribution Metrics</h2>
-            <p className="text-sm text-gray-600">Processing data from Qlik, DEMA, and GM2...</p>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={contributionData.length === 0}
+        onRetry={retry}
+        loadingTitle="Loading Contribution Metrics"
+        loadingHint="Reading Qlik, DEMA, and GM2. Large exports can take a few minutes."
+        emptyHint="Upload Qlik / DEMA / GM2 in Settings for this week, then open Contribution again."
+        skeleton={
+          <div className="grid grid-cols-3 gap-6">
+            {contributionLabels.map((_, index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-3 gap-6">
-          {contributionLabels.map((_, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-48 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        }
+      />
     )
   }
 

@@ -1,56 +1,52 @@
 'use client'
 
-import { useMenCategorySales } from '@/contexts/DataCacheContext'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import { getMenCategorySales, type MenCategorySalesData, type MenCategorySalesResponse } from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
+import ReportLoadState from '@/components/ReportLoadState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { CartesianGrid, LabelList, Line, LineChart, XAxis } from '@/lib/recharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
 
 export default function MenCategorySales() {
-  const { men_category_sales } = useMenCategorySales()
+  const { baseWeek, men_category_sales: cached } = useDataCache()
   const isAnimationActive = useChartAnimations()
+  const { data, loading, error, retry } = useWeekSeriesLoad<MenCategorySalesResponse>({
+    baseWeek,
+    load: (week) => getMenCategorySales(week, 8),
+    cached,
+    hasRows: (payload) => normalizeNamedSeries<MenCategorySalesData>(payload, 'men_category_sales').length > 0,
+  })
 
-  // Normalize men_category_sales structure - handle both { men_category_sales: [...] } and direct array
-  let categoryData: any[] = []
-  if (men_category_sales) {
-    if (Array.isArray(men_category_sales)) {
-      // Structure: direct array
-      categoryData = men_category_sales
-    } else if (men_category_sales.men_category_sales && Array.isArray(men_category_sales.men_category_sales)) {
-      // Structure: { men_category_sales: [...] }
-      categoryData = men_category_sales.men_category_sales
-    } else if (typeof men_category_sales === 'object') {
-      // Structure: { men_category_sales: {...} } - might be an object instead of array
-      categoryData = Object.values(men_category_sales.men_category_sales || {}) as any[]
-    }
-  }
+  const categoryData = normalizeNamedSeries<MenCategorySalesData>(data, 'men_category_sales')
 
-  if (!men_category_sales || categoryData.length === 0) {
+  if (loading || error || categoryData.length === 0) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Loading Men Category Sales</h2>
-            <p className="text-sm text-gray-600">Processing sales data by product category...</p>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={categoryData.length === 0}
+        onRetry={retry}
+        loadingTitle="Loading Men Category Sales"
+        loadingHint="Reading Qlik sales by product category. Large exports can take a few minutes."
+        emptyHint="Upload the Qlik export in Settings for this week, then open Men's Category Sales again."
+        skeleton={
+          <div className="grid grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7].map((index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6, 7].map((index) => (
-            <Card key={index}>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-48 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        }
+      />
     )
   }
 
