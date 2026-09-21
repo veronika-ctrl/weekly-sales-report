@@ -79,13 +79,20 @@ function LayoutContentInner({
 
   // Report pages: show week selector bar so user can change week without going to Settings
   if (baseWeek && !isSettings && !isPdfMode) {
-    const dataStatus = loading
-      ? 'loading'
-      : isDataReady
-        ? 'has-data'
-        : periods
-          ? 'no-data'
-          : 'loading'
+    // Summary only fills table1 now, so isDataReady is not “files exist”.
+    // Prefer weeks-with-uploads so Audience/Online KPIs are not labeled empty.
+    const dataStatus =
+      weeksWithData != null
+        ? weeksWithData.has(baseWeek)
+          ? 'has-data'
+          : 'no-data'
+        : loading
+          ? 'loading'
+          : isDataReady
+            ? 'has-data'
+            : periods
+              ? 'no-data'
+              : 'loading'
     return (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2 rounded-md">
