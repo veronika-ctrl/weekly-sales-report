@@ -1,61 +1,57 @@
 'use client'
 
-import { useGenderSales } from '@/contexts/DataCacheContext'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import { getGenderSales, type GenderSalesData, type GenderSalesResponse } from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
+import ReportLoadState from '@/components/ReportLoadState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { CartesianGrid, LabelList, Line, LineChart, XAxis } from '@/lib/recharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
 
 export default function GenderSales() {
-  const { gender_sales } = useGenderSales()
+  const { baseWeek, gender_sales: cached } = useDataCache()
   const isAnimationActive = useChartAnimations()
+  const { data, loading, error, retry } = useWeekSeriesLoad<GenderSalesResponse>({
+    baseWeek,
+    load: (week) => getGenderSales(week, 8),
+    cached,
+    hasRows: (payload) => normalizeNamedSeries<GenderSalesData>(payload, 'gender_sales').length > 0,
+  })
 
   const genderLabels = [
     { key: 'men_unisex_sales', label: 'Gross Sales Men', format: (val: number) => Math.round(val / 1000).toString() },
     { key: 'women_sales', label: 'Gross Sales Womens', format: (val: number) => Math.round(val / 1000).toString() },
   ]
 
-  // Normalize gender_sales structure - handle both { gender_sales: [...] } and direct array
-  let genderData: any[] = []
-  if (gender_sales) {
-    if (Array.isArray(gender_sales)) {
-      // Structure: direct array
-      genderData = gender_sales
-    } else if (gender_sales.gender_sales && Array.isArray(gender_sales.gender_sales)) {
-      // Structure: { gender_sales: [...] }
-      genderData = gender_sales.gender_sales
-    } else if (typeof gender_sales === 'object') {
-      // Structure: { gender_sales: {...} } - might be an object instead of array
-      genderData = Object.values(gender_sales.gender_sales || {}) as any[]
-    }
-  }
+  const genderData = normalizeNamedSeries<GenderSalesData>(data, 'gender_sales')
 
-  if (!gender_sales || genderData.length === 0) {
+  if (loading || error || genderData.length === 0) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Loading Gender Sales</h2>
-            <p className="text-sm text-gray-600">Processing sales data by gender...</p>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={genderData.length === 0}
+        onRetry={retry}
+        loadingTitle="Loading Gender Sales"
+        loadingHint="Reading Qlik sales by gender. Large exports can take a few minutes."
+        emptyHint="Upload the Qlik export in Settings for this week, then open Gender Sales again."
+        skeleton={
+          <div className="grid grid-cols-2 gap-6">
+            {genderLabels.map((_, index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-6">
-          {genderLabels.map((_, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-48 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        }
+      />
     )
   }
 
@@ -63,26 +59,26 @@ export default function GenderSales() {
     <div className="space-y-8">
       <div className="grid grid-cols-2 gap-6">
         {genderLabels.map((label, index) => {
-          const chartData = genderData.map(g => {
+          const chartData = genderData.map((g) => {
             const weekNum = g.week.split('-')[1]
             const currentValue = g[label.key as keyof typeof g] as number
             const lastYearValue = g.last_year?.[label.key as keyof typeof g.last_year] as number || 0
-            
+
             return {
               week: `W${weekNum}`,
               current: currentValue,
-              lastYear: lastYearValue
+              lastYear: lastYearValue,
             }
           })
 
           const chartConfig = {
             current: {
-              label: "Current Year",
-              color: "#4B5563",
+              label: 'Current Year',
+              color: '#4B5563',
             },
             lastYear: {
-              label: "Last Year",
-              color: "#F97316",
+              label: 'Last Year',
+              color: '#F97316',
             },
           } satisfies ChartConfig
 
@@ -150,4 +146,3 @@ export default function GenderSales() {
     </div>
   )
 }
-

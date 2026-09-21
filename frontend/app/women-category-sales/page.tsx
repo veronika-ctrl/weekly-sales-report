@@ -1,56 +1,52 @@
 'use client'
 
-import { useWomenCategorySales } from '@/contexts/DataCacheContext'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import { getWomenCategorySales, type WomenCategorySalesData, type WomenCategorySalesResponse } from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
+import ReportLoadState from '@/components/ReportLoadState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { CartesianGrid, LabelList, Line, LineChart, XAxis } from '@/lib/recharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
 
 export default function WomenCategorySales() {
-  const { women_category_sales } = useWomenCategorySales()
+  const { baseWeek, women_category_sales: cached } = useDataCache()
   const isAnimationActive = useChartAnimations()
+  const { data, loading, error, retry } = useWeekSeriesLoad<WomenCategorySalesResponse>({
+    baseWeek,
+    load: (week) => getWomenCategorySales(week, 8),
+    cached,
+    hasRows: (payload) => normalizeNamedSeries<WomenCategorySalesData>(payload, 'women_category_sales').length > 0,
+  })
 
-  // Normalize women_category_sales structure - handle both { women_category_sales: [...] } and direct array
-  let categoryData: any[] = []
-  if (women_category_sales) {
-    if (Array.isArray(women_category_sales)) {
-      // Structure: direct array
-      categoryData = women_category_sales
-    } else if (women_category_sales.women_category_sales && Array.isArray(women_category_sales.women_category_sales)) {
-      // Structure: { women_category_sales: [...] }
-      categoryData = women_category_sales.women_category_sales
-    } else if (typeof women_category_sales === 'object') {
-      // Structure: { women_category_sales: {...} } - might be an object instead of array
-      categoryData = Object.values(women_category_sales.women_category_sales || {}) as any[]
-    }
-  }
+  const categoryData = normalizeNamedSeries<WomenCategorySalesData>(data, 'women_category_sales')
 
-  if (!women_category_sales || categoryData.length === 0) {
+  if (loading || error || categoryData.length === 0) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Loading Women Category Sales</h2>
-            <p className="text-sm text-gray-600">Processing sales data by product category...</p>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={categoryData.length === 0}
+        onRetry={retry}
+        loadingTitle="Loading Women Category Sales"
+        loadingHint="Reading Qlik sales by product category. Large exports can take a few minutes."
+        emptyHint="Upload the Qlik export in Settings for this week, then open Women's Category Sales again."
+        skeleton={
+          <div className="grid grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7].map((index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6, 7].map((index) => (
-            <Card key={index}>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-48 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        }
+      />
     )
   }
 

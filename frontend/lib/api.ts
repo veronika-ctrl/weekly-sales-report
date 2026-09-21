@@ -433,35 +433,35 @@ export async function getOnlineKPIs(
 }
 
 export async function getContribution(baseWeek: string, numWeeks: number = 8): Promise<ContributionResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/contribution?base_week=${baseWeek}&num_weeks=${numWeeks}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Contribution data: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/contribution?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/contribution',
+  )
 }
 
 export async function getGenderSales(baseWeek: string, numWeeks: number = 8): Promise<GenderSalesResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/gender-sales?base_week=${baseWeek}&num_weeks=${numWeeks}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Gender Sales data: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/gender-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/gender-sales',
+  )
 }
 
 export async function getMenCategorySales(baseWeek: string, numWeeks: number = 8): Promise<MenCategorySalesResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/men-category-sales?base_week=${baseWeek}&num_weeks=${numWeeks}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Men Category Sales data: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/men-category-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/men-category-sales',
+  )
 }
 
 export async function getWomenCategorySales(baseWeek: string, numWeeks: number = 8): Promise<WomenCategorySalesResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/women-category-sales?base_week=${baseWeek}&num_weeks=${numWeeks}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Women Category Sales data: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/women-category-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/women-category-sales',
+  )
 }
 
 export async function getCategorySales(baseWeek: string, numWeeks: number = 8): Promise<CategorySalesResponse> {
