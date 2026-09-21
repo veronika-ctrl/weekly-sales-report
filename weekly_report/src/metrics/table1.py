@@ -1,8 +1,10 @@
 """Table 1 metrics calculation module."""
 
-import pandas as pd
-from typing import Dict, Any, Optional
+import threading
 from pathlib import Path
+from typing import Any, Dict, Optional
+
+import pandas as pd
 from loguru import logger
 
 from weekly_report.src.adapters import qlik, dema, dema_gm2, shopify
@@ -14,6 +16,10 @@ from weekly_report.src.periods.calculator import (
     get_periods_for_week,
 )
 from weekly_report.src.cache.manager import raw_data_cache
+
+# Render is 2GB. Two overlapping Qlik Excel loads OOM the service and every
+# browser tab then shows TypeError: Failed to fetch until it restarts.
+_raw_data_load_lock = threading.Lock()
 
 
 def calculate_table1_metrics(
@@ -231,14 +237,22 @@ def load_all_raw_data(data_path: Path) -> Dict[str, pd.DataFrame]:
         }
     """
     data_path_str = str(data_path)
-    
-    # Check cache first
+
     cached_data = raw_data_cache.get(data_path_str)
     if cached_data:
         return cached_data
-    
+
+    with _raw_data_load_lock:
+        cached_data = raw_data_cache.get(data_path_str)
+        if cached_data:
+            return cached_data
+
+        return _load_all_raw_data_uncached(data_path, data_path_str)
+
+
+def _load_all_raw_data_uncached(data_path: Path, data_path_str: str) -> Dict[str, pd.DataFrame]:
     logger.info(f"Loading all raw data from {data_path}")
-    
+
     data_sources = {}
     
     # Load Qlik data
