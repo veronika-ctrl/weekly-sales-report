@@ -1,19 +1,26 @@
 'use client'
 
-import { useKPIs } from '@/contexts/DataCacheContext'
+import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
+import { getOnlineKPIs, type OnlineKPIsResponse } from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
+import ReportLoadState from '@/components/ReportLoadState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, XAxis } from '@/lib/recharts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
 
 export default function OnlineKPIsPage() {
   const isPdfMode = false
-  const { kpis: kpisData } = useKPIs()
+  const { baseWeek, kpis: cachedKpis } = useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
-  // Disable animations in PDF mode
   const isAnimationActive = !isPdfMode && chartAnimationsEnabled
+  const { data, loading, error, retry } = useWeekSeriesLoad<OnlineKPIsResponse>({
+    baseWeek,
+    load: (week) => getOnlineKPIs(week, 8),
+    cached: cachedKpis,
+    hasRows: (payload) => normalizeNamedSeries(payload, 'kpis').length > 0,
+  })
 
   const kpiLabels = [
     { key: 'sessions', label: 'Sessions', format: (val: number) => (val / 1000).toFixed(1) },
@@ -27,45 +34,33 @@ export default function OnlineKPIsPage() {
     { key: 'new_customer_cac', label: 'New Customer CAC', format: (val: number) => Math.round(val).toString() }
   ]
 
-  // Normalize kpis structure - handle both { kpis: [...] } and direct array
-  let kpis: any[] = []
-  if (kpisData) {
-    if (Array.isArray(kpisData)) {
-      // Structure: direct array
-      kpis = kpisData
-    } else if (kpisData.kpis && Array.isArray(kpisData.kpis)) {
-      // Structure: { kpis: [...] }
-      kpis = kpisData.kpis
-    } else if (typeof kpisData === 'object') {
-      // Structure: { kpis: {...} } - might be an object instead of array
-      kpis = Object.values(kpisData.kpis || {}) as any[]
-    }
-  }
+  const kpis = normalizeNamedSeries<OnlineKPIsResponse['kpis'][number]>(data, 'kpis')
 
-  if (!kpisData || kpis.length === 0) {
+  if (loading || error || kpis.length === 0) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Loading Online KPIs</h2>
-            <p className="text-sm text-gray-600">Processing data from Qlik, DEMA, and Shopify...</p>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={kpis.length === 0}
+        onRetry={retry}
+        loadingTitle="Loading Online KPIs"
+        loadingHint="Reading Qlik, DEMA, and Shopify. Large exports can take a few minutes."
+        emptyHint="Upload Qlik and DEMA for this week in Settings, then open Online KPIs again."
+        skeleton={
+          <div className="grid grid-cols-3 gap-6">
+            {kpiLabels.map((_, index) => (
+              <Card key={index}>
+                <CardHeader>
+                  <Skeleton className="h-5 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-        
-        <div className="grid grid-cols-3 gap-6">
-          {kpiLabels.map((kpi, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <Skeleton className="h-5 w-48" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-48 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        }
+      />
     )
   }
 

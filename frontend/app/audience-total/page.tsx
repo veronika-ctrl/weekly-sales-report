@@ -3,13 +3,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
-import { Loader2, Maximize2 } from 'lucide-react'
+import { Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
 import { AudienceSlideView } from '@/components/audience/AudienceSlideView'
+import ReportLoadState from '@/components/ReportLoadState'
 import { getMonthlyAmerPlanFromBudget, resolveAudienceBudgetForWeek } from '@/lib/audienceBudgetSeries'
-import { getAudienceBudgetSeries, type BudgetGeneralResponse } from '@/lib/api'
+import {
+  getAudienceBudgetSeries,
+  getOnlineKPIs,
+  type BudgetGeneralResponse,
+  type OnlineKPIsResponse,
+} from '@/lib/api'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
 
 function budgetGeneralUsable(b: BudgetGeneralResponse | null | undefined): boolean {
   return Boolean(b && !b.error && b.table && Object.keys(b.table).length > 0)
@@ -79,8 +86,7 @@ function deriveMetrics(k: {
 }
 
 export default function AudienceTotalPage() {
-  const { baseWeek, loading, error, loadAllData, kpis: kpisData, periods, isDataReady, budget_general } =
-    useDataCache()
+  const { baseWeek, kpis: cachedKpis, budget_general } = useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
   const [slideView, setSlideView] = useState(false)
@@ -89,29 +95,14 @@ export default function AudienceTotalPage() {
     Record<string, number> | null
   > | null>(null)
 
-  useEffect(() => {
-    if (!baseWeek) return
-    if ((!periods || !isDataReady) && !loading && !error) loadAllData(baseWeek, false)
-  }, [baseWeek, loading, periods, isDataReady, loadAllData, error])
+  const { data, loading, error, retry } = useWeekSeriesLoad<OnlineKPIsResponse>({
+    baseWeek,
+    load: (week) => getOnlineKPIs(week, 8),
+    cached: cachedKpis,
+    hasRows: (payload) => normalizeNamedSeries(payload, 'kpis').length > 0,
+  })
 
-  let kpis: Array<{
-    week: string
-    new_customers?: number
-    returning_customers?: number
-    total_orders?: number
-    aov_new_customer?: number
-    aov_returning_customer?: number
-    cos?: number
-    new_customer_cac?: number
-    last_year?: Record<string, number>
-  }> = []
-  if (kpisData) {
-    if (Array.isArray(kpisData)) kpis = kpisData as any[]
-    else if (kpisData?.kpis && Array.isArray(kpisData.kpis)) kpis = kpisData.kpis as any[]
-    else if (typeof kpisData === 'object' && (kpisData as any).kpis)
-      kpis = Object.values((kpisData as any).kpis) as any[]
-  }
-
+  const kpis = normalizeNamedSeries<OnlineKPIsResponse['kpis'][number]>(data, 'kpis')
   const numBudgetWeeks = kpis.length >= 1 ? kpis.length : 8
 
   useEffect(() => {
@@ -167,44 +158,20 @@ export default function AudienceTotalPage() {
     })
   }, [kpis, effectiveBudgetGeneral, serverAudienceBudgetByWeek, monthlyAmerPlan])
 
-  const noData = baseWeek && !loading && !error && (!periods || !isDataReady)
-  const hasData = periods && isDataReady && metrics.length > 0
-  const noAudienceData = baseWeek && !loading && !error && periods && isDataReady && metrics.length === 0
+  const hasData = metrics.length > 0
 
   return (
     <div className="space-y-8">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800 mb-2">{error}</p>
-          <Button onClick={() => baseWeek && loadAllData(baseWeek, true)} variant="outline" size="sm">
-            Retry
-          </Button>
-        </div>
-      )}
-      {noData && (
-        <div className="rounded-lg border bg-muted/40 p-6 text-center">
-          <p className="text-sm text-muted-foreground mb-4">No data for this week. Choose another week above or sync data in Settings.</p>
-          <Link href="/settings" className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-            Go to Settings
-          </Link>
-        </div>
-      )}
-      {noAudienceData && (
-        <div className="rounded-lg border bg-amber-50 border-amber-200 p-6 text-center">
-          <p className="text-sm font-medium text-amber-900 mb-2">No audience data for this week</p>
-          <p className="text-sm text-amber-800 mb-4">
-            Audience metrics (Total AOV, customers, Return rate, COS, CAC) use the same data as the Summary and Online KPIs: <strong>Qlik</strong> (with Sales Channel, Country, New/Returning Customer) and <strong>DEMA</strong> (for COS and CAC). Upload or sync data for this week in Settings and ensure the files contain online sales by country.
-          </p>
-          <Link href="/settings" className="inline-flex rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
-            Go to Settings
-          </Link>
-        </div>
-      )}
-      {!hasData && !noData && !noAudienceData && (
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading audience metrics...</p>
-        </div>
+      {(loading || error || !hasData) && (
+        <ReportLoadState
+          loading={loading}
+          error={error}
+          empty={!hasData}
+          onRetry={retry}
+          loadingTitle="Loading Audience Total"
+          loadingHint="Reading Qlik and DEMA for AOV, customers, return rate, COS and CAC. Large exports can take a few minutes."
+          emptyHint="Upload Qlik and DEMA for this week in Settings (online sales by country), then open Audience Total again."
+        />
       )}
       {hasData && (
         <>

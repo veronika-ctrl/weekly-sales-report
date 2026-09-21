@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useChartAnimations } from '@/contexts/ChartSettingsContext'
-import { Loader2, Maximize2 } from 'lucide-react'
+import { Maximize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import {
@@ -17,10 +17,13 @@ import {
   getAudienceBudgetSeries,
   getAudienceMetricsPerCountry,
   type AudienceMetricsCountryData,
+  type AudienceMetricsPerCountryResponse,
   type BudgetGeneralResponse,
 } from '@/lib/api'
 import { AudienceMetricsChartGrid } from '@/components/audience/AudienceMetricsChartGrid'
 import { AudienceSlideView } from '@/components/audience/AudienceSlideView'
+import ReportLoadState from '@/components/ReportLoadState'
+import { normalizeNamedSeries, useWeekSeriesLoad } from '@/lib/week-series-load'
 
 function budgetGeneralUsable(b: BudgetGeneralResponse | null | undefined): boolean {
   return Boolean(b && !b.error && b.table && Object.keys(b.table).length > 0)
@@ -46,38 +49,32 @@ function slugToMarketName(slug: string): string {
   return SLUG_TO_NAME[normalized] ?? slug.replace(/-/g, ' ')
 }
 
+type AudienceMarketRow = {
+  week: string
+  weekLabel: string
+  last_year?: AudienceMetricsCountryData['last_year']
+} & AudienceMetricsCountryData
+
 export default function AudienceMarketPage() {
   const params = useParams()
   const slug = typeof params?.market === 'string' ? params.market : ''
   const marketName = slugToMarketName(slug)
-  const { baseWeek, loading, periods, loadAllData, isDataReady, error, budget_general } = useDataCache()
+  const { baseWeek, budget_general } = useDataCache()
   const chartAnimationsEnabled = useChartAnimations()
   const isAnimationActive = chartAnimationsEnabled
   const [slideView, setSlideView] = useState(false)
-
-  const [audienceData, setAudienceData] = useState<
-    Array<
-      {
-        week: string
-        weekLabel: string
-        last_year?: AudienceMetricsCountryData['last_year']
-      } & AudienceMetricsCountryData
-    > | null
-  >(null)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [weeksRaw, setWeeksRaw] = useState<
-    Array<{ week: string; countries: Record<string, AudienceMetricsCountryData> }>
-  >([])
-  const [resolvedCountryKey, setResolvedCountryKey] = useState<string>('')
   const [serverAudienceBudgetByWeek, setServerAudienceBudgetByWeek] = useState<Record<
     string,
     Record<string, number> | null
   > | null>(null)
 
-  useEffect(() => {
-    if (!baseWeek) return
-    if ((!periods || !isDataReady) && !loading && !error) loadAllData(baseWeek, false)
-  }, [baseWeek, loading, periods, isDataReady, loadAllData, error])
+  const { data, loading, error, retry } = useWeekSeriesLoad<AudienceMetricsPerCountryResponse>({
+    baseWeek,
+    load: (week) => getAudienceMetricsPerCountry(week, 8),
+    cached: null,
+    hasRows: (payload) =>
+      normalizeNamedSeries(payload, 'audience_metrics_per_country').length > 0,
+  })
 
   useEffect(() => {
     if (!baseWeek) {
@@ -106,66 +103,51 @@ export default function AudienceMarketPage() {
     return budgetGeneralUsable(budget_general) ? budget_general : null
   }, [budget_general])
 
-  useEffect(() => {
-    if (!baseWeek || !marketName) return
-    let cancelled = false
-    getAudienceMetricsPerCountry(baseWeek, 8)
-      .then((res) => {
-        if (cancelled) return
-        const byWeek = res.audience_metrics_per_country || []
-        const firstWeek = byWeek[0]
-        const countryKeys = firstWeek ? Object.keys(firstWeek.countries || {}) : []
-        const nameMatch = countryKeys.find(
-          (c) =>
-            c.toLowerCase() === marketName.toLowerCase() ||
-            c.toLowerCase().replace(/\s+/g, '-') === (slug || '').toLowerCase()
-        )
-        const countryKey = nameMatch || marketName
-        setResolvedCountryKey(countryKey)
-        setWeeksRaw(byWeek)
+  const weeksRaw = useMemo(
+    () =>
+      normalizeNamedSeries<{ week: string; countries: Record<string, AudienceMetricsCountryData> }>(
+        data,
+        'audience_metrics_per_country',
+      ),
+    [data],
+  )
 
-        const series = byWeek.map((w) => {
-          const c = w.countries[countryKey] || w.countries[marketName]
-          if (!c) return null
-          return {
-            week: w.week,
-            weekLabel: `W${w.week.split('-')[1]}`,
-            ...c,
-            last_year: c.last_year ?? null,
-          }
-        }).filter(Boolean) as Array<
-          {
-            week: string
-            weekLabel: string
-            last_year?: AudienceMetricsCountryData['last_year']
-          } & AudienceMetricsCountryData
-        >
-        setAudienceData(series.length ? series : null)
-        setFetchError(series.length ? null : `No data for market "${marketName}"`)
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setFetchError(e?.message || 'Failed to load audience metrics')
-          setAudienceData(null)
-          setWeeksRaw([])
-          setResolvedCountryKey('')
+  const resolvedCountryKey = useMemo(() => {
+    const firstWeek = weeksRaw[0]
+    const countryKeys = firstWeek ? Object.keys(firstWeek.countries || {}) : []
+    const nameMatch = countryKeys.find(
+      (c) =>
+        c.toLowerCase() === marketName.toLowerCase() ||
+        c.toLowerCase().replace(/\s+/g, '-') === (slug || '').toLowerCase(),
+    )
+    return nameMatch || marketName
+  }, [weeksRaw, marketName, slug])
+
+  const audienceData = useMemo(() => {
+    return weeksRaw
+      .map((w) => {
+        const c = w.countries[resolvedCountryKey] || w.countries[marketName]
+        if (!c) return null
+        return {
+          week: w.week,
+          weekLabel: `W${w.week.split('-')[1]}`,
+          ...c,
+          last_year: c.last_year ?? null,
         }
       })
-    return () => {
-      cancelled = true
-    }
-  }, [baseWeek, marketName, slug])
+      .filter(Boolean) as AudienceMarketRow[]
+  }, [weeksRaw, resolvedCountryKey, marketName])
 
   const monthlyAmerPlan = useMemo(
     () =>
       baseWeek
         ? getMonthlyAmerPlanFromBudget(baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral)
         : null,
-    [baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral]
+    [baseWeek, serverAudienceBudgetByWeek, effectiveBudgetGeneral],
   )
 
   const audienceSeriesWithBudget = useMemo(() => {
-    if (!audienceData?.length) return null
+    if (!audienceData.length) return []
     const weekToRow = new Map(weeksRaw.map((x) => [x.week, x] as const))
     return audienceData.map((row) => {
       const w = weekToRow.get(row.week)
@@ -190,38 +172,20 @@ export default function AudienceMarketPage() {
     monthlyAmerPlan,
   ])
 
-  const noData = baseWeek && !loading && !error && (!periods || !isDataReady)
-  const hasData = periods && isDataReady && audienceSeriesWithBudget && audienceSeriesWithBudget.length > 0
+  const hasData = audienceSeriesWithBudget.length > 0
 
   return (
     <div className="space-y-8">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800 mb-2">{error}</p>
-          <Button onClick={() => baseWeek && loadAllData(baseWeek, true)} variant="outline" size="sm">
-            Retry
-          </Button>
-        </div>
-      )}
-      {fetchError && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <p className="text-sm text-amber-800">{fetchError}</p>
-          <Link href="/audience-total" className="text-sm text-amber-700 underline mt-2 inline-block">Back to Audience Total</Link>
-        </div>
-      )}
-      {noData && (
-        <div className="rounded-lg border bg-muted/40 p-6 text-center">
-          <p className="text-sm text-muted-foreground mb-4">No data for this week. Choose another week above or sync data in Settings.</p>
-          <Link href="/settings" className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-            Go to Settings
-          </Link>
-        </div>
-      )}
-      {!hasData && !noData && !fetchError && (
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading audience metrics for {marketName}...</p>
-        </div>
+      {(loading || error || !hasData) && (
+        <ReportLoadState
+          loading={loading}
+          error={error}
+          empty={!hasData}
+          onRetry={retry}
+          loadingTitle={`Loading audience metrics for ${marketName}`}
+          loadingHint="Reading Qlik and DEMA by country. Large exports can take a few minutes."
+          emptyHint={`No audience metrics for ${marketName} this week. Upload Qlik (online sales by country) and DEMA in Settings, then open this page again.`}
+        />
       )}
       {hasData && (
         <>
@@ -244,9 +208,9 @@ export default function AudienceMarketPage() {
               ← Back to Audience Total
             </Link>
           </p>
-          <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={isAnimationActive} compact />
+          <AudienceMetricsChartGrid series={audienceSeriesWithBudget} isAnimationActive={isAnimationActive} compact />
           <AudienceSlideView title={`Audience — ${marketName}`} open={slideView} onClose={() => setSlideView(false)}>
-            <AudienceMetricsChartGrid series={audienceSeriesWithBudget!} isAnimationActive={false} compact />
+            <AudienceMetricsChartGrid series={audienceSeriesWithBudget} isAnimationActive={false} compact />
           </AudienceSlideView>
         </>
       )}

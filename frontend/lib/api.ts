@@ -175,6 +175,7 @@ export interface OnlineKPIsResponse {
     sessions: number
     new_customer_cac: number
     total_orders: number
+    return_rate_pct?: number
     return_rate_new_pct?: number
     return_rate_returning_pct?: number
     last_year: {
@@ -192,6 +193,7 @@ export interface OnlineKPIsResponse {
       sessions: number
       new_customer_cac: number
       total_orders: number
+      return_rate_pct?: number
       return_rate_new_pct?: number
       return_rate_returning_pct?: number
     } | null
@@ -404,11 +406,11 @@ export async function getOnlineKPIs(
     num_weeks: String(numWeeks),
   })
   if (country) params.set('country', country)
-  const response = await fetch(`${API_BASE_URL}/api/online-kpis?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch Online KPIs: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/online-kpis?${params.toString()}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/online-kpis',
+  )
 }
 
 export async function getContribution(baseWeek: string, numWeeks: number = 8): Promise<ContributionResponse> {
@@ -1019,14 +1021,13 @@ export async function getAudienceMetricsPerCountry(
   numWeeks: number = 8
 ): Promise<AudienceMetricsPerCountryResponse> {
   const key = `audience-metrics-per-country:${week}:${numWeeks}`
-  return withShortCache(key, async () => {
+  return withShortCache(key, () => {
     const params = new URLSearchParams({ base_week: week, num_weeks: String(numWeeks) })
-    const response = await fetch(`${API_BASE_URL}/api/audience-metrics-per-country?${params}`)
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}))
-      throw new Error(err?.detail || `Failed to fetch audience metrics: ${response.statusText}`)
-    }
-    return response.json()
+    return fetchJsonWithTimeout<AudienceMetricsPerCountryResponse>(
+      `${API_BASE_URL}/api/audience-metrics-per-country?${params}`,
+      HEAVY_METRICS_TIMEOUT_MS,
+      '/api/audience-metrics-per-country',
+    )
   })
 }
 
