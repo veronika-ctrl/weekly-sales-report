@@ -66,8 +66,15 @@ export default function MenCategorySales() {
     return { category, total }
   })
 
-  // Sort by total sales descending
+  // Sort by total sales descending, then swap RESORT and ACCESSORIES.
   const sortedCategories = categoryTotals.sort((a, b) => b.total - a.total).map(item => item.category)
+  const resortIndex = sortedCategories.findIndex((name) => name.toUpperCase() === 'RESORT')
+  const accessoriesIndex = sortedCategories.findIndex((name) => name.toUpperCase() === 'ACCESSORIES')
+  if (resortIndex !== -1 && accessoriesIndex !== -1 && resortIndex !== accessoriesIndex) {
+    const resort = sortedCategories[resortIndex]
+    sortedCategories[resortIndex] = sortedCategories[accessoriesIndex]
+    sortedCategories[accessoriesIndex] = resort
+  }
 
   return (
     <div className="space-y-8">
