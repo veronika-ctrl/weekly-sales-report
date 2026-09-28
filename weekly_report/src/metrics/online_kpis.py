@@ -219,10 +219,9 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
             
             qlik_df = all_raw_data.get('qlik', pd.DataFrame())
             dema_df = all_raw_data.get('dema_spend', pd.DataFrame())
-            
-            # Shopify data is loaded separately as it's not in load_all_raw_data
-            from weekly_report.src.adapters.shopify import load_data as load_shopify_data
-            shopify_df = load_shopify_data(latest_data_path)
+            # Already loaded with the Qlik export. A second Shopify read sits on
+            # top of that frame and is enough to cross Render's memory limit.
+            shopify_df = all_raw_data.get('shopify', pd.DataFrame())
             # Sum session counts per calendar day, then bucket by ISO week (avoids mis-using total columns)
             shopify_df = _rollup_shopify_sessions_by_calendar_day(shopify_df)
             logger.info(f"Loaded Shopify (daily→weekly pipeline): {shopify_df.shape}, columns: {shopify_df.columns.tolist() if not shopify_df.empty else 'empty'}")

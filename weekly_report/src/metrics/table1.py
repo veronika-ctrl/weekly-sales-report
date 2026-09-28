@@ -1,5 +1,6 @@
 """Table 1 metrics calculation module."""
 
+import gc
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -251,6 +252,9 @@ def load_all_raw_data(data_path: Path) -> Dict[str, pd.DataFrame]:
 
 
 def _load_all_raw_data_uncached(data_path: Path, data_path_str: str) -> Dict[str, pd.DataFrame]:
+    # Drop any previously cached week before pandas allocates the next export.
+    raw_data_cache.clear()
+    gc.collect()
     logger.info(f"Loading all raw data from {data_path}")
 
     data_sources = {}
@@ -352,6 +356,20 @@ def _dema_date_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
+def _slice_iso_week(df: pd.DataFrame, period_week: str, date_col: Optional[str]) -> pd.DataFrame:
+    """Rows for one ISO week. Does not copy the rest of the frame or mutate it."""
+    if "iso_week" in df.columns:
+        mask = df["iso_week"].astype(str) == period_week
+    else:
+        if not date_col or date_col not in df.columns:
+            raise ValueError(f"Cannot filter data for {period_week}")
+        dates = pd.to_datetime(df[date_col], errors="coerce")
+        iso = dates.dt.isocalendar()
+        week = iso["year"].astype(str) + "-" + iso["week"].astype(str).str.zfill(2)
+        mask = week == period_week
+    return df.loc[mask].copy()
+
+
 def filter_data_for_period(all_data: Dict[str, pd.DataFrame], period_week: str) -> Dict[str, pd.DataFrame]:
     """
     Filter pre-loaded data for specific ISO week.
@@ -367,52 +385,28 @@ def filter_data_for_period(all_data: Dict[str, pd.DataFrame], period_week: str) 
     
     filtered_data = {}
     
-    # Filter Qlik data by ISO week
-    qlik_data = all_data['qlik'].copy()
-    if 'Date' in qlik_data.columns:
-        qlik_data['Date'] = pd.to_datetime(qlik_data['Date'], errors='coerce')
-        qlik_data['ISO_Week'] = qlik_data['Date'].dt.isocalendar().week
-        qlik_data['ISO_Year'] = qlik_data['Date'].dt.isocalendar().year
-        qlik_data['ISO_Week_Str'] = qlik_data['ISO_Year'].astype(str) + '-' + qlik_data['ISO_Week'].astype(str).str.zfill(2)
-        
-        period_data = qlik_data[qlik_data['ISO_Week_Str'] == period_week]
-        filtered_data['qlik'] = period_data.drop(['ISO_Week', 'ISO_Year', 'ISO_Week_Str'], axis=1)
-        logger.info(f"Filtered Qlik data for {period_week}: {filtered_data['qlik'].shape}")
-    else:
+    qlik_data = all_data['qlik']
+    if 'iso_week' not in qlik_data.columns and 'Date' not in qlik_data.columns:
         logger.error(f"No Date column found in Qlik data for filtering")
         raise ValueError(f"Cannot filter Qlik data for {period_week}")
+    filtered_data['qlik'] = _slice_iso_week(qlik_data, period_week, 'Date')
+    logger.info(f"Filtered Qlik data for {period_week}: {filtered_data['qlik'].shape}")
     
-    # Filter Dema spend data by ISO week
-    dema_spend_data = all_data['dema_spend'].copy()
+    dema_spend_data = all_data['dema_spend']
     spend_date_col = _dema_date_column(dema_spend_data)
-    if spend_date_col:
-        dema_spend_data[spend_date_col] = pd.to_datetime(dema_spend_data[spend_date_col], errors='coerce')
-        dema_spend_data['ISO_Week'] = dema_spend_data[spend_date_col].dt.isocalendar().week
-        dema_spend_data['ISO_Year'] = dema_spend_data[spend_date_col].dt.isocalendar().year
-        dema_spend_data['ISO_Week_Str'] = dema_spend_data['ISO_Year'].astype(str) + '-' + dema_spend_data['ISO_Week'].astype(str).str.zfill(2)
-        
-        period_data = dema_spend_data[dema_spend_data['ISO_Week_Str'] == period_week]
-        filtered_data['dema_spend'] = period_data.drop(['ISO_Week', 'ISO_Year', 'ISO_Week_Str'], axis=1)
-        logger.info(f"Filtered Dema spend data for {period_week}: {filtered_data['dema_spend'].shape}")
-    else:
+    if 'iso_week' not in dema_spend_data.columns and not spend_date_col:
         logger.error(f"No Days/Day column found in Dema spend data for filtering")
         raise ValueError(f"Cannot filter Dema spend data for {period_week}")
+    filtered_data['dema_spend'] = _slice_iso_week(dema_spend_data, period_week, spend_date_col)
+    logger.info(f"Filtered Dema spend data for {period_week}: {filtered_data['dema_spend'].shape}")
     
-    # Filter Dema GM2 data by ISO week
-    dema_gm2_data = all_data['dema_gm2'].copy()
+    dema_gm2_data = all_data['dema_gm2']
     gm2_date_col = _dema_date_column(dema_gm2_data)
-    if gm2_date_col:
-        dema_gm2_data[gm2_date_col] = pd.to_datetime(dema_gm2_data[gm2_date_col], errors='coerce')
-        dema_gm2_data['ISO_Week'] = dema_gm2_data[gm2_date_col].dt.isocalendar().week
-        dema_gm2_data['ISO_Year'] = dema_gm2_data[gm2_date_col].dt.isocalendar().year
-        dema_gm2_data['ISO_Week_Str'] = dema_gm2_data['ISO_Year'].astype(str) + '-' + dema_gm2_data['ISO_Week'].astype(str).str.zfill(2)
-        
-        period_data = dema_gm2_data[dema_gm2_data['ISO_Week_Str'] == period_week]
-        filtered_data['dema_gm2'] = period_data.drop(['ISO_Week', 'ISO_Year', 'ISO_Week_Str'], axis=1)
-        logger.info(f"Filtered Dema GM2 data for {period_week}: {filtered_data['dema_gm2'].shape}")
-    else:
+    if 'iso_week' not in dema_gm2_data.columns and not gm2_date_col:
         logger.error(f"No Days/Day column found in Dema GM2 data for filtering")
         raise ValueError(f"Cannot filter Dema GM2 data for {period_week}")
+    filtered_data['dema_gm2'] = _slice_iso_week(dema_gm2_data, period_week, gm2_date_col)
+    logger.info(f"Filtered Dema GM2 data for {period_week}: {filtered_data['dema_gm2'].shape}")
     
     logger.info(f"Successfully filtered all data for {period_week}")
     return filtered_data
@@ -435,46 +429,35 @@ def filter_data_for_date_range(all_data: Dict[str, pd.DataFrame], start_date: st
     filtered_data = {}
     start_dt = pd.to_datetime(start_date)
     end_dt = pd.to_datetime(end_date)
+
+    def _slice_dates(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+        dates = pd.to_datetime(df[date_col], errors='coerce')
+        return df.loc[(dates >= start_dt) & (dates <= end_dt)].copy()
     
     # Filter Qlik data by date range
-    qlik_data = all_data['qlik'].copy()
+    qlik_data = all_data['qlik']
     if 'Date' in qlik_data.columns:
-        qlik_data['Date'] = pd.to_datetime(qlik_data['Date'], errors='coerce')
-        period_data = qlik_data[
-            (qlik_data['Date'] >= start_dt) & 
-            (qlik_data['Date'] <= end_dt)
-        ]
-        filtered_data['qlik'] = period_data
+        filtered_data['qlik'] = _slice_dates(qlik_data, 'Date')
         logger.info(f"Filtered Qlik data for date range: {filtered_data['qlik'].shape}")
     else:
         logger.error(f"No Date column found in Qlik data for filtering")
         raise ValueError(f"Cannot filter Qlik data for date range {start_date} to {end_date}")
     
     # Filter Dema spend data by date range
-    dema_spend_data = all_data['dema_spend'].copy()
+    dema_spend_data = all_data['dema_spend']
     spend_date_col = _dema_date_column(dema_spend_data)
     if spend_date_col:
-        dema_spend_data[spend_date_col] = pd.to_datetime(dema_spend_data[spend_date_col], errors='coerce')
-        period_data = dema_spend_data[
-            (dema_spend_data[spend_date_col] >= start_dt) &
-            (dema_spend_data[spend_date_col] <= end_dt)
-        ]
-        filtered_data['dema_spend'] = period_data
+        filtered_data['dema_spend'] = _slice_dates(dema_spend_data, spend_date_col)
         logger.info(f"Filtered Dema spend data for date range: {filtered_data['dema_spend'].shape}")
     else:
         logger.error(f"No Days/Day column found in Dema spend data for filtering")
         raise ValueError(f"Cannot filter Dema spend data for date range {start_date} to {end_date}")
     
     # Filter Dema GM2 data by date range
-    dema_gm2_data = all_data['dema_gm2'].copy()
+    dema_gm2_data = all_data['dema_gm2']
     gm2_date_col = _dema_date_column(dema_gm2_data)
     if gm2_date_col:
-        dema_gm2_data[gm2_date_col] = pd.to_datetime(dema_gm2_data[gm2_date_col], errors='coerce')
-        period_data = dema_gm2_data[
-            (dema_gm2_data[gm2_date_col] >= start_dt) &
-            (dema_gm2_data[gm2_date_col] <= end_dt)
-        ]
-        filtered_data['dema_gm2'] = period_data
+        filtered_data['dema_gm2'] = _slice_dates(dema_gm2_data, gm2_date_col)
         logger.info(f"Filtered Dema GM2 data for date range: {filtered_data['dema_gm2'].shape}")
     else:
         logger.error(f"No Days/Day column found in Dema GM2 data for filtering")
