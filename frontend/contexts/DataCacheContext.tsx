@@ -506,13 +506,17 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
         setMarkets(batchData.markets)
         marketsToSave = batchData.markets
         setIsDataReady(true)
-        // Refresh markets with recalculate=true so Y/Y for last-year weeks (2024-50, 2024-51, 2024-52) is filled
-        try {
-          const freshMarkets = await getTopMarkets(week, 8, true)
-          setMarkets(freshMarkets)
-          marketsToSave = freshMarkets
-        } catch (_) {
-          // keep batchData.markets
+        // Recompute markets from the Qlik files only on an explicit refresh.
+        // Doing it on every Summary visit loads several full exports and OOMs
+        // the 2GB Render instance. The restart is what makes the app look stuck.
+        if (forceRefresh) {
+          try {
+            const freshMarkets = await getTopMarkets(week, 8, true)
+            setMarkets(freshMarkets)
+            marketsToSave = freshMarkets
+          } catch (_) {
+            // keep batchData.markets
+          }
         }
         setKpis(batchData.kpis)
         setContribution(batchData.contribution)
@@ -674,7 +678,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       })
       let marketsData: MarketsResponse
       try {
-        marketsData = await getTopMarkets(week, 8, true)
+        marketsData = await getTopMarkets(week, 8)
       } catch {
         marketsData = { markets: [], period_info: { latest_week: week, latest_dates: '' } }
       }

@@ -1,11 +1,14 @@
 """Markets calculation module for top markets analysis."""
 
+import gc
+
 import pandas as pd
 from typing import Dict, List, Any
 from pathlib import Path
 from loguru import logger
 
 from weekly_report.src.adapters import qlik
+from weekly_report.src.cache.manager import raw_data_cache
 from weekly_report.src.periods.calculator import get_week_date_range
 from weekly_report.src.metrics.table1 import load_all_raw_data
 
@@ -88,6 +91,11 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
         iso_cal = qlik_df['Date'].dt.isocalendar()
         qlik_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
     online_df = qlik_df[qlik_df['Sales Channel'] == 'Online'].copy() if 'Sales Channel' in qlik_df.columns else qlik_df.copy()
+    # The online slice is enough for current-year weeks. Drop the full export
+    # before any last-year folder is read so both files are not resident.
+    del all_raw_data, qlik_df
+    raw_data_cache.clear()
+    gc.collect()
     
     country_weeks_data = {}
     
@@ -121,6 +129,9 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     for week_str in last_year_weeks:
         week_path = data_root_resolved / "raw" / week_str
         if week_path.exists():
+            ly_raw = None
+            ly_qlik = None
+            ly_online = None
             try:
                 ly_raw = load_all_raw_data(week_path)
                 ly_qlik = ly_raw['qlik']
@@ -134,6 +145,10 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
                 logger.info(f"Loaded last-year data for Y/Y from {week_path}")
             except Exception as e:
                 logger.warning(f"Could not load last-year data for {week_str}: {e}")
+            finally:
+                del ly_raw, ly_qlik, ly_online
+                raw_data_cache.clear()
+                gc.collect()
         else:
             # No folder for this last-year week; Y/Y will show "-" for that week if base file had no data
             total_for_week = sum(country_weeks_data.get(c, {}).get(week_str, 0) for c in country_weeks_data)

@@ -52,7 +52,8 @@ class RawDataCache:
         return data
 
     def set(self, key: str, data: Dict[str, Any]) -> None:
-        self.cache[key] = (time.time(), data)
+        # Render is 2GB. One Qlik export plus a second cached week OOMs the process.
+        self.cache = {key: (time.time(), data)}
 
     def clear(self) -> None:
         self.cache.clear()
