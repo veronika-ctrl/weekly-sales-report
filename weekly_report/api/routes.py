@@ -4728,56 +4728,34 @@ async def get_discounts_full_price_vs_sale_excel(
 
 @app.get("/api/discounts/history-info")
 async def get_discounts_history_info(base_week: str = Query(...)):
-    """Summarize the accumulated Full price vs Sale (revenue-over-time) history that
-    spans all week folders: which files contributed, the covered date range, and
-    whether a Discount Amount column / last-year data is present."""
+    """Summarize Full Price vs Sale history from month-named files.
+
+    Old ``*/discounts/*`` weekly uploads are listed as ignored, not matched.
+    """
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")
         config = load_config(week=base_week)
-        from weekly_report.src.metrics.discounts_sales import (
-            _inspect_revenue_over_time_discount_column,
-            _is_revenue_over_time_format,
-            _read_csv_flexible,
-            load_revenue_over_time_history,
-        )
+        from weekly_report.src.metrics.discounts_sales import load_revenue_over_time_history
+        from weekly_report.src.metrics.full_price_excl_exchanges import excl_exchanges_history_info
 
         history = load_revenue_over_time_history(config.data_root)
+        info = excl_exchanges_history_info(config.data_root)
         df = history.get("df")
-        raw_root = Path(config.data_root) / "raw"
-        files = []
-        latest_inspection: Dict[str, Any] = {}
-        for f in sorted(raw_root.glob("*/discounts/*.*"), key=lambda p: p.stat().st_mtime):
-            if f.name.startswith("."):
-                continue
-            files.append({
-                "name": f.name,
-                "week": f.parent.parent.name,
-                "uploaded_at": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
-            })
-            try:
-                cdf = _read_csv_flexible(f)
-                cdf.columns = [c.strip().replace('"', "") for c in cdf.columns]
-                if _is_revenue_over_time_format(cdf):
-                    latest_inspection = {
-                        "file": f.name,
-                        **_inspect_revenue_over_time_discount_column(cdf),
-                    }
-            except Exception:
-                pass
-
         rng = None
         if df is not None and not df.empty:
             rng = {"start": str(df["_date"].min().date()), "end": str(df["_date"].max().date())}
         return {
-            "files": files,
-            "count": len(files),
+            "files": info.get("files", []),
+            "count": info.get("count", 0),
             "matched_files": history.get("files_used", []),
+            "ignored_files": history.get("ignored_files", info.get("ignored_files", [])),
             "range": rng,
             "has_discount": bool(history.get("has_discount")),
             "currency": history.get("currency", "SEK"),
             "fx": history.get("fx"),
-            "latest_file_inspection": latest_inspection,
+            "note": info.get("note"),
+            "latest_file_inspection": {},
         }
     except HTTPException:
         raise
@@ -4801,6 +4779,34 @@ async def get_excl_exchanges_history_info(base_week: str = Query(...)):
     except Exception as e:
         logger.error(f"Error loading excl-exchanges history info: {e}")
         raise HTTPException(status_code=500, detail="Failed to load exchange-excluded history info")
+
+
+@app.get("/api/discounts/discount-types")
+async def get_discount_types(
+    base_week: str = Query(...),
+    granularity: str = Query("week", description="week or month"),
+    num_weeks: int = Query(8),
+    months: int = Query(13),
+):
+    """Codes and manual discounts by type (Klaviyo, care, AfterShip, …) vs last year."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.discount_types import calculate_discount_types
+
+        return calculate_discount_types(
+            base_week,
+            config.data_root,
+            granularity=granularity,
+            num_weeks=num_weeks,
+            months=months,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading discount types: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load discount types")
 
 
 @app.post("/api/discounts/reset-history")

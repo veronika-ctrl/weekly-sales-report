@@ -226,7 +226,7 @@ def calculate_full_price_share_for_date_range(
                 "full_price_share_pct": round(share, 2),
                 "error": None,
                 "filename": filename,
-                "source": "revenue_over_time",
+                "source": "pricing_type",
                 "currency": currency,
                 "fx_applied": bool(fx.get("applied")),
                 "files_used": files_used,
@@ -247,7 +247,7 @@ def calculate_full_price_share_for_date_range(
                 "full_price_share_pct": None,
                 "error": "zero_net_sales",
                 "filename": (history.get("files_used") or [None])[-1],
-                "source": "revenue_over_time",
+                "source": "pricing_type",
             }
 
     raw_path = Path(data_root) / "raw" / base_week / "discounts"
@@ -2603,69 +2603,39 @@ def _discount_series_from_export(df: pd.DataFrame, full_col: str, total_col: str
 
 
 def load_revenue_over_time_history(data_root: Path) -> Dict[str, Any]:
+    """Daily Full Price vs Sale history from the new month-named files.
+
+    Does **not** read ``data/raw/*/discounts/*`` (old all-orders weekly exports).
+    Source: ``pricing_type/`` then ``raw/*/full_price_vs_sale_excl_exchanges/``
+    month-named files only.
+
+    ``_discounted`` is Compare-at + Discount Code + Subscription + Both + Price Drop
+    (missing columns = 0), not Total − Full Price. ``_discount`` is Discount Amount
+    + Markdown Amount.
     """
-    Merge every uploaded ``revenue-over-time`` file (across all week folders) into a
-    single daily history, deduped by date (most recently modified file wins).
+    from weekly_report.src.metrics.pricing_history import load_pricing_type_daily_history
 
-    Returns a dict with a normalized DataFrame under ``df`` containing columns:
-    ``_date`` (datetime), ``_full`` (full-price net), ``_discounted`` (Total - Full),
-    ``_total`` (net). When no matching files are found, ``df`` is empty.
-    """
-    raw_root = Path(data_root) / "raw"
-    files = sorted(
-        [f for f in raw_root.glob("*/discounts/*.*") if not f.name.startswith(".")],
-        key=lambda f: f.stat().st_mtime,
-    )
-
-    frames: List[pd.DataFrame] = []
-    files_used: List[str] = []
-    for f in files:
-        try:
-            df = _read_csv_flexible(f)
-        except Exception:
-            continue
-        df.columns = [c.strip().replace('"', "") for c in df.columns]
-        if not _is_revenue_over_time_format(df):
-            continue
-
-        date_col = _pick_column(df, ["Date", "Day", "Dag", "Datum"])
-        full_col = _pick_column(df, ["Full Price", "Full price", "Fullpris"])
-        total_col = _pick_column(df, ["Total", "Totalt", "Sum"])
-
-        sub = pd.DataFrame()
-        sub["_date"] = pd.to_datetime(df[date_col], errors="coerce")
-        sub["_full"] = _to_number(df[full_col])
-        sub["_total"] = _to_number(df[total_col])
-        sub["_discount"] = _discount_series_from_export(df, full_col, total_col)
-        sub = sub.dropna(subset=["_date"])
-        # Carry file mtime so later (newer) uploads win on duplicate dates.
-        sub["_mtime"] = f.stat().st_mtime
-        frames.append(sub)
-        files_used.append(f.name)
-
-    if not frames:
+    history = load_pricing_type_daily_history(data_root)
+    df = history.get("df")
+    if df is None or df.empty:
         return {
             "df": pd.DataFrame(columns=["_date", "_full", "_discounted", "_total", "_discount"]),
-            "files_used": [],
+            "files_used": history.get("files_used", []),
+            "ignored_files": history.get("ignored_files", []),
             "has_discount": False,
-            "fx": {"applied": False},
-            "currency": "SEK",
+            "fx": history.get("fx") or {"applied": False},
+            "currency": history.get("currency", "SEK"),
         }
-
-    alld = pd.concat(frames, ignore_index=True)
-    # Newest file wins per calendar date.
-    alld = alld.sort_values(["_date", "_mtime"]).drop_duplicates(subset=["_date"], keep="last")
-    alld["_discounted"] = (alld["_total"] - alld["_full"]).clip(lower=0.0)
-    alld["_discount"] = pd.to_numeric(alld["_discount"], errors="coerce")
-    has_discount = bool(alld["_discount"].notna().any())
-    alld = alld[["_date", "_full", "_discounted", "_total", "_discount"]].sort_values("_date").reset_index(drop=True)
-    alld, fx = convert_revenue_over_time_to_sek(alld, Path(data_root))
+    keep = ["_date", "_full", "_discounted", "_total", "_discount"]
+    out = df[keep].copy()
+    out["_discount"] = pd.to_numeric(out["_discount"], errors="coerce").fillna(0.0)
     return {
-        "df": alld,
-        "files_used": files_used,
-        "has_discount": has_discount,
-        "fx": fx,
-        "currency": fx.get("target_currency", "SEK") if fx.get("applied") else "USD",
+        "df": out.sort_values("_date").reset_index(drop=True),
+        "files_used": history.get("files_used", []),
+        "ignored_files": history.get("ignored_files", []),
+        "has_discount": True,
+        "fx": history.get("fx"),
+        "currency": history.get("currency", "SEK"),
     }
 
 
@@ -2678,8 +2648,9 @@ def calculate_full_price_vs_sale_weekly(
     Weekly Full Price vs Discounted net sales for the last N ISO weeks, with the
     matching same-week-number values from last year (YoY).
 
-    Source: the custom app's accumulated ``revenue-over-time`` daily history.
-    Discounted = Total - Full Price.
+    Source: month-named Full Price vs Sale daily files (excl. exchanges slot /
+    ``pricing_type/``). Discounted = Compare-at + Discount Code + Subscription
+    + Both + Price Drop. Weighted disc uses Discount Amount + Markdown Amount.
     """
     history = load_revenue_over_time_history(data_root)
     df = history["df"]
@@ -2687,7 +2658,7 @@ def calculate_full_price_vs_sale_weekly(
         return {
             "base_week": base_week,
             "num_weeks": num_weeks,
-            "source": "revenue_over_time",
+            "source": "pricing_type",
             "has_last_year": False,
             "has_discount": False,
             "files_used": history["files_used"],
@@ -2764,12 +2735,13 @@ def calculate_full_price_vs_sale_weekly(
     return {
         "base_week": base_week,
         "num_weeks": num_weeks,
-        "source": "revenue_over_time",
+        "source": "pricing_type",
         "has_last_year": has_last_year,
         "has_discount": has_discount,
         "currency": history.get("currency", "SEK"),
         "fx": history.get("fx"),
         "files_used": history["files_used"],
+        "ignored_files": history.get("ignored_files", []),
         "history_range": {
             "start": str(df["_date"].min().date()),
             "end": str(df["_date"].max().date()),
@@ -2798,8 +2770,9 @@ def calculate_full_price_vs_sale_monthly(
         "base_week": base_week,
         "months": months,
         "granularity": "month",
-        "source": "revenue_over_time",
+        "source": "pricing_type",
         "files_used": history["files_used"],
+        "ignored_files": history.get("ignored_files", []),
     }
     if df.empty:
         return {**base_out, "has_last_year": False, "months_data": [], "ytd": None}

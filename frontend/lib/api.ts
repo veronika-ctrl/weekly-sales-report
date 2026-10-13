@@ -1321,10 +1321,14 @@ export interface FullPriceExclMetrics {
   full_price: number
   compare_at_price_sale: number
   discount_code_auto: number
+  subscription_discount?: number
   both: number
   price_drop_sale: number
+  discounted?: number
   total: number
   discount_amount: number
+  markdown_amount?: number
+  all_orders_discount?: number
   full_price_share_pct: number | null
   exchange_orders: number
   exchange_gross_value: number
@@ -1446,6 +1450,67 @@ export async function getDiscountsHistoryInfo(baseWeek: string): Promise<Discoun
     throw new Error(`Failed to fetch discounts history info: ${response.statusText}`)
   }
   return response.json()
+}
+
+export interface DiscountTypeBucket {
+  id: string
+  label: string
+  discount_amount: number
+  orders: number
+  share_of_discounts_pct: number | null
+  pct_of_gross_sales: number | null
+  is_free_shipping: boolean
+  subgroups?: DiscountTypeBucket[]
+}
+
+export interface DiscountTypesPeriod {
+  key: string
+  week?: string
+  month?: string
+  start: string
+  end: string
+  gross_sales: number
+  discount_amount: number
+  orders: number
+  discount_of_gross_pct: number | null
+  groups: DiscountTypeBucket[]
+  last_year?: {
+    gross_sales: number
+    discount_amount: number
+    orders: number
+    discount_of_gross_pct: number | null
+    groups: DiscountTypeBucket[]
+  }
+}
+
+export interface DiscountTypesResponse {
+  base_week: string
+  granularity: string
+  note: string
+  files_used: string[]
+  currency?: string
+  fx?: FullPriceVsSaleFx | null
+  history_range?: { start: string; end: string } | null
+  periods: DiscountTypesPeriod[]
+}
+
+export async function getDiscountTypes(
+  baseWeek: string,
+  granularity: 'week' | 'month' = 'week',
+  numWeeks: number = 8,
+  months: number = 13,
+): Promise<DiscountTypesResponse> {
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    granularity,
+    num_weeks: String(numWeeks),
+    months: String(months),
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/discount-types?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/discount-types',
+  )
 }
 
 export async function resetDiscountsHistory(baseWeek: string): Promise<{ deleted: string[]; count: number }> {

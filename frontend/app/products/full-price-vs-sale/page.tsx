@@ -10,9 +10,11 @@ import {
   getFullPriceVsSaleMonthly,
   getFullPriceVsSaleExclExchanges,
   getFullPriceVsSaleExclExchangesMonthly,
+  getDiscountTypes,
   type FullPriceVsSaleResponse,
   type FullPriceVsSaleMonthlyResponse,
   type FullPriceExclExchangesResponse,
+  type DiscountTypesResponse,
 } from '@/lib/api'
 import {
   allOrdersSectionState,
@@ -25,6 +27,9 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis, YAxis } from '@/lib/recharts'
 import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
 import SalesMixChart from '@/components/SalesMixChart'
+import DiscountTypesSection from '@/components/DiscountTypesSection'
+
+const AMOUNTS_NOTE = 'Amounts incl. VAT, before returns.'
 
 type View = 'week' | 'month'
 
@@ -70,13 +75,20 @@ export default function FullPriceVsSalePage() {
   const [monthly, setMonthly] = useState<FullPriceVsSaleMonthlyResponse | null>(null)
   const [exclWeekly, setExclWeekly] = useState<FullPriceExclExchangesResponse | null>(null)
   const [exclMonthly, setExclMonthly] = useState<FullPriceExclExchangesResponse | null>(null)
+  const [typesWeekly, setTypesWeekly] = useState<DiscountTypesResponse | null>(null)
+  const [typesMonthly, setTypesMonthly] = useState<DiscountTypesResponse | null>(null)
   const [allOrdersLoading, setAllOrdersLoading] = useState({ weekly: false, monthly: false })
   const [exclLoading, setExclLoading] = useState({ weekly: false, monthly: false })
+  const [typesLoading, setTypesLoading] = useState({ weekly: false, monthly: false })
   const [allOrdersErrors, setAllOrdersErrors] = useState<{ weekly: string | null; monthly: string | null }>({
     weekly: null,
     monthly: null,
   })
   const [exclErrors, setExclErrors] = useState<{ weekly: string | null; monthly: string | null }>({
+    weekly: null,
+    monthly: null,
+  })
+  const [typesErrors, setTypesErrors] = useState<{ weekly: string | null; monthly: string | null }>({
     weekly: null,
     monthly: null,
   })
@@ -88,10 +100,14 @@ export default function FullPriceVsSalePage() {
     setMonthly(null)
     setExclWeekly(null)
     setExclMonthly(null)
+    setTypesWeekly(null)
+    setTypesMonthly(null)
     setAllOrdersErrors({ weekly: null, monthly: null })
     setExclErrors({ weekly: null, monthly: null })
+    setTypesErrors({ weekly: null, monthly: null })
     setAllOrdersLoading({ weekly: true, monthly: true })
     setExclLoading({ weekly: true, monthly: true })
+    setTypesLoading({ weekly: true, monthly: true })
 
     const loadAllOrders = async () => {
       const weeklyResult = await settleLoad(
@@ -149,8 +165,36 @@ export default function FullPriceVsSalePage() {
       setExclLoading((prev) => ({ ...prev, monthly: false }))
     }
 
-    // Two streams, not four parallel pandas jobs on a single Render worker.
-    void Promise.all([loadAllOrders(), loadExcl()])
+    const loadTypes = async () => {
+      const weeklyResult = await settleLoad(
+        () => getDiscountTypes(baseWeek, 'week', 8),
+        '/api/discounts/discount-types',
+        180_000,
+      )
+      if (cancelled) return
+      if (weeklyResult.ok) setTypesWeekly(weeklyResult.value)
+      else {
+        setTypesWeekly(null)
+        setTypesErrors((prev) => ({ ...prev, weekly: weeklyResult.error }))
+      }
+      setTypesLoading((prev) => ({ ...prev, weekly: false }))
+
+      const monthlyResult = await settleLoad(
+        () => getDiscountTypes(baseWeek, 'month', 8, 13),
+        '/api/discounts/discount-types?granularity=month',
+        180_000,
+      )
+      if (cancelled) return
+      if (monthlyResult.ok) setTypesMonthly(monthlyResult.value)
+      else {
+        setTypesMonthly(null)
+        setTypesErrors((prev) => ({ ...prev, monthly: monthlyResult.error }))
+      }
+      setTypesLoading((prev) => ({ ...prev, monthly: false }))
+    }
+
+    // Three light streams: all-orders + excl share one source; discount types are small CSVs.
+    void Promise.all([loadAllOrders(), loadExcl(), loadTypes()])
     return () => {
       cancelled = true
     }
@@ -406,7 +450,7 @@ export default function FullPriceVsSalePage() {
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
                       Sum of daily &quot;Total&quot; column (all sale types). YoY % is total net sales growth, not
-                      full-price-only growth.
+                      full-price-only growth. Amounts incl. VAT, before returns.
                     </p>
                   </CardContent>
                 </Card>
@@ -509,6 +553,7 @@ export default function FullPriceVsSalePage() {
                     <Bar dataKey="discounted" stackId="a" fill="#F97316" name="Discounted" isAnimationActive={isAnimationActive} />
                   </BarChart>
                 </ChartContainer>
+                <p className="text-[11px] text-muted-foreground mt-2">{AMOUNTS_NOTE}</p>
               </CardContent>
             </Card>
           </div>
@@ -597,6 +642,7 @@ export default function FullPriceVsSalePage() {
                       ))}
                 </tbody>
               </table>
+              <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_NOTE}</p>
             </CardContent>
           </Card>
         </>
@@ -609,6 +655,14 @@ export default function FullPriceVsSalePage() {
         monthly={exclMonthly}
         state={exclState}
         error={exclError}
+      />
+
+      <DiscountTypesSection
+        view={view}
+        weekly={typesWeekly}
+        monthly={typesMonthly}
+        loading={view === 'week' ? typesLoading.weekly : typesLoading.monthly}
+        error={view === 'week' ? typesErrors.weekly : typesErrors.monthly}
       />
     </div>
   )

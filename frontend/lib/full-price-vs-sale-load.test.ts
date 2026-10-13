@@ -205,6 +205,26 @@ describe('discount share UI wiring', () => {
   })
 })
 
+describe('amount footnote and discount types', () => {
+  it('keeps existing slides and adds VAT footnote plus discount-types section', () => {
+    const page = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../app/products/full-price-vs-sale/page.tsx'),
+      'utf8',
+    )
+    const types = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/DiscountTypesSection.tsx'),
+      'utf8',
+    )
+    assert.match(page, /AMOUNTS_NOTE|Amounts incl\. VAT, before returns\./)
+    assert.match(page, /DiscountTypesSection/)
+    assert.match(page, /SalesMixChart/)
+    assert.match(page, /FullPriceExclExchangesSection/)
+    assert.match(types, /data-testid="discount-types-section"/)
+    assert.match(types, /Codes and manual discounts only/)
+    assert.match(types, /Free shipping shows order/)
+  })
+})
+
 describe('sales mix UI wiring', () => {
   it('places 100% sales-mix stacks once on the page, not duplicated in the exchanges section', () => {
     const page = readFileSync(
@@ -259,6 +279,7 @@ describe('full price API client', () => {
     'getFullPriceVsSaleMonthly',
     'getFullPriceVsSaleExclExchanges',
     'getFullPriceVsSaleExclExchangesMonthly',
+    'getDiscountTypes',
   ]) {
     it(`${name} uses fetchJsonWithTimeout (credentials + timeout)`, () => {
       const body = exportedFnBody(name)
