@@ -2,10 +2,9 @@
 
 import type { DiscountTypesPeriod, DiscountTypesResponse, DiscountTypeBucket } from '@/lib/api'
 import type { SectionViewState } from '@/lib/full-price-vs-sale-load'
+import { monthlyTypesLayout, SHOPIFY_GROSS_EXCL_VAT_NOTE } from '@/lib/full-price-presentation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
-
-const AMOUNTS_NOTE = 'Amounts incl. VAT, before returns.'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -64,6 +63,50 @@ function GroupRows({
   )
 }
 
+function ByTypeCard({
+  title,
+  period,
+  testId,
+  extraNote,
+}: {
+  title: string
+  period: DiscountTypesPeriod
+  testId?: string
+  extraNote?: string
+}) {
+  return (
+    <Card data-testid={testId}>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {extraNote ? `${extraNote} · ` : null}
+          Total {thousands(period.discount_amount)} · {pct(period.discount_of_gross_pct)} of gross{' '}
+          {thousands(period.gross_sales)} · LY {thousands(period.last_year?.discount_amount)} ·{' '}
+          {pct(period.last_year?.discount_of_gross_pct)} of LY gross
+        </p>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="py-2 pr-4 font-medium">Type</th>
+              <th className="py-2 px-3 font-medium text-right">Discount</th>
+              <th className="py-2 px-3 font-medium text-right">Orders</th>
+              <th className="py-2 px-3 font-medium text-right">Share of discounts</th>
+              <th className="py-2 px-3 font-medium text-right">% of gross</th>
+              <th className="py-2 pl-3 font-medium text-right">LY discount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <GroupRows groups={period.groups} lyGroups={period.last_year?.groups} />
+          </tbody>
+        </table>
+        <p className="text-[11px] text-muted-foreground mt-3">{SHOPIFY_GROSS_EXCL_VAT_NOTE}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DiscountTypesSection({
   view,
   weekly,
@@ -79,8 +122,10 @@ export default function DiscountTypesSection({
 }) {
   const data = view === 'week' ? weekly : monthly
   const periods = data?.periods || []
-  const periodsAsc = [...periods].sort((a, b) => String(a.end).localeCompare(String(b.end)))
-  const latest: DiscountTypesPeriod | undefined = periodsAsc[periodsAsc.length - 1]
+  const weekPeriodsAsc = [...periods].sort((a, b) => String(a.end).localeCompare(String(b.end)))
+  const monthLayout = monthlyTypesLayout(periods)
+  const periodsAsc = view === 'week' ? weekPeriodsAsc : monthLayout.periodsAsc
+  const latestWeek: DiscountTypesPeriod | undefined = weekPeriodsAsc[weekPeriodsAsc.length - 1]
   const periodLabel = (p: DiscountTypesPeriod) =>
     view === 'week' ? weekLabel(p.week || p.key) : monthLabel(p.month || p.key)
   const state: SectionViewState = loading
@@ -93,17 +138,19 @@ export default function DiscountTypesSection({
           ? 'empty'
           : 'ready'
 
+  const slideTitle = view === 'week' ? 'Discount Types – Weekly' : 'Discount Types – Monthly'
+
   return (
     <div className="space-y-4 pt-2" data-testid="discount-types-section">
       <div>
-        <h3 className="text-base font-semibold text-gray-900">Discount types</h3>
+        <h3 className="text-base font-semibold text-gray-900">{slideTitle}</h3>
         <p className="text-sm text-muted-foreground mt-1">
           {data?.note ||
             'Codes and manual discounts only; lowered prices (markdowns) are shown on the Full Price vs Sale slides.'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Last {view === 'week' ? '8 ISO weeks' : '13 months'} vs last year. Free shipping shows order
-          counts only (0 value). {AMOUNTS_NOTE}
+          counts only (0 value). {SHOPIFY_GROSS_EXCL_VAT_NOTE}
         </p>
       </div>
 
@@ -118,7 +165,7 @@ export default function DiscountTypesSection({
         <div className="rounded-md border bg-muted/40 p-6 text-sm text-muted-foreground">
           No discount-type files found. Expected under weekly_report/data/discount_types/.
         </div>
-      ) : latest ? (
+      ) : periodsAsc.length > 0 ? (
         <>
           <Card>
             <CardHeader>
@@ -156,39 +203,33 @@ export default function DiscountTypesSection({
                   ))}
                 </tbody>
               </table>
-              <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_NOTE}</p>
+              <p className="text-[11px] text-muted-foreground mt-3">{SHOPIFY_GROSS_EXCL_VAT_NOTE}</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">
-                {periodLabel(latest)} · by type (SEK ’000)
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Total {thousands(latest.discount_amount)} · {pct(latest.discount_of_gross_pct)} of gross{' '}
-                {thousands(latest.gross_sales)} · LY {thousands(latest.last_year?.discount_amount)} ·{' '}
-                {pct(latest.last_year?.discount_of_gross_pct)} of LY gross
-              </p>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Type</th>
-                    <th className="py-2 px-3 font-medium text-right">Discount</th>
-                    <th className="py-2 px-3 font-medium text-right">Orders</th>
-                    <th className="py-2 px-3 font-medium text-right">Share of discounts</th>
-                    <th className="py-2 px-3 font-medium text-right">% of gross</th>
-                    <th className="py-2 pl-3 font-medium text-right">LY discount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <GroupRows groups={latest.groups} lyGroups={latest.last_year?.groups} />
-                </tbody>
-              </table>
-              <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_NOTE}</p>
-            </CardContent>
-          </Card>
+          {view === 'week' && latestWeek ? (
+            <ByTypeCard
+              title="Discount Types – Weekly"
+              period={latestWeek}
+              extraNote={periodLabel(latestWeek)}
+              testId="discount-types-weekly"
+            />
+          ) : null}
+          {view === 'month' && monthLayout.primary ? (
+            <ByTypeCard
+              title="Discount Types – Monthly"
+              period={monthLayout.primary}
+              extraNote={`${periodLabel(monthLayout.primary)} vs same month last year`}
+              testId="discount-types-last-full-month"
+            />
+          ) : null}
+          {view === 'month' && monthLayout.mtd ? (
+            <ByTypeCard
+              title={`${periodLabel(monthLayout.mtd)} month-to-date`}
+              period={monthLayout.mtd}
+              extraNote={`${monthLayout.mtd.start} → ${monthLayout.mtd.end}`}
+              testId="discount-types-mtd"
+            />
+          ) : null}
         </>
       ) : null}
     </div>

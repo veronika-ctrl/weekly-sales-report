@@ -206,7 +206,7 @@ describe('discount share UI wiring', () => {
 })
 
 describe('amount footnote and discount types', () => {
-  it('keeps existing slides and adds VAT footnote plus discount-types section', () => {
+  it('keeps VAT footnote on Full Price vs Sale slides and Shopify excl. VAT on discount types', () => {
     const page = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), '../app/products/full-price-vs-sale/page.tsx'),
       'utf8',
@@ -215,13 +215,17 @@ describe('amount footnote and discount types', () => {
       join(dirname(fileURLToPath(import.meta.url)), '../components/DiscountTypesSection.tsx'),
       'utf8',
     )
-    assert.match(page, /AMOUNTS_NOTE|Amounts incl\. VAT, before returns\./)
+    assert.match(page, /AMOUNTS_INCL_VAT_NOTE|Amounts incl\. VAT, before returns\./)
     assert.match(page, /DiscountTypesSection/)
     assert.match(page, /SalesMixChart/)
     assert.match(page, /FullPriceExclExchangesSection/)
     assert.match(types, /data-testid="discount-types-section"/)
     assert.match(types, /Codes and manual discounts only/)
     assert.match(types, /Free shipping shows order/)
+    assert.match(types, /SHOPIFY_GROSS_EXCL_VAT_NOTE|Shopify gross sales and discounts, excl\. VAT\./)
+    assert.doesNotMatch(types, /Amounts incl\. VAT, before returns\./)
+    assert.match(types, /Discount Types – Monthly/)
+    assert.match(types, /Discount Types – Weekly/)
   })
 })
 
@@ -257,6 +261,8 @@ describe('sales mix UI wiring', () => {
     assert.match(chart, /dataKey="promo"/)
     assert.match(chart, /AfterShip exchanges/)
     assert.match(chart, /Promotional discount/)
+    assert.match(chart, /formatMixAxisTick/)
+    assert.match(chart, /MIX_AXIS_TICKS/)
     assert.match(formula, /excl\. Total \+ Exchange Gross Value/)
     assert.match(formula, /share of sales, not exchange credits/)
     assert.doesNotMatch(chart, /exchange credits ÷ all-orders discount/)
