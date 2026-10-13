@@ -223,6 +223,17 @@ describe('amount footnote and discount types', () => {
     assert.match(types, /Codes and manual discounts only/)
     assert.match(types, /Free shipping shows order/)
   })
+
+  it('indents every group subgroup, not only Klaviyo', () => {
+    const types = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/DiscountTypesSection.tsx'),
+      'utf8',
+    )
+    assert.match(types, /for \(const g of groups\)/)
+    assert.match(types, /for \(const sub of g\.subgroups/)
+    assert.match(types, /indent \? 'pl-6 text-muted-foreground'/)
+    assert.doesNotMatch(types, /g\.id === ['"]klaviyo['"]/)
+  })
 })
 
 describe('sales mix UI wiring', () => {

@@ -6,6 +6,7 @@ Mapping file wins over the daily file's group/subgroup when code_or_title matche
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -20,28 +21,83 @@ NOTE = (
     "on the Full Price vs Sale slides."
 )
 
+# Display order only. Aliases match strings in the bundled mapping/daily CSVs
+# (including the numeric prefix). Old labels stay as aliases so prior files still map.
 DISPLAY_GROUPS: List[Tuple[str, str, Tuple[str, ...]]] = [
+    ("aftership", "AfterShip exchanges", ("0 AfterShip exchanges", "AfterShip exchanges")),
     ("klaviyo", "Klaviyo", ("1 Klaviyo", "Klaviyo")),
     ("customer_care", "Customer care", ("2 Customer care", "Customer care")),
     ("conjured", "Conjured referral", ("3 Conjured referral", "Conjured referral")),
-    ("aftership", "AfterShip exchanges", ("0 AfterShip exchanges", "AfterShip exchanges")),
-    ("internal", "Internal friends & PR", ("5 Internal, friends & PR", "5 Internal friends & PR", "Internal friends & PR")),
     ("campaign", "Campaign codes", ("4 Campaign codes", "Campaign codes")),
+    (
+        "investors",
+        "Investors, team, PR & friends",
+        (
+            "5 Investors, team, PR & friends",
+            "Investors, team, PR & friends",
+            "5 Internal, friends & PR",
+            "5 Internal friends & PR",
+            "Internal friends & PR",
+        ),
+    ),
     ("test", "Test orders", ("6 Test orders", "Test orders")),
-    ("other", "Other", ("7 Other / unknown", "Other / unknown", "Other")),
+    ("subscription", "Subscription codes", ("7 Subscription codes", "Subscription codes")),
+    ("other", "Other / unknown", ("8 Other / unknown", "7 Other / unknown", "Other / unknown", "Other")),
 ]
 
-KLAVIYO_SUBGROUPS: List[Tuple[str, str, Tuple[str, ...], bool]] = [
-    ("welcome_code", "Welcome code", ("Welcome code",), False),
-    ("memories", "Memories", ("Memories",), False),
-    ("inactive_winback", "Inactive Winback", ("Inactive Winback",), False),
-    (
-        "free_shipping",
-        "Abandoned checkout / free shipping",
-        ("Abandoned checkout / free shipping (FS-)", "Abandoned checkout / free shipping"),
-        True,
-    ),
-]
+# Curated subgroups always shown (even at 0), same pattern as Klaviyo.
+# Groups without an entry still emit whatever subgroups appear in the window.
+DISPLAY_SUBGROUPS: Dict[str, List[Tuple[str, str, Tuple[str, ...], bool]]] = {
+    "aftership": [
+        ("aftership_exchange_orders", "AfterShip exchange orders", ("AfterShip exchange orders",), False),
+        ("manual_exchange_codes", "Manual exchange codes", ("Manual exchange codes",), False),
+    ],
+    "klaviyo": [
+        ("welcome_code", "Welcome code", ("Welcome code",), False),
+        ("memories", "Memories", ("Memories",), False),
+        ("inactive_winback", "Inactive Winback", ("Inactive Winback",), False),
+        (
+            "free_shipping",
+            "Abandoned checkout / free shipping",
+            ("Abandoned checkout / free shipping (FS-)", "Abandoned checkout / free shipping"),
+            True,
+        ),
+    ],
+    "customer_care": [
+        (
+            "manual_discount",
+            "Manual discount on order (draft/edit)",
+            ("Manual discount on order (draft/edit)",),
+            False,
+        ),
+        ("named_care_codes", "Named / care codes", ("Named / care codes",), False),
+    ],
+    "investors": [
+        (
+            "investors_owner_founder",
+            "Investors, owner & founder",
+            ("Investors, owner & founder",),
+            False,
+        ),
+        ("team", "Team", ("Team",), False),
+        ("pr", "PR", ("PR",), False),
+        (
+            "marketing_creative",
+            "Marketing (creative team)",
+            ("Marketing (creative team)",),
+            False,
+        ),
+        ("friends_family", "Friends & family", ("Friends & family",), False),
+        (
+            "other_named",
+            "Other named codes (to confirm)",
+            ("Other named codes (to confirm)",),
+            False,
+        ),
+    ],
+}
+
+KLAVIYO_SUBGROUPS = DISPLAY_SUBGROUPS["klaviyo"]
 
 
 def _bundled_dir() -> Path:
@@ -129,6 +185,92 @@ def _klaviyo_subgroup_id(raw: str) -> Optional[str]:
     return None
 
 
+def _slug_sub_id(raw: str) -> str:
+    text = str(raw or "").strip().lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    return slug or "unspecified"
+
+
+def _raw_subgroup(value: Any) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() in ("", "nan", "none") else text
+
+
+def _resolve_sub(gid: str, raw: Any) -> Tuple[str, str, bool]:
+    """Return (id, display label, is_free_shipping) for a raw subgroup string."""
+    text = _raw_subgroup(raw)
+    for sid, label, aliases, free in DISPLAY_SUBGROUPS.get(gid, []):
+        if text in aliases or text == label:
+            return sid, label, free
+    if gid == "klaviyo":
+        fuzzy = _klaviyo_subgroup_id(text)
+        if fuzzy:
+            for sid, label, _aliases, free in KLAVIYO_SUBGROUPS:
+                if sid == fuzzy:
+                    return sid, label, free
+    return _slug_sub_id(text), text or "Unspecified", False
+
+
+def _empty_subgroups(gid: str, gross: float) -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": sid,
+            "label": slabel,
+            **_metrics(0.0, 0.0, 0.0, gross, free_shipping=free),
+        }
+        for sid, slabel, _a, free in DISPLAY_SUBGROUPS.get(gid, [])
+    ]
+
+
+def _group_subgroups(
+    gid: str,
+    dsub: pd.DataFrame,
+    amount_col: str,
+    orders_col: str,
+    total_disc: float,
+    gross: float,
+) -> List[Dict[str, Any]]:
+    """Curated subgroups first (always listed), then any extra names in this window."""
+    gslice = dsub[dsub["_group_id"] == gid] if (dsub is not None and not dsub.empty) else pd.DataFrame()
+    meta: Dict[str, Tuple[str, bool]] = {}
+    amounts: Dict[str, float] = {}
+    orders: Dict[str, float] = {}
+    if not gslice.empty:
+        for _, row in gslice.iterrows():
+            sid, label, free = _resolve_sub(gid, row["subgroup"] if "subgroup" in gslice.columns else "")
+            meta.setdefault(sid, (label, free))
+            amt = pd.to_numeric(row.get(amount_col, 0.0), errors="coerce")
+            ords = pd.to_numeric(row.get(orders_col, 0.0), errors="coerce")
+            amounts[sid] = amounts.get(sid, 0.0) + (0.0 if pd.isna(amt) else float(amt))
+            orders[sid] = orders.get(sid, 0.0) + (0.0 if pd.isna(ords) else float(ords))
+
+    seen: set = set()
+    out: List[Dict[str, Any]] = []
+    for sid, slabel, _a, free in DISPLAY_SUBGROUPS.get(gid, []):
+        seen.add(sid)
+        out.append(
+            {
+                "id": sid,
+                "label": slabel,
+                **_metrics(amounts.get(sid, 0.0), orders.get(sid, 0.0), total_disc, gross, free_shipping=free),
+            }
+        )
+    extras = [sid for sid in amounts if sid not in seen]
+    extras.sort(key=lambda sid: meta.get(sid, (sid, False))[0].lower())
+    for sid in extras:
+        label, free = meta.get(sid, (sid, False))
+        out.append(
+            {
+                "id": sid,
+                "label": label,
+                **_metrics(amounts.get(sid, 0.0), orders.get(sid, 0.0), total_disc, gross, free_shipping=free),
+            }
+        )
+    return out
+
+
 def load_discount_type_tables(data_root: Path) -> Dict[str, Any]:
     folders = discount_types_dirs(data_root)
     groups_path = _latest_matching(folders, "discount_groups_daily_")
@@ -214,22 +356,14 @@ def _window_slice(daily: pd.DataFrame, totals: pd.DataFrame, start: pd.Timestamp
         total_disc = 0.0
         groups_out: List[Dict[str, Any]] = []
         for gid, label, _aliases in DISPLAY_GROUPS:
-            row = {
-                "id": gid,
-                "label": label,
-                **_metrics(0.0, 0.0, 0.0, gross, free_shipping=False),
-                "subgroups": [],
-            }
-            if gid == "klaviyo":
-                row["subgroups"] = [
-                    {
-                        "id": sid,
-                        "label": slabel,
-                        **_metrics(0.0, 0.0, 0.0, gross, free_shipping=free),
-                    }
-                    for sid, slabel, _a, free in KLAVIYO_SUBGROUPS
-                ]
-            groups_out.append(row)
+            groups_out.append(
+                {
+                    "id": gid,
+                    "label": label,
+                    **_metrics(0.0, 0.0, 0.0, gross, free_shipping=False),
+                    "subgroups": _empty_subgroups(gid, gross),
+                }
+            )
         return {
             "gross_sales": gross,
             "discount_amount": 0.0,
@@ -247,12 +381,6 @@ def _window_slice(daily: pd.DataFrame, totals: pd.DataFrame, start: pd.Timestamp
     total_disc = float(pd.to_numeric(dsub[amount_col], errors="coerce").fillna(0.0).sum())
 
     grouped = dsub.groupby("_group_id", dropna=False)[[amount_col, orders_col]].sum()
-    klaviyo = dsub[dsub["_group_id"] == "klaviyo"].copy()
-    if not klaviyo.empty:
-        klaviyo["_sub_id"] = klaviyo["subgroup"].map(_klaviyo_subgroup_id)
-        k_grouped = klaviyo.groupby("_sub_id", dropna=False)[[amount_col, orders_col]].sum()
-    else:
-        k_grouped = pd.DataFrame(columns=[amount_col, orders_col])
 
     groups_out = []
     for gid, label, _aliases in DISPLAY_GROUPS:
@@ -262,30 +390,14 @@ def _window_slice(daily: pd.DataFrame, totals: pd.DataFrame, start: pd.Timestamp
         else:
             amt = 0.0
             ords = 0.0
-        entry = {
-            "id": gid,
-            "label": label,
-            **_metrics(amt, ords, total_disc, gross, free_shipping=False),
-            "subgroups": [],
-        }
-        if gid == "klaviyo":
-            subs = []
-            for sid, slabel, _a, free in KLAVIYO_SUBGROUPS:
-                if sid in k_grouped.index:
-                    samt = float(k_grouped.loc[sid, amount_col] or 0.0)
-                    sords = float(k_grouped.loc[sid, orders_col] or 0.0)
-                else:
-                    samt = 0.0
-                    sords = 0.0
-                subs.append(
-                    {
-                        "id": sid,
-                        "label": slabel,
-                        **_metrics(samt, sords, total_disc, gross, free_shipping=free),
-                    }
-                )
-            entry["subgroups"] = subs
-        groups_out.append(entry)
+        groups_out.append(
+            {
+                "id": gid,
+                "label": label,
+                **_metrics(amt, ords, total_disc, gross, free_shipping=False),
+                "subgroups": _group_subgroups(gid, dsub, amount_col, orders_col, total_disc, gross),
+            }
+        )
 
     disc_of_gross = (total_disc / gross * 100.0) if gross > 0 else None
     return {

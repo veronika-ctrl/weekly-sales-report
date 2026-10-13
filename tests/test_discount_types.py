@@ -69,13 +69,14 @@ def test_fixture_share_and_free_shipping(tmp_path: Path):
     assert sep["discount_of_gross_pct"] == pytest.approx(3.5)
     groups = {g["id"]: g for g in sep["groups"]}
     assert [g["id"] for g in sep["groups"]] == [
+        "aftership",
         "klaviyo",
         "customer_care",
         "conjured",
-        "aftership",
-        "internal",
         "campaign",
+        "investors",
         "test",
+        "subscription",
         "other",
     ]
     welcome = next(s for s in groups["klaviyo"]["subgroups"] if s["id"] == "welcome_code")
@@ -123,3 +124,88 @@ def test_weekly_has_last_year_slot():
     assert payload["periods"][0]["week"].endswith("-33") or payload["periods"][0]["week"] < "2026-40"
     assert "last_year" in payload["periods"][-1]
     assert payload["note"].startswith("Codes and manual discounts only")
+
+
+NEW_GROUP_ORDER = [
+    "aftership",
+    "klaviyo",
+    "customer_care",
+    "conjured",
+    "campaign",
+    "investors",
+    "test",
+    "subscription",
+    "other",
+]
+
+INVESTOR_SUBGROUP_LABELS = [
+    "Investors, owner & founder",
+    "Team",
+    "PR",
+    "Marketing (creative team)",
+    "Friends & family",
+    "Other named codes (to confirm)",
+]
+
+
+def test_new_groups_emit_indented_subgroups(tmp_path: Path):
+    folder = tmp_path / "discount_types"
+    folder.mkdir()
+    (folder / "discount_groups_daily_fix.csv").write_text(
+        "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
+        "2026-09-01,1 Klaviyo,Welcome code,Welcome-A,1,100,10\n"
+        "2026-09-01,1 Klaviyo,Memories,MEM-1,1,50,5\n"
+        '2026-09-01,"5 Investors, team, PR & friends",Team,TEAMKALLING,1,80,8\n'
+        '2026-09-01,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1,40,4\n'
+        "2026-09-01,4 Campaign codes,BLACK_FEAST,BLACK_FEAST,1,30,3\n"
+        "2026-09-01,7 Subscription codes,Subscription codes,AUTOMATIQUE,1,20,2\n"
+        "2026-09-01,8 Other / unknown,27CXD94R,27CXD94R,1,10,1\n",
+        encoding="utf-8",
+    )
+    (folder / "shopify_daily_totals_fix.csv").write_text(
+        "date,gross_sales_usd,discount_amount_usd,orders\n"
+        "2026-09-01,1000,33,10\n",
+        encoding="utf-8",
+    )
+    (folder / "discount_code_mapping.csv").write_text(
+        "code_or_title,group,subgroup,orders,discount_amount_usd\n",
+        encoding="utf-8",
+    )
+    payload = calculate_discount_types("2026-36", tmp_path, granularity="month", months=1)
+    sep = next(p for p in payload["periods"] if p["key"] == "2026-09")
+    assert [g["id"] for g in sep["groups"]] == NEW_GROUP_ORDER
+    groups = {g["id"]: g for g in sep["groups"]}
+
+    klaviyo_labels = [s["label"] for s in groups["klaviyo"]["subgroups"]]
+    assert klaviyo_labels[:4] == [
+        "Welcome code",
+        "Memories",
+        "Inactive Winback",
+        "Abandoned checkout / free shipping",
+    ]
+    assert groups["investors"]["discount_amount"] == pytest.approx(12.0)
+    assert [s["label"] for s in groups["investors"]["subgroups"]] == INVESTOR_SUBGROUP_LABELS
+    team = next(s for s in groups["investors"]["subgroups"] if s["id"] == "team")
+    pr = next(s for s in groups["investors"]["subgroups"] if s["id"] == "pr")
+    assert team["discount_amount"] == pytest.approx(8.0)
+    assert pr["discount_amount"] == pytest.approx(4.0)
+    assert any(s["label"] == "BLACK_FEAST" for s in groups["campaign"]["subgroups"])
+    assert any(s["label"] == "Subscription codes" for s in groups["subscription"]["subgroups"])
+    assert any(s["label"] == "27CXD94R" for s in groups["other"]["subgroups"])
+    assert groups["aftership"]["subgroups"]  # curated rows still present at 0
+
+
+def test_real_csv_investor_subgroups_present():
+    tables = load_discount_type_tables(Path("/tmp/does-not-exist"))
+    if not tables["files_used"]:
+        pytest.skip("bundled discount_types CSVs not available")
+    payload = calculate_discount_types("2026-40", Path("/tmp/does-not-exist"), granularity="month", months=14)
+    sep26 = _sep(payload, "2026-09")
+    assert [g["id"] for g in sep26["groups"]] == NEW_GROUP_ORDER
+    groups = {g["id"]: g for g in sep26["groups"]}
+    assert groups["investors"]["label"] == "Investors, team, PR & friends"
+    assert [s["label"] for s in groups["investors"]["subgroups"][:6]] == INVESTOR_SUBGROUP_LABELS
+    assert groups["investors"]["discount_amount"] == pytest.approx(2838, abs=1)
+    k_labels = [s["label"] for s in groups["klaviyo"]["subgroups"]]
+    assert "Welcome code" in k_labels
+    assert "Abandoned checkout / free shipping" in k_labels

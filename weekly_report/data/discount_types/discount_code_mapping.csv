@@ -5,57 +5,109 @@ AfterShip Returns exchange,0 AfterShip exchanges,AfterShip exchange orders,696.0
 #100262805_Exchange,0 AfterShip exchanges,Manual exchange codes,1.0,106.72
 Custom discount,2 Customer care,Manual discount on order (draft/edit),69.0,5370.26
 Warranty Replacement,2 Customer care,Manual discount on order (draft/edit),9.0,741.0
+compensation lost items,2 Customer care,Manual discount on order (draft/edit),1.0,458.54
+claim,2 Customer care,Manual discount on order (draft/edit),1.0,233.39
+Sale Item,2 Customer care,Manual discount on order (draft/edit),1.0,208.0
+same price as last order,2 Customer care,Manual discount on order (draft/edit),1.0,207.33
+ Due to missing items it original order,2 Customer care,Manual discount on order (draft/edit),1.0,207.12
+pricematch,2 Customer care,Manual discount on order (draft/edit),1.0,197.19
+Didn't recieve products,2 Customer care,Manual discount on order (draft/edit),1.0,188.7
+BF,2 Customer care,Manual discount on order (draft/edit),1.0,182.13
+sale,2 Customer care,Manual discount on order (draft/edit),1.0,161.68
+multipack discount,2 Customer care,Manual discount on order (draft/edit),2.0,155.0
+Due to missing items it original order,2 Customer care,Manual discount on order (draft/edit),1.0,152.8
+Summer Sale,2 Customer care,Manual discount on order (draft/edit),1.0,137.8
+already paid for 1 x 3-p - exchange order,2 Customer care,Manual discount on order (draft/edit),1.0,125.0
+Black Feast,2 Customer care,Manual discount on order (draft/edit),2.0,122.4
+same as last order,2 Customer care,Manual discount on order (draft/edit),1.0,119.8
+original order returned to warehouse,2 Customer care,Manual discount on order (draft/edit),1.0,111.46
+same price as stock out socks,2 Customer care,Manual discount on order (draft/edit),1.0,102.0
+Discount code + Black Friday ,2 Customer care,Manual discount on order (draft/edit),1.0,101.33
+Out Of Stock products,2 Customer care,Manual discount on order (draft/edit),1.0,100.54
+Damaged parcel,2 Customer care,Manual discount on order (draft/edit),0.0,96.76
+compensation late order,2 Customer care,Manual discount on order (draft/edit),1.0,92.6
+CDLP ÌNSIDER,2 Customer care,Manual discount on order (draft/edit),1.0,82.68
+BF sale,2 Customer care,Manual discount on order (draft/edit),1.0,77.44
+Multipack,2 Customer care,Manual discount on order (draft/edit),1.0,69.25
+"10% discount due to ""out of stock""",2 Customer care,Manual discount on order (draft/edit),1.0,66.7
+delay etc,2 Customer care,Manual discount on order (draft/edit),1.0,66.0
+Original order out of stock - same price discount,2 Customer care,Manual discount on order (draft/edit),1.0,61.74
+3-pack t-shirts ,2 Customer care,Manual discount on order (draft/edit),1.0,60.59
+12-pack,2 Customer care,Manual discount on order (draft/edit),1.0,59.39
+LOST ORDER,2 Customer care,Manual discount on order (draft/edit),1.0,49.23
+SALE,2 Customer care,Manual discount on order (draft/edit),1.0,49.23
+lost package,2 Customer care,Manual discount on order (draft/edit),1.0,47.41
+Lost package,2 Customer care,Manual discount on order (draft/edit),1.0,46.5
+oos,2 Customer care,Manual discount on order (draft/edit),2.0,41.76
+MEMORIES,2 Customer care,Manual discount on order (draft/edit),1.0,40.43
+welcome discount,2 Customer care,Manual discount on order (draft/edit),2.0,39.44
+3 pack,2 Customer care,Manual discount on order (draft/edit),1.0,33.6
+compensation for stock outs,2 Customer care,Manual discount on order (draft/edit),1.0,33.09
+Fedex Order Issues,2 Customer care,Manual discount on order (draft/edit),1.0,32.92
+för att endast betala mellanskillnaden för bytet,2 Customer care,Manual discount on order (draft/edit),1.0,32.15
+out of stock discount,2 Customer care,Manual discount on order (draft/edit),2.0,31.58
+Free Shipping,2 Customer care,Manual discount on order (draft/edit),1.0,30.6
+Item missing,2 Customer care,Manual discount on order (draft/edit),1.0,30.6
+Missing item,2 Customer care,Manual discount on order (draft/edit),1.0,30.51
+Welcome,2 Customer care,Manual discount on order (draft/edit),2.0,27.009999999999998
+Black Friday ,2 Customer care,Manual discount on order (draft/edit),1.0,24.59
+earlier price + extra because problems with order,2 Customer care,Manual discount on order (draft/edit),1.0,23.35
+12 Pack,2 Customer care,Manual discount on order (draft/edit),1.0,20.0
+10% welcome discount and 10% on top of that,2 Customer care,Manual discount on order (draft/edit),1.0,17.1
+Welcome discount,2 Customer care,Manual discount on order (draft/edit),1.0,16.5
+Got wrong products,2 Customer care,Manual discount on order (draft/edit),1.0,15.45
+socks out of stock,2 Customer care,Manual discount on order (draft/edit),1.0,14.76
+late delivery,2 Customer care,Manual discount on order (draft/edit),1.0,14.3
+Lost Order,2 Customer care,Manual discount on order (draft/edit),1.0,13.94
+didnt receive his previous order ,2 Customer care,Manual discount on order (draft/edit),1.0,13.91
+Apology discount for Out of Stock Army Green,2 Customer care,Manual discount on order (draft/edit),1.0,10.4
+Free shipping,2 Customer care,Manual discount on order (draft/edit),1.0,10.2
+return fee - exchange order,2 Customer care,Manual discount on order (draft/edit),1.0,9.65
+out of stock products,2 Customer care,Manual discount on order (draft/edit),1.0,9.42
+Apology discount,2 Customer care,Manual discount on order (draft/edit),1.0,8.0
+original order out of stock,2 Customer care,Manual discount on order (draft/edit),1.0,8.0
+package price,2 Customer care,Manual discount on order (draft/edit),1.0,7.31
+"late order and then returned, ",2 Customer care,Manual discount on order (draft/edit),1.0,6.76
+OOS,2 Customer care,Manual discount on order (draft/edit),1.0,4.89
+free shipping,2 Customer care,Manual discount on order (draft/edit),1.0,4.48
+cancelled order bc of out of stuck,2 Customer care,Manual discount on order (draft/edit),1.0,2.92
+OOS discount,2 Customer care,Manual discount on order (draft/edit),1.0,2.34
+TURNR-EXCHANGE,2 Customer care,Manual discount on order (draft/edit),29.0,0.0
 Vanessa Tryde_CDLP,2 Customer care,Named / care codes,1.0,625.85
 Thank_you_CDLP,2 Customer care,Named / care codes,1.0,585.83
 Filip Weidlitz_CDLP,2 Customer care,Named / care codes,1.0,462.68
-compensation lost items,2 Customer care,Manual discount on order (draft/edit),1.0,458.54
 PIETROCI_&_CDLP,2 Customer care,Named / care codes,1.0,292.5
 CDLP15_johnmurphy,2 Customer care,Named / care codes,1.0,283.64
 CDLP20_JamesBurnett,2 Customer care,Named / care codes,1.0,267.25
 David_Lesniak30,2 Customer care,Named / care codes,1.0,247.5
-claim,2 Customer care,Manual discount on order (draft/edit),1.0,233.39
 CDLP20_ERIKMANSSON,2 Customer care,Named / care codes,1.0,222.21
 CDLP_RIKARDSTRID,2 Customer care,Named / care codes,1.0,214.68
 Jonna_CDLP,2 Customer care,Named / care codes,1.0,211.74
-Sale Item,2 Customer care,Manual discount on order (draft/edit),1.0,208.0
 Märta_WELCOME_CDLP,2 Customer care,Named / care codes,1.0,207.88
-same price as last order,2 Customer care,Manual discount on order (draft/edit),1.0,207.33
- Due to missing items it original order,2 Customer care,Manual discount on order (draft/edit),1.0,207.12
 Katja_Miller_CDLP_2026,2 Customer care,Named / care codes,1.0,204.8
 Ulrika_CDLP,2 Customer care,Named / care codes,1.0,203.97
 Curran Johnston_CDLP_200,2 Customer care,Named / care codes,1.0,200.0
-pricematch,2 Customer care,Manual discount on order (draft/edit),1.0,197.19
 WELCOME_ERIKGUNTHER,2 Customer care,Named / care codes,1.0,195.87
 WELCOME_Christopher,2 Customer care,Named / care codes,1.0,195.53
-Didn't recieve products,2 Customer care,Manual discount on order (draft/edit),1.0,188.7
-BF,2 Customer care,Manual discount on order (draft/edit),1.0,182.13
 CDLP20_MAXXSHARP,2 Customer care,Named / care codes,1.0,178.0
 CDLPCLAIM_CHRISRHODES,2 Customer care,Named / care codes,1.0,175.0
 Lovise_CDLP,2 Customer care,Named / care codes,1.0,165.59
-sale,2 Customer care,Manual discount on order (draft/edit),1.0,161.68
 CDLP20_Cooper,2 Customer care,Named / care codes,1.0,155.84
-multipack discount,2 Customer care,Manual discount on order (draft/edit),2.0,155.0
-Due to missing items it original order,2 Customer care,Manual discount on order (draft/edit),1.0,152.8
 CDLP20_ScottBaldwin,2 Customer care,Named / care codes,1.0,152.03
 Malou_CDLP_2026,2 Customer care,Named / care codes,1.0,146.41
 CDLP20_WILLIAMMELNYK,2 Customer care,Named / care codes,1.0,140.0
 Jonatan_Wallin,2 Customer care,Named / care codes,1.0,138.7
 Helen_CDLP_2026,2 Customer care,Named / care codes,1.0,138.4
-Summer Sale,2 Customer care,Manual discount on order (draft/edit),1.0,137.8
 Sofia_Petersson,2 Customer care,Named / care codes,1.0,136.16
 CDLP100_VILDABROSTROM,2 Customer care,Named / care codes,1.0,132.54
 Welcome_Bianca_CDLP,2 Customer care,Named / care codes,1.0,128.0
 Welcome_Francesca_CDLP,2 Customer care,Named / care codes,1.0,127.9
 Welcome_Eeke_CDLP,2 Customer care,Named / care codes,1.0,127.86
-already paid for 1 x 3-p - exchange order,2 Customer care,Manual discount on order (draft/edit),1.0,125.0
-Black Feast,2 Customer care,Manual discount on order (draft/edit),2.0,122.4
 CDLPSWIM_NAVID,2 Customer care,Named / care codes,1.0,120.31
 WELCOME_Jessica_150,2 Customer care,Named / care codes,1.0,119.97
-same as last order,2 Customer care,Manual discount on order (draft/edit),1.0,119.8
 WELCOME_Ellinor_150,2 Customer care,Named / care codes,1.0,116.52
 Verena_Piontek,2 Customer care,Named / care codes,1.0,116.18
 CDLP15_SeanMcArdle,2 Customer care,Named / care codes,1.0,115.52
-original order returned to warehouse,2 Customer care,Manual discount on order (draft/edit),1.0,111.46
 CDLPCLAIM_GORDONBOEHM,2 Customer care,Named / care codes,1.0,110.0
 DIEDRIK_GERMER_CDLP_2026,2 Customer care,Named / care codes,1.0,108.49
 TINA PEYVANDI_CDLP_2026,2 Customer care,Named / care codes,1.0,108.36
@@ -63,23 +115,17 @@ Francesca_Furlan_CDLP_2026,2 Customer care,Named / care codes,1.0,107.79
 Hannan_Spasevski_CDLP_2026,2 Customer care,Named / care codes,1.0,107.25
 CDLP15_AbdulazizAlfalih,2 Customer care,Named / care codes,2.0,107.03
 CDLP_CLAIM_DanielMeloni,2 Customer care,Named / care codes,1.0,106.58
-Veronika_Kulikova,2 Customer care,Named / care codes,1.0,106.3
 CASSANDRA_DAHL_CDLP_2026,2 Customer care,Named / care codes,1.0,106.17
 Hanna_Wörman_CDLP_2026,2 Customer care,Named / care codes,1.0,105.97
 CDLP20_MichaelStracke,2 Customer care,Named / care codes,1.0,103.05
 MARCUS_DEMA_&_CDLP,2 Customer care,Named / care codes,1.0,102.94
 CDLP50_GABE,2 Customer care,Named / care codes,1.0,102.5
-same price as stock out socks,2 Customer care,Manual discount on order (draft/edit),1.0,102.0
-Discount code + Black Friday ,2 Customer care,Manual discount on order (draft/edit),1.0,101.33
-Out Of Stock products,2 Customer care,Manual discount on order (draft/edit),1.0,100.54
 CDLP100_RONANS,2 Customer care,Named / care codes,1.0,100.0
 CDLP10_DANIELBADDLEY,2 Customer care,Named / care codes,2.0,99.42999999999999
-Damaged parcel,2 Customer care,Manual discount on order (draft/edit),0.0,96.76
 MALTE_HÖGLUND_CDLP_2026,2 Customer care,Named / care codes,1.0,96.08
 CDLP95_Majmudar,2 Customer care,Named / care codes,1.0,95.0
 Jens Berndtson,2 Customer care,Named / care codes,1.0,94.08
 CDLP15_AliTavsanoglu,2 Customer care,Named / care codes,1.0,93.96
-compensation late order,2 Customer care,Manual discount on order (draft/edit),1.0,92.6
 Conor_Utri_CDLP_2026,2 Customer care,Named / care codes,1.0,91.5
 CDLP15_ChristofKoumoudos,2 Customer care,Named / care codes,1.0,90.29
 Michele_Ciacci,2 Customer care,Named / care codes,1.0,89.48
@@ -93,12 +139,10 @@ Andreas_Palm_CDLP_2026,2 Customer care,Named / care codes,1.0,87.99
 Annika_Tiden_CDLP_2026,2 Customer care,Named / care codes,1.0,87.99
 Märta_Hulden_CDLP_2026,2 Customer care,Named / care codes,1.0,87.99
 Erik_Günther_CDLP_2026,2 Customer care,Named / care codes,1.0,87.97
-Veronika_Kulikova_CDLP_2026,2 Customer care,Named / care codes,1.0,87.97
 Christopher_Dundeberg_CDLP_2026,2 Customer care,Named / care codes,1.0,87.96
 Eeke_Osterhof_CDLP_2026,2 Customer care,Named / care codes,1.0,87.96
 Kim_Norberg_CDLP_2026,2 Customer care,Named / care codes,1.0,87.96
 CDLP15_joseluisponce,2 Customer care,Named / care codes,1.0,86.1
-CDLP ÌNSIDER,2 Customer care,Manual discount on order (draft/edit),1.0,82.68
 CDLP20_CRAIGMATHIS,2 Customer care,Named / care codes,1.0,81.76
 LUKASKINDLER2_CDLP20,2 Customer care,Named / care codes,1.0,80.6
 Ingrid_Guttormsen,2 Customer care,Named / care codes,1.0,77.87
@@ -107,7 +151,6 @@ Axel_Samuelsson,2 Customer care,Named / care codes,1.0,77.52
 Daniel_Samojlik,2 Customer care,Named / care codes,1.0,77.52
 Agnes_Fowler,2 Customer care,Named / care codes,1.0,77.51
 Hanna_Wörman,2 Customer care,Named / care codes,1.0,77.51
-BF sale,2 Customer care,Manual discount on order (draft/edit),1.0,77.44
 Marcus Liljevall,2 Customer care,Named / care codes,1.0,77.4
 Alexander Af Wetterstedt,2 Customer care,Named / care codes,1.0,76.79
 Jonas Boman,2 Customer care,Named / care codes,1.0,76.68
@@ -124,26 +167,20 @@ CDLP15_ToddCrawford,2 Customer care,Named / care codes,1.0,72.0
 CDLP20_AbeOrzel,2 Customer care,Named / care codes,1.0,72.0
 CDLP10_JOHANNESSTEIG,2 Customer care,Named / care codes,1.0,71.25
 CDLP20_TOMWALLACE,2 Customer care,Named / care codes,1.0,70.5
-Multipack,2 Customer care,Manual discount on order (draft/edit),1.0,69.25
 CDLP20_DANIELWILL,2 Customer care,Named / care codes,1.0,68.92
 VILDALUCASCUSTOMERJOURNEY_RETURN,2 Customer care,Named / care codes,3.0,68.6
 CDLP15_FrancisBolzan,2 Customer care,Named / care codes,1.0,68.55
 CDLP20_ThomasRailhac,2 Customer care,Named / care codes,1.0,67.61
 CDLP20_FREDRIKHAMMAR,2 Customer care,Named / care codes,1.0,67.29
-"10% discount due to ""out of stock""",2 Customer care,Manual discount on order (draft/edit),1.0,66.7
-delay etc,2 Customer care,Manual discount on order (draft/edit),1.0,66.0
 CDLP20_ChristoferBorén,2 Customer care,Named / care codes,1.0,63.12
 CDLP10_NIKLASFREDRIK,2 Customer care,Named / care codes,1.0,62.88
 CDLP30_JAMESBRIGGS,2 Customer care,Named / care codes,1.0,61.96
 CDLP15_THOMASANDERSSON,2 Customer care,Named / care codes,1.0,61.8
-Original order out of stock - same price discount,2 Customer care,Manual discount on order (draft/edit),1.0,61.74
 Jannis_Koehn,2 Customer care,Named / care codes,1.0,61.2
 CDLP15_DavidHorisberger,2 Customer care,Named / care codes,1.0,61.17
 CDLP20_BenjaminNg,2 Customer care,Named / care codes,1.0,61.02
 CDLP25_Stelios,2 Customer care,Named / care codes,1.0,60.78
-3-pack t-shirts ,2 Customer care,Manual discount on order (draft/edit),1.0,60.59
 CDLP10_CarolinePaquet,2 Customer care,Named / care codes,1.0,60.59
-12-pack,2 Customer care,Manual discount on order (draft/edit),1.0,59.39
 CDLP15_StephenSemler,2 Customer care,Named / care codes,1.0,59.25
 CDLP20_michaelpoch,2 Customer care,Named / care codes,1.0,57.0
 CDLP20_ IrvingShaw,2 Customer care,Named / care codes,1.0,56.97
@@ -155,16 +192,12 @@ CDLP25_MORITZWELKER,2 Customer care,Named / care codes,1.0,52.55
 CDLP20_TristanTschaikowsky,2 Customer care,Named / care codes,1.0,52.33
 CDLP30_PATRICKOBRIEN,2 Customer care,Named / care codes,1.0,51.79
 CDLP15_SHAHINHOJATI,2 Customer care,Named / care codes,1.0,49.5
-LOST ORDER,2 Customer care,Manual discount on order (draft/edit),1.0,49.23
-SALE,2 Customer care,Manual discount on order (draft/edit),1.0,49.23
 CDLP15_DAMIEN,2 Customer care,Named / care codes,1.0,48.13
 CDLP10_barryguillaume,2 Customer care,Named / care codes,1.0,48.06
 CDLP10_KarlBaker,2 Customer care,Named / care codes,1.0,48.0
 CDLP30_HASSELBUSCH,2 Customer care,Named / care codes,1.0,47.77
-lost package,2 Customer care,Manual discount on order (draft/edit),1.0,47.41
 CDLP20_ChristianNava,2 Customer care,Named / care codes,1.0,47.0
 CDLP10_HITLAGER,2 Customer care,Named / care codes,1.0,46.57
-Lost package,2 Customer care,Manual discount on order (draft/edit),1.0,46.5
 CDLP10_ChengTeik,2 Customer care,Named / care codes,1.0,44.89
 CDLP15_ShawnBueche,2 Customer care,Named / care codes,1.0,44.25
 CDLP_CLAUSRANDRUP,2 Customer care,Named / care codes,1.0,43.65
@@ -173,15 +206,12 @@ CDLP15_Andersen,2 Customer care,Named / care codes,1.0,43.2
 CDLP25_PHILIPGLAZE,2 Customer care,Named / care codes,1.0,43.2
 CDLP15_FabianWolski,2 Customer care,Named / care codes,1.0,42.94
 CDLP25_STEAPHANBRAULT,2 Customer care,Named / care codes,1.0,42.51
-oos,2 Customer care,Manual discount on order (draft/edit),2.0,41.76
 Oleksandr_CDLP2026,2 Customer care,Named / care codes,1.0,41.66
 CDLP10_JasonBriscoe,2 Customer care,Named / care codes,1.0,41.5
 LUKASKINDLER_CDLP20,2 Customer care,Named / care codes,1.0,40.58
 CDLP15_EmmaNoreklint,2 Customer care,Named / care codes,1.0,40.54
 CDLP15_RobRasmussen,2 Customer care,Named / care codes,1.0,40.5
 CDLP15_WEISS,2 Customer care,Named / care codes,1.0,40.5
-MEMORIES,2 Customer care,Manual discount on order (draft/edit),1.0,40.43
-welcome discount,2 Customer care,Manual discount on order (draft/edit),2.0,39.44
 CDLP10_barry_guillaume,2 Customer care,Named / care codes,1.0,39.05
 CDLP15_BLOOM,2 Customer care,Named / care codes,1.0,38.6
 CDLP15_PierreJacob,2 Customer care,Named / care codes,1.0,38.39
@@ -200,26 +230,17 @@ CDLP10_Blauert,2 Customer care,Named / care codes,1.0,35.21
 CDLP15_KEVINCORBETT,2 Customer care,Named / care codes,1.0,34.4
 CDLP15_SamiSolh,2 Customer care,Named / care codes,1.0,33.92
 CDLP30_TOMWHITE,2 Customer care,Named / care codes,1.0,33.66
-3 pack,2 Customer care,Manual discount on order (draft/edit),1.0,33.6
-compensation for stock outs,2 Customer care,Manual discount on order (draft/edit),1.0,33.09
 CDLP20_AnthonyBangham,2 Customer care,Named / care codes,1.0,33.07
-Fedex Order Issues,2 Customer care,Manual discount on order (draft/edit),1.0,32.92
 CDLP20_TomasKazukauskas,2 Customer care,Named / care codes,1.0,32.7
-för att endast betala mellanskillnaden för bytet,2 Customer care,Manual discount on order (draft/edit),1.0,32.15
 CDLP15_CHRISTOPH,2 Customer care,Named / care codes,1.0,31.91
-out of stock discount,2 Customer care,Manual discount on order (draft/edit),2.0,31.58
 CDLP15_GRANIERI,2 Customer care,Named / care codes,1.0,31.5
 CDLP15_ArthurSaizeau,2 Customer care,Named / care codes,1.0,31.26
 CDLP15_YANG,2 Customer care,Named / care codes,1.0,31.14
 CDLP20_MARCDION,2 Customer care,Named / care codes,1.0,30.79
-Free Shipping,2 Customer care,Manual discount on order (draft/edit),1.0,30.6
-Item missing,2 Customer care,Manual discount on order (draft/edit),1.0,30.6
 CDLP15_AxteliusAlex,2 Customer care,Named / care codes,1.0,30.52
-Missing item,2 Customer care,Manual discount on order (draft/edit),1.0,30.51
 CDLP25_KyleLogsdon,2 Customer care,Named / care codes,1.0,30.0
 Nadine_CDLP_20,2 Customer care,Named / care codes,1.0,28.38
 CDLP20_ARNBORGTRUVE,2 Customer care,Named / care codes,1.0,27.52
-Welcome,2 Customer care,Manual discount on order (draft/edit),2.0,27.009999999999998
 CDLP15_ALECAMSELLEM,2 Customer care,Named / care codes,1.0,27.0
 CDLP15_BORTZ,2 Customer care,Named / care codes,1.0,27.0
 CDLP15_ANNAKRADETCKAIA,2 Customer care,Named / care codes,1.0,26.83
@@ -229,14 +250,12 @@ CDLP_gabriel10,2 Customer care,Named / care codes,1.0,25.91
 CDLP10_FLORIANSCHICKL,2 Customer care,Named / care codes,1.0,25.79
 CDLP10_BRUNNSHAGE,2 Customer care,Named / care codes,1.0,25.14
 CDLP10_ELBOGEN,2 Customer care,Named / care codes,1.0,25.0
-Black Friday ,2 Customer care,Manual discount on order (draft/edit),1.0,24.59
 CDLP10_ELANKRAMER,2 Customer care,Named / care codes,1.0,24.3
 CDLP20_ AdolfoPrina,2 Customer care,Named / care codes,1.0,24.0
 CDLP10_MathiasLindh,2 Customer care,Named / care codes,1.0,23.91
 CDLP10_Brian,2 Customer care,Named / care codes,1.0,23.7
 CDLP15_PhilipGlaze,2 Customer care,Named / care codes,1.0,23.42
 CDLP_Shayan10,2 Customer care,Named / care codes,1.0,23.4
-earlier price + extra because problems with order,2 Customer care,Manual discount on order (draft/edit),1.0,23.35
 CDLP15_KYLELOGSDON,2 Customer care,Named / care codes,1.0,22.8
 CDLP15_Bolam,2 Customer care,Named / care codes,1.0,22.68
 CDLP10_NOAHZAAGOUG,2 Customer care,Named / care codes,1.0,22.3
@@ -248,31 +267,23 @@ CDLP10_PATRICK,2 Customer care,Named / care codes,1.0,20.5
 Welcome10_70XGPDPR71QT,2 Customer care,Named / care codes,1.0,20.5
 Kalle_15%,2 Customer care,Named / care codes,1.0,20.27
 CDLP15_DavidTarino,2 Customer care,Named / care codes,1.0,20.25
-12 Pack,2 Customer care,Manual discount on order (draft/edit),1.0,20.0
 CDLP15_JimmyGrek,2 Customer care,Named / care codes,1.0,19.15
 CDLP15_BULENT1,2 Customer care,Named / care codes,1.0,18.81
 CDLP15_ValerOrlovsky,2 Customer care,Named / care codes,1.0,18.39
 CDLP15_BASHIRRIFAI,2 Customer care,Named / care codes,1.0,18.12
 CDLP10_FLAVIO,2 Customer care,Named / care codes,1.0,17.68
-10% welcome discount and 10% on top of that,2 Customer care,Manual discount on order (draft/edit),1.0,17.1
 CDLPwelcome_NathanPerry,2 Customer care,Named / care codes,1.0,17.0
 CDLP10_KIMFISK,2 Customer care,Named / care codes,1.0,16.58
-Welcome discount,2 Customer care,Manual discount on order (draft/edit),1.0,16.5
 CDLP10__MarcusFredriksson,2 Customer care,Named / care codes,1.0,16.36
 CDLP15_MARKLAING,2 Customer care,Named / care codes,1.0,16.13
 CDLP10_KristerKnutsson,2 Customer care,Named / care codes,1.0,15.82
-Got wrong products,2 Customer care,Manual discount on order (draft/edit),1.0,15.45
 CDLP10_JeffreyG,2 Customer care,Named / care codes,1.0,15.0
 CDLP20_RODERICKHERNDON,2 Customer care,Named / care codes,1.0,15.0
-socks out of stock,2 Customer care,Manual discount on order (draft/edit),1.0,14.76
-late delivery,2 Customer care,Manual discount on order (draft/edit),1.0,14.3
 CDLP15_DARIUSZ,2 Customer care,Named / care codes,1.0,14.25
 CDLP15_Rivers,2 Customer care,Named / care codes,1.0,14.25
 CDLP15_CallumShepherd,2 Customer care,Named / care codes,1.0,14.17
 CDLP10_Norman,2 Customer care,Named / care codes,1.0,14.02
 CDLP10_Wai-PingNg,2 Customer care,Named / care codes,1.0,14.0
-Lost Order,2 Customer care,Manual discount on order (draft/edit),1.0,13.94
-didnt receive his previous order ,2 Customer care,Manual discount on order (draft/edit),1.0,13.91
 CDLP10NEWS_LINDAHOLDO,2 Customer care,Named / care codes,1.0,13.83
 CDLP10_JullienBeranger,2 Customer care,Named / care codes,1.0,13.28
 CDLP10_ERICSSON,2 Customer care,Named / care codes,1.0,13.22
@@ -286,21 +297,13 @@ CDLP10_LARSMUENCH,2 Customer care,Named / care codes,1.0,11.32
 CDLP15_Ashcraft,2 Customer care,Named / care codes,1.0,11.25
 CDLP15_WilfredoCaceres,2 Customer care,Named / care codes,1.0,11.19
 CDLP10_KUKUSHKINA,2 Customer care,Named / care codes,1.0,10.43
-Apology discount for Out of Stock Army Green,2 Customer care,Manual discount on order (draft/edit),1.0,10.4
-Free shipping,2 Customer care,Manual discount on order (draft/edit),1.0,10.2
-return fee - exchange order,2 Customer care,Manual discount on order (draft/edit),1.0,9.65
 CDLP10_DanielCoe,2 Customer care,Named / care codes,1.0,9.55
 CDLP10_ArthurSaizeau,2 Customer care,Named / care codes,1.0,9.47
-out of stock products,2 Customer care,Manual discount on order (draft/edit),1.0,9.42
 LONGTIME_Schneider,2 Customer care,Named / care codes,1.0,8.66
 CDLP10_NanWang,2 Customer care,Named / care codes,1.0,8.07
 CDLP_Subscription,2 Customer care,Named / care codes,1.0,8.07
-Apology discount,2 Customer care,Manual discount on order (draft/edit),1.0,8.0
-original order out of stock,2 Customer care,Manual discount on order (draft/edit),1.0,8.0
 CDLP10_MARCUS,2 Customer care,Named / care codes,1.0,7.68
-package price,2 Customer care,Manual discount on order (draft/edit),1.0,7.31
 SORRY10,2 Customer care,Named / care codes,1.0,7.0
-"late order and then returned, ",2 Customer care,Manual discount on order (draft/edit),1.0,6.76
 CDLP15__AdamHargreaves,2 Customer care,Named / care codes,1.0,6.75
 CDLP10_ALEXANDERHUSCHE,2 Customer care,Named / care codes,1.0,6.0
 CDLP15_NickClements,2 Customer care,Named / care codes,1.0,6.0
@@ -308,12 +311,8 @@ CDLP15_ FrimanMaria,2 Customer care,Named / care codes,1.0,5.82
 CDLP_RON10,2 Customer care,Named / care codes,1.0,5.73
 CDLP15_JAKEKREMBIL,2 Customer care,Named / care codes,1.0,5.42
 CDLP15_ANDREW,2 Customer care,Named / care codes,1.0,5.41
-OOS,2 Customer care,Manual discount on order (draft/edit),1.0,4.89
 CDLP10_RYANHOLLY,2 Customer care,Named / care codes,1.0,4.5
-free shipping,2 Customer care,Manual discount on order (draft/edit),1.0,4.48
 CDLP10_RYAN,2 Customer care,Named / care codes,1.0,3.32
-cancelled order bc of out of stuck,2 Customer care,Manual discount on order (draft/edit),1.0,2.92
-OOS discount,2 Customer care,Manual discount on order (draft/edit),1.0,2.34
 CASSANDRAFREESHIP,2 Customer care,Named / care codes,0.0,0.0
 CDLPFREESHIPPING_MikkelEnevoldsen,2 Customer care,Named / care codes,0.0,0.0
 CDLPFREESHIP_ANDY,2 Customer care,Named / care codes,0.0,0.0
@@ -357,67 +356,68 @@ FreeShipping_StevenTam,2 Customer care,Named / care codes,0.0,0.0
 Free_Shipping_Christopher,2 Customer care,Named / care codes,0.0,0.0
 Free_Shipping_Exchange_Orders_Ingrid,2 Customer care,Named / care codes,0.0,0.0
 Freeshipping_junwooyeon,2 Customer care,Named / care codes,0.0,0.0
-TURNR-EXCHANGE,2 Customer care,Manual discount on order (draft/edit),29.0,0.0
 Welcome_Shipping,2 Customer care,Named / care codes,0.0,0.0
 BLACK_FEAST,4 Campaign codes,BLACK_FEAST,480.0,20538.59
-Un_Cadeau_15%,4 Campaign codes,Un_Cadeau_15%,693.0,18898.89
-EARLYBIRD,4 Campaign codes,EARLYBIRD,205.0,10679.22
-Summer_Sale_2026,4 Campaign codes,Summer_Sale_2026,89.0,6564.3
-Feedback_15%,4 Campaign codes,Feedback_15%,90.0,4221.3
-EXTRA10%,4 Campaign codes,EXTRA10%,239.0,4078.02
-SPRING_SALE_2025,4 Campaign codes,SPRING_SALE_2025,121.0,3198.1299999999997
-CDLP_Survey_15%,4 Campaign codes,CDLP_Survey_15%,42.0,1888.53
 CDLP_Feedback_15%,4 Campaign codes,CDLP_Feedback_15%,4.0,615.0699999999999
-EXTRA_10%,4 Campaign codes,EXTRA_10%,37.0,474.17
-MOTHERS_DAY,4 Campaign codes,MOTHERS_DAY,7.0,153.53
-Winter_Offer_2026,4 Campaign codes,Winter_Offer_2026,3.0,87.09
-CDLPfeedback_15%,4 Campaign codes,CDLPfeedback_15%,1.0,60.17
+CDLP_Survey_15%,4 Campaign codes,CDLP_Survey_15%,42.0,1888.53
 CDLPfeedback_15,4 Campaign codes,CDLPfeedback_15,1.0,48.92
+CDLPfeedback_15%,4 Campaign codes,CDLPfeedback_15%,1.0,60.17
+EARLYBIRD,4 Campaign codes,EARLYBIRD,205.0,10679.22
+EXTRA10%,4 Campaign codes,EXTRA10%,239.0,4078.02
+EXTRA_10%,4 Campaign codes,EXTRA_10%,37.0,474.17
+Feedback_15%,4 Campaign codes,Feedback_15%,90.0,4221.3
+MOTHERS_DAY,4 Campaign codes,MOTHERS_DAY,7.0,153.53
+SPRING_SALE_2025,4 Campaign codes,SPRING_SALE_2025,121.0,3198.1299999999997
 SUMMER_SALE_10%,4 Campaign codes,SUMMER_SALE_10%,5.0,42.13
-Frängsmyr_Knut100,"5 Internal, friends & PR",Frängsmyr_Knut100,41.0,37826.4
-CDLPINSIDER2025,"5 Internal, friends & PR",CDLPINSIDER2025,73.0,13162.12
-CDLPINSIDER,"5 Internal, friends & PR",CDLPINSIDER,41.0,7267.61
-CDLP_Friends2016,"5 Internal, friends & PR",CDLP_Friends2016,20.0,5074.36
-Veronika_100,"5 Internal, friends & PR",Veronika_100,6.0,3816.84
-CHRILLELARSON100,"5 Internal, friends & PR",CHRILLELARSON100,2.0,3142.48
-Jwan_Yosef_CDLP,"5 Internal, friends & PR",Jwan_Yosef_CDLP,3.0,3035.0
-CDLPINSIDER26!!,"5 Internal, friends & PR",CDLPINSIDER26!!,18.0,2893.02
-SOFIAFRIENDS,"5 Internal, friends & PR",SOFIAFRIENDS,38.0,2619.22
-Veronika_100%,"5 Internal, friends & PR",Veronika_100%,3.0,1929.41
-Robert Stilin_CDLP,"5 Internal, friends & PR",Robert Stilin_CDLP,4.0,1855.0
-TEAMKALLING,"5 Internal, friends & PR",TEAMKALLING,20.0,1852.0
-Andreas_CDLP,"5 Internal, friends & PR",Andreas_CDLP,2.0,1505.07
-Luigi_CDLP_350$_Monthly,"5 Internal, friends & PR",Luigi_CDLP_350$_Monthly,4.0,1403.64
-100%_WHS,"5 Internal, friends & PR",100%_WHS,2.0,951.77
-Friends&Family,"5 Internal, friends & PR",Friends&Family,15.0,807.76
-Subscription_Veronika_100,"5 Internal, friends & PR",Subscription_Veronika_100,7.0,650.68
-Bernardo_Silva,"5 Internal, friends & PR",Bernardo_Silva,4.0,592.65
-Soho_House20,"5 Internal, friends & PR",Soho_House20,14.0,467.47
-Subscription_Joakim,"5 Internal, friends & PR",Subscription_Joakim,4.0,449.64
-JANNE,"5 Internal, friends & PR",JANNE,7.0,328.11
-Frängsmyr_Knut100_2026,"5 Internal, friends & PR",Frängsmyr_Knut100_2026,1.0,205.66
-WELCOMECASSANDRADAHL100,"5 Internal, friends & PR",WELCOMECASSANDRADAHL100,2.0,171.28
-AUTOMATIQUE,"5 Internal, friends & PR",AUTOMATIQUE,20.0,170.73
-CDLPxNetlight,"5 Internal, friends & PR",CDLPxNetlight,2.0,106.27000000000001
-elliotautomatique,"5 Internal, friends & PR",elliotautomatique,1.0,93.15
-Alex Hamben_CDLPxDepict,"5 Internal, friends & PR",Alex Hamben_CDLPxDepict,1.0,77.58
-John Tan_CDLPxDepict,"5 Internal, friends & PR",John Tan_CDLPxDepict,1.0,77.54
-Hanna_100%,"5 Internal, friends & PR",Hanna_100%,1.0,49.9
-Jessica_Teamkalling,"5 Internal, friends & PR",Jessica_Teamkalling,1.0,42.62
-CORNELIACHRISGIFT,"5 Internal, friends & PR",CORNELIACHRISGIFT,0.0,0.0
-Free-Shipping-Friends,"5 Internal, friends & PR",Free-Shipping-Friends,0.0,0.0
-Valentine's Gifts,"5 Internal, friends & PR",Valentine's Gifts,0.0,0.0
-WHS-FreeShipping,"5 Internal, friends & PR",WHS-FreeShipping,0.0,0.0
+Summer_Sale_2026,4 Campaign codes,Summer_Sale_2026,89.0,6564.3
+Un_Cadeau_15%,4 Campaign codes,Un_Cadeau_15%,693.0,18898.89
+Winter_Offer_2026,4 Campaign codes,Winter_Offer_2026,3.0,87.09
+CDLP_Friends2016,"5 Investors, team, PR & friends",Friends & family,20.0,5074.36
+Friends&Family,"5 Investors, team, PR & friends",Friends & family,15.0,807.76
+Bernardo_Silva,"5 Investors, team, PR & friends",Friends & family,4.0,592.65
+Soho_House20,"5 Investors, team, PR & friends",Friends & family,14.0,467.47
+Subscription_Joakim,"5 Investors, team, PR & friends",Friends & family,4.0,449.64
+Free-Shipping-Friends,"5 Investors, team, PR & friends",Friends & family,0.0,0.0
+Frängsmyr_Knut100,"5 Investors, team, PR & friends","Investors, owner & founder",41.0,37826.4
+CDLPINSIDER2025,"5 Investors, team, PR & friends","Investors, owner & founder",73.0,13162.12
+CDLPINSIDER,"5 Investors, team, PR & friends","Investors, owner & founder",41.0,7267.61
+CHRILLELARSON100,"5 Investors, team, PR & friends","Investors, owner & founder",2.0,3142.48
+CDLPINSIDER26!!,"5 Investors, team, PR & friends","Investors, owner & founder",18.0,2893.02
+Andreas_CDLP,"5 Investors, team, PR & friends","Investors, owner & founder",2.0,1505.07
+Frängsmyr_Knut100_2026,"5 Investors, team, PR & friends","Investors, owner & founder",1.0,205.66
+Jwan_Yosef_CDLP,"5 Investors, team, PR & friends",Marketing (creative team),3.0,3035.0
+Robert Stilin_CDLP,"5 Investors, team, PR & friends",Marketing (creative team),4.0,1855.0
+Luigi_CDLP_350$_Monthly,"5 Investors, team, PR & friends",Other named codes (to confirm),4.0,1403.64
+JANNE,"5 Investors, team, PR & friends",Other named codes (to confirm),7.0,328.11
+WELCOMECASSANDRADAHL100,"5 Investors, team, PR & friends",Other named codes (to confirm),2.0,171.28
+CDLPxNetlight,"5 Investors, team, PR & friends",Other named codes (to confirm),2.0,106.27000000000001
+Alex Hamben_CDLPxDepict,"5 Investors, team, PR & friends",Other named codes (to confirm),1.0,77.58
+John Tan_CDLPxDepict,"5 Investors, team, PR & friends",Other named codes (to confirm),1.0,77.54
+Hanna_100%,"5 Investors, team, PR & friends",Other named codes (to confirm),1.0,49.9
+CORNELIACHRISGIFT,"5 Investors, team, PR & friends",Other named codes (to confirm),0.0,0.0
+Valentine's Gifts,"5 Investors, team, PR & friends",Other named codes (to confirm),0.0,0.0
+SOFIAFRIENDS,"5 Investors, team, PR & friends",PR,38.0,2619.22
+100%_WHS,"5 Investors, team, PR & friends",PR,2.0,951.77
+WHS-FreeShipping,"5 Investors, team, PR & friends",PR,0.0,0.0
+TEAMKALLING,"5 Investors, team, PR & friends",Team,20.0,1852.0
+Jessica_Teamkalling,"5 Investors, team, PR & friends",Team,1.0,42.62
+Veronika_100,6 Test orders,Test codes,6.0,3816.84
 TESTORDERSBYJOAKIM,6 Test orders,Test codes,20.0,2921.5299999999997
+Veronika_100%,6 Test orders,Test codes,3.0,1929.41
 WARENPOSTTEST,6 Test orders,Test codes,4.0,868.9100000000001
 Checkout_Test,6 Test orders,Test codes,1.0,720.11
+Subscription_Veronika_100,6 Test orders,Test codes,7.0,650.68
 Test_Store_Credits_Exchange,6 Test orders,Test codes,2.0,344.51
+Veronika_Kulikova,6 Test orders,Test codes,1.0,106.3
+Veronika_Kulikova_CDLP_2026,6 Test orders,Test codes,1.0,87.97
 Test_Order_Italy,6 Test orders,Test codes,1.0,64.63
 Hanna_Test,6 Test orders,Test codes,1.0,60.42
 Test_Withdrawal,6 Test orders,Test codes,1.0,45.8
 Test_Store_Credits_Paid,6 Test orders,Test codes,1.0,18.94
 Test_Withdrawal_Shipping,6 Test orders,Test codes,0.0,0.0
 WARENPOSTTEST_SHIPPING,6 Test orders,Test codes,0.0,0.0
-2W9JLQLP,7 Other / unknown,2W9JLQLP,1.0,48.69
-27CXD94R,7 Other / unknown,27CXD94R,1.0,19.9
-2MQHJKH3,7 Other / unknown,2MQHJKH3,1.0,13.71
+AUTOMATIQUE,7 Subscription codes,Subscription codes,20.0,170.73
+elliotautomatique,7 Subscription codes,Subscription codes,1.0,93.15
+27CXD94R,8 Other / unknown,27CXD94R,1.0,19.9
+2MQHJKH3,8 Other / unknown,2MQHJKH3,1.0,13.71
+2W9JLQLP,8 Other / unknown,2W9JLQLP,1.0,48.69
