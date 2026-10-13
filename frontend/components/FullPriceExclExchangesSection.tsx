@@ -243,6 +243,7 @@ export default function FullPriceExclExchangesSection({
                   })}
                 </tbody>
               </table>
+              <p className="text-[11px] text-muted-foreground mt-3">Amounts incl. VAT, before returns.</p>
             </CardContent>
           </Card>
         </>

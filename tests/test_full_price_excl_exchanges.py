@@ -26,12 +26,13 @@ HEADERS = (
     "Price Drop Sale,Total,Discount Amount,Full Price Share %,Exchange Orders,"
     "Exchange Gross Value,Exchange Discount,Exchange Net Revenue"
 )
+HEADERS_WITH_OPTIONAL = HEADERS + ",Subscription Discount,Markdown Amount"
 
 
 def _row(
     date: str,
     full: str = "100",
-    compare: str = "0",
+    compare: str | None = None,
     code: str = "0",
     both: str = "0",
     drop: str = "0",
@@ -42,15 +43,28 @@ def _row(
     egross: str = "0",
     edisc: str = "0",
     enet: str = "0",
+    subscription: str | None = None,
+    markdown: str | None = None,
 ) -> str:
-    return ",".join(
-        [date, full, compare, code, both, drop, total, discount, share, orders, egross, edisc, enet]
-    )
+    if compare is None:
+        try:
+            compare = str(float(total or 0) - float(full or 0))
+        except ValueError:
+            compare = "0"
+    cells = [date, full, compare, code, both, drop, total, discount, share, orders, egross, edisc, enet]
+    if subscription is not None or markdown is not None:
+        cells.append(subscription if subscription is not None else "0")
+        cells.append(markdown if markdown is not None else "0")
+    return ",".join(cells)
 
 
-def _write_csv(path: Path, rows: list[str]) -> None:
+def _write_csv(path: Path, rows: list[str], *, headers: str = HEADERS) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(HEADERS + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    path.write_text(headers + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+
+
+def _slot(tmp_path: Path, week: str = "2026-36", name: str = "september_2026.csv") -> Path:
+    return tmp_path / "raw" / week / FILE_TYPE / name
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +86,7 @@ def test_missing_headers_error(tmp_path: Path):
 
 
 def test_blank_numeric_becomes_zero(tmp_path: Path):
-    dest = tmp_path / "raw" / "2026-36" / FILE_TYPE / "week.csv"
+    dest = _slot(tmp_path)
     _write_csv(
         dest,
         [_row("2026-09-01", full="", compare="", total="", discount="", share="", orders="", egross="", edisc="", enet="")],
@@ -88,7 +102,7 @@ def test_blank_numeric_becomes_zero(tmp_path: Path):
 
 
 def test_percentage_parsing(tmp_path: Path):
-    dest = tmp_path / "raw" / "2026-36" / FILE_TYPE / "week.csv"
+    dest = _slot(tmp_path)
     _write_csv(
         dest,
         [
@@ -103,7 +117,7 @@ def test_percentage_parsing(tmp_path: Path):
 
 
 def test_zero_sales_dates_preserved(tmp_path: Path):
-    dest = tmp_path / "raw" / "2026-36" / FILE_TYPE / "week.csv"
+    dest = _slot(tmp_path)
     _write_csv(
         dest,
         [
@@ -118,37 +132,52 @@ def test_zero_sales_dates_preserved(tmp_path: Path):
     assert zero["_total"] == 0.0
 
 
-def test_upsert_by_date_replace_overlapping_append_new(tmp_path: Path):
-    first = tmp_path / "raw" / "2026-35" / FILE_TYPE / "full-price-vs-sale-excl-exchanges-2026-08-24-to-2026-08-30.csv"
+def test_own_month_wins_and_extra_days_are_dropped(tmp_path: Path):
+    """August file may include extra September days; September file owns Sep dates."""
+    august = _slot(tmp_path, "2026-41", "august_2026_full_exchanges.csv")
     _write_csv(
-        first,
+        august,
         [
             _row("2026-08-24", full="10", total="20", discount="1"),
             _row("2026-08-25", full="30", total="40", discount="2"),
+            _row("2026-09-01", full="1", total="1", discount="0"),  # extra day — ignore
         ],
     )
-    first.touch()
-    import time
-
-    time.sleep(0.02)
-    second = tmp_path / "raw" / "2026-36" / FILE_TYPE / "full-price-vs-sale-excl-exchanges-2026-08-25-to-2026-08-31.csv"
+    september = _slot(tmp_path, "2026-41", "september_2026.csv")
     _write_csv(
-        second,
+        september,
         [
-            _row("2026-08-25", full="99", total="100", discount="9"),
-            _row("2026-08-31", full="5", total="5", discount="0"),
+            _row("2026-09-01", full="99", total="100", discount="9"),
+            _row("2026-09-02", full="5", total="5", discount="0"),
         ],
     )
     hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
     by_date = {str(r["_date"].date()): r for _, r in hist["df"].iterrows()}
-    assert set(by_date) == {"2026-08-24", "2026-08-25", "2026-08-31"}
+    assert set(by_date) == {"2026-08-24", "2026-08-25", "2026-09-01", "2026-09-02"}
     assert by_date["2026-08-24"]["_full"] == 10.0
-    assert by_date["2026-08-25"]["_full"] == 99.0
-    assert by_date["2026-08-25"]["_total"] == 100.0
-    assert by_date["2026-08-31"]["_full"] == 5.0
+    assert by_date["2026-09-01"]["_full"] == 99.0
+    assert by_date["2026-09-01"]["_total"] == 100.0
 
 
-def test_no_bleed_into_all_orders_history(tmp_path: Path):
+def test_legacy_weekly_names_are_ignored(tmp_path: Path):
+    old = tmp_path / "raw" / "2026-40" / FILE_TYPE / "Full_Price_vs_Sale_W40.csv"
+    _write_csv(old, [_row("2026-09-28", full="50", total="100")])
+    exch = tmp_path / "raw" / "2026-40" / FILE_TYPE / "Exchanges_W40.csv"
+    _write_csv(exch, [_row("2026-09-29", full="1", total="1")])
+    hist_name = tmp_path / "raw" / "2026-40" / FILE_TYPE / "Exchanges_Historical_Data.csv"
+    _write_csv(hist_name, [_row("2026-09-30", full="2", total="2")])
+    dated = tmp_path / "raw" / "2026-40" / FILE_TYPE / "full-price-vs-sale-2024-01-01-to-2024-01-07.csv"
+    _write_csv(dated, [_row("2024-01-01", full="3", total="3")])
+    month = _slot(tmp_path, "2026-41", "september_2026.csv")
+    _write_csv(month, [_row("2026-09-15", full="80", total="100")])
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    dates = [str(d.date()) for d in hist["df"]["_date"]]
+    assert dates == ["2026-09-15"]
+    assert "Full_Price_vs_Sale_W40.csv" in hist.get("ignored_files", [])
+    assert any("W40" in n for n in hist.get("ignored_files", []))
+
+
+def test_discounts_slot_is_not_read(tmp_path: Path):
     discounts = tmp_path / "raw" / "2026-36" / "discounts" / "all-orders.csv"
     discounts.parent.mkdir(parents=True)
     discounts.write_text(
@@ -156,14 +185,17 @@ def test_no_bleed_into_all_orders_history(tmp_path: Path):
         "2026-09-01,80,20,100,10\n",
         encoding="utf-8",
     )
-    excl = tmp_path / "raw" / "2026-36" / FILE_TYPE / "excl.csv"
+    stray_month = tmp_path / "raw" / "2026-36" / "discounts" / "august_2026_full_exchanges.csv"
+    _write_csv(stray_month, [_row("2026-08-15", full="1", total="1")])
+    excl = _slot(tmp_path, "2026-41", "september_2026.csv")
     _write_csv(excl, [_row("2026-09-01", full="50", total="60", discount="5", orders="2", egross="40")])
 
     all_hist = load_revenue_over_time_history(tmp_path)
     excl_hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
     assert len(all_hist["df"]) == 1
-    assert float(all_hist["df"].iloc[0]["_full"]) == 80.0
-    assert float(all_hist["df"].iloc[0]["_total"]) == 100.0
+    assert float(all_hist["df"].iloc[0]["_full"]) == 50.0
+    assert float(all_hist["df"].iloc[0]["_total"]) == 60.0
+    assert float(all_hist["df"].iloc[0]["_discounted"]) == pytest.approx(10.0)
     assert len(excl_hist["df"]) == 1
     assert float(excl_hist["df"].iloc[0]["_full"]) == 50.0
 
@@ -251,7 +283,7 @@ def test_comparison_discount_share_fallback_without_all_orders():
 
 
 def test_period_and_daily_report(tmp_path: Path):
-    dest = tmp_path / "raw" / "2026-36" / FILE_TYPE / "week.csv"
+    dest = _slot(tmp_path)
     # ISO week 2026-36 is 2026-08-31 .. 2026-09-06
     _write_csv(
         dest,
@@ -260,19 +292,16 @@ def test_period_and_daily_report(tmp_path: Path):
             _row("2026-09-02", full="0", total="0", discount="0", share="0"),
         ],
     )
-    all_orders = tmp_path / "raw" / "2026-36" / "discounts" / "all.csv"
-    all_orders.parent.mkdir(parents=True, exist_ok=True)
-    all_orders.write_text(
-        "Date,Full Price,Total,Discount Amount\n2026-09-01,80,120,15\n2026-09-02,0,0,0\n",
-        encoding="utf-8",
-    )
     payload = calculate_full_price_vs_sale_excl_exchanges(
         "2026-36", tmp_path, num_weeks=1, granularity="week"
     )
     assert payload["period"] is not None
     assert payload["period"]["total"] == pytest.approx(100.0)
     assert payload["period"]["exchange_orders"] == 2
-    assert payload["period"]["comparison"]["total_incl"] == pytest.approx(120.0)
+    assert payload["period"]["discounted"] == pytest.approx(20.0)
+    # All-orders discount reconstructed from the same file: 10 + 5.
+    assert payload["period"]["comparison"]["discount_incl"] == pytest.approx(15.0)
+    assert payload["period"]["comparison"]["total_incl"] == pytest.approx(100.0)
     dates = [d["date"] for d in payload["days"]]
     assert "2026-09-01" in dates
     assert "2026-09-02" in dates
@@ -341,7 +370,7 @@ def test_upload_accepts_valid_headers_and_returns_date_range(tmp_path: Path, mon
 def test_weekly_series_period_total_is_not_latest_week_and_mix_stays_flat(tmp_path: Path):
     """8-week (here: 2-week) window share ≠ latest week; excluding 0-net exchanges does not lift FP%."""
     # ISO 2026-36 = Mon 2026-08-31; 2026-37 = Mon 2026-09-07.
-    dest = tmp_path / "raw" / "2026-37" / FILE_TYPE / "excl.csv"
+    dest = _slot(tmp_path, "2026-37", "september_2026.csv")
     _write_csv(
         dest,
         [
@@ -372,15 +401,6 @@ def test_weekly_series_period_total_is_not_latest_week_and_mix_stays_flat(tmp_pa
             ),
         ],
     )
-    all_orders = tmp_path / "raw" / "2026-37" / "discounts" / "all.csv"
-    all_orders.parent.mkdir(parents=True, exist_ok=True)
-    all_orders.write_text(
-        "Date,Full Price,Total,Discount Amount\n"
-        "2026-09-01,80,100,10\n"
-        "2026-09-08,40,100,30\n",
-        encoding="utf-8",
-    )
-
     payload = calculate_full_price_vs_sale_excl_exchanges(
         "2026-37", tmp_path, num_weeks=2, granularity="week"
     )
@@ -458,21 +478,17 @@ def test_sales_mix_is_share_of_sales_not_share_of_discount():
 
 
 def test_monthly_before_after_series(tmp_path: Path):
-    dest = tmp_path / "raw" / "2026-37" / FILE_TYPE / "excl.csv"
     _write_csv(
-        dest,
+        _slot(tmp_path, "2026-41", "august_2026.csv"),
         [
             _row("2026-08-15", full="70", total="100", discount="5", share="70", orders="1", egross="8", edisc="8", enet="0"),
-            _row("2026-09-08", full="50", total="100", discount="6", share="50", orders="1", egross="9", edisc="9", enet="0"),
         ],
     )
-    all_orders = tmp_path / "raw" / "2026-37" / "discounts" / "all.csv"
-    all_orders.parent.mkdir(parents=True, exist_ok=True)
-    all_orders.write_text(
-        "Date,Full Price,Total,Discount Amount\n"
-        "2026-08-15,70,100,5\n"
-        "2026-09-08,50,100,15\n",
-        encoding="utf-8",
+    _write_csv(
+        _slot(tmp_path, "2026-41", "september_2026.csv"),
+        [
+            _row("2026-09-08", full="50", total="100", discount="6", share="50", orders="1", egross="9", edisc="9", enet="0"),
+        ],
     )
     payload = calculate_full_price_vs_sale_excl_exchanges(
         "2026-37", tmp_path, months=2, granularity="month"
@@ -490,3 +506,87 @@ def test_monthly_before_after_series(tmp_path: Path):
     assert (
         sep["sales_mix_full_price_pct"] + sep["sales_mix_exchange_pct"] + sep["sales_mix_promo_pct"]
     ) == pytest.approx(100.0)
+
+
+def test_optional_headers_missing_are_zero_not_a_hard_fail(tmp_path: Path):
+    dest = _slot(tmp_path, "2026-41", "september_2026.csv")
+    _write_csv(dest, [_row("2026-09-01", full="80", total="100", discount="10")])
+    inspected = inspect_excl_exchanges_upload(dest)
+    assert inspected["missing_headers"] == []
+    assert inspected["optional_headers_present"]["Subscription Discount"] is False
+    assert inspected["optional_headers_present"]["Markdown Amount"] is False
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    row = hist["df"].iloc[0]
+    assert row["_subscription"] == 0.0
+    assert row["_markdown"] == 0.0
+    assert row["_discounted"] == pytest.approx(20.0)
+    assert row["_discount"] == pytest.approx(10.0)
+
+
+def test_discounted_is_explicit_sum_including_subscription(tmp_path: Path):
+    dest = _slot(tmp_path, "2026-41", "september_2026.csv")
+    _write_csv(
+        dest,
+        [
+            _row(
+                "2026-09-01",
+                full="50",
+                compare="10",
+                code="5",
+                both="3",
+                drop="2",
+                total="80",
+                discount="4",
+                subscription="7",
+                markdown="1",
+            )
+        ],
+        headers=HEADERS_WITH_OPTIONAL,
+    )
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    row = hist["df"].iloc[0]
+    # 10+5+7+3+2 = 27, not Total−Full (30).
+    assert row["_discounted"] == pytest.approx(27.0)
+    assert row["_discount"] == pytest.approx(5.0)  # 4 + 1 markdown
+    assert row["_all_orders_discount"] == pytest.approx(4.0)  # discount amount + exchange 0
+    payload = calculate_full_price_vs_sale_excl_exchanges("2026-36", tmp_path, num_weeks=1)
+    assert payload["period"]["discounted"] == pytest.approx(27.0)
+    assert payload["period"]["subscription_discount"] == pytest.approx(7.0)
+    assert payload["period"]["full_price_share_pct"] == pytest.approx(50.0 / 80.0 * 100.0)
+
+
+def test_typo_and_short_year_month_filenames(tmp_path: Path):
+    from weekly_report.src.metrics.pricing_history import parse_month_from_filename
+
+    assert parse_month_from_filename("january_2026_ful_exchanges.csv") == (2026, 1)
+    assert parse_month_from_filename("september_full_26.csv") == (2026, 9)
+    assert parse_month_from_filename("august_2026_full_exchanges.csv") == (2026, 8)
+    assert parse_month_from_filename("Full_Price_vs_Sale_W40.csv") is None
+    jan = _slot(tmp_path, "2026-41", "january_2026_ful_exchanges.csv")
+    _write_csv(
+        jan,
+        [
+            _row("2026-01-15", full="40", total="100"),
+            _row("2026-02-01", full="1", total="1"),  # extra day after January
+        ],
+    )
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    dates = [str(d.date()) for d in hist["df"]["_date"]]
+    assert dates == ["2026-01-15"]
+
+
+def test_weekly_continuation_file_keeps_mon_sun_only(tmp_path: Path):
+    # ISO 2026-41 = Mon 2026-10-05 .. Sun 2026-10-11. Export often has +2 extra days.
+    dest = _slot(tmp_path, "2026-41", "week_2026_41.csv")
+    _write_csv(
+        dest,
+        [
+            _row("2026-10-05", full="10", total="10"),
+            _row("2026-10-11", full="20", total="20"),
+            _row("2026-10-12", full="99", total="99"),
+            _row("2026-10-13", full="88", total="88"),
+        ],
+    )
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    dates = [str(d.date()) for d in hist["df"]["_date"]]
+    assert dates == ["2026-10-05", "2026-10-11"]
