@@ -18,8 +18,9 @@ node_modules/
 out/
 *.log
 
-# Data
-data/
+# Uploaded report files at the repo root. A leading slash keeps this from
+# also hiding weekly_report/data, where the corrected exports live.
+/data/
 charts/
 reports/
 
@@ -43,4 +44,3 @@ Thumbs.db
 # Environment
 .env
 .env.local
-weekly_report/data/
