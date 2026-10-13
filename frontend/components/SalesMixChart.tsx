@@ -7,6 +7,7 @@ import {
   periodVsLatest,
   type BeforeAfterView,
 } from '@/lib/full-price-before-after-series'
+import { formatMixAxisTick, MIX_AXIS_DOMAIN, MIX_AXIS_TICKS } from '@/lib/full-price-presentation'
 import { buildSalesMixChartData, SALES_MIX_FORMULA } from '@/lib/sales-mix'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
@@ -148,7 +149,16 @@ export default function SalesMixChart({
           <BarChart data={chartData} margin={{ top: 36, right: 12, left: 12, bottom: 8 }} barCategoryGap="18%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} width={48} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
+            <YAxis
+              type="number"
+              tick={{ fontSize: 11 }}
+              width={52}
+              domain={MIX_AXIS_DOMAIN}
+              ticks={[...MIX_AXIS_TICKS]}
+              interval={0}
+              allowDecimals={false}
+              tickFormatter={formatMixAxisTick}
+            />
             <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(Number(v ?? 0))} />} />
             <Legend />
             <Bar

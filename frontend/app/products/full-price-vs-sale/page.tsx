@@ -21,6 +21,12 @@ import {
   exclExchangesSectionState,
   settleLoad,
 } from '@/lib/full-price-vs-sale-load'
+import {
+  AMOUNTS_INCL_VAT_NOTE,
+  hasLastYearTotal,
+  lyOrNull,
+  shareChartPoint,
+} from '@/lib/full-price-presentation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
@@ -28,8 +34,6 @@ import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, XAxis
 import FullPriceExclExchangesSection from '@/components/FullPriceExclExchangesSection'
 import SalesMixChart from '@/components/SalesMixChart'
 import DiscountTypesSection from '@/components/DiscountTypesSection'
-
-const AMOUNTS_NOTE = 'Amounts incl. VAT, before returns.'
 
 type View = 'week' | 'month'
 
@@ -203,11 +207,13 @@ export default function FullPriceVsSalePage() {
   // Weekly (ascending already)
   const weeklyShare = useMemo(
     () =>
-      (weekly?.weeks || []).map((w) => ({
-        label: weekLabel(w.week),
-        value: w.full_price_pct ?? 0,
-        lastYear: w.last_year?.full_price_pct ?? 0,
-      })),
+      (weekly?.weeks || []).map((w) =>
+        shareChartPoint({
+          label: weekLabel(w.week),
+          fullPricePct: w.full_price_pct,
+          lastYear: w.last_year,
+        }),
+      ),
     [weekly]
   )
   const weeklySplit = useMemo(
@@ -231,11 +237,13 @@ export default function FullPriceVsSalePage() {
   )
   const monthlyShare = useMemo(
     () =>
-      monthsAsc.map((m) => ({
-        label: monthLabel(m.month),
-        value: m.full_price_pct ?? 0,
-        lastYear: m.last_year?.full_price_pct ?? 0,
-      })),
+      monthsAsc.map((m) =>
+        shareChartPoint({
+          label: monthLabel(m.month),
+          fullPricePct: m.full_price_pct,
+          lastYear: m.last_year,
+        }),
+      ),
     [monthsAsc]
   )
   const monthlySplit = useMemo(
@@ -497,13 +505,14 @@ export default function FullPriceVsSalePage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} width={48} />
-                    <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(Number(v ?? 0))} />} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => pct(v == null ? null : Number(v))} />} />
                     <Line
                       type="monotone"
                       dataKey="value"
                       stroke="#4B5563"
                       strokeWidth={2}
                       dot={{ r: 3 }}
+                      connectNulls={false}
                       isAnimationActive={isAnimationActive}
                       name="This year"
                     >
@@ -513,7 +522,7 @@ export default function FullPriceVsSalePage() {
                         fontSize={12}
                         fontWeight={600}
                         fill="#1f2937"
-                        formatter={(v: unknown) => pct(Number(v ?? 0))}
+                        formatter={(v: unknown) => pct(v == null ? null : Number(v))}
                       />
                     </Line>
                     <Line
@@ -523,6 +532,7 @@ export default function FullPriceVsSalePage() {
                       strokeWidth={2}
                       strokeDasharray="4 4"
                       dot={{ r: 3 }}
+                      connectNulls={false}
                       isAnimationActive={isAnimationActive}
                       name="Last year"
                     />
@@ -553,7 +563,7 @@ export default function FullPriceVsSalePage() {
                     <Bar dataKey="discounted" stackId="a" fill="#F97316" name="Discounted" isAnimationActive={isAnimationActive} />
                   </BarChart>
                 </ChartContainer>
-                <p className="text-[11px] text-muted-foreground mt-2">{AMOUNTS_NOTE}</p>
+                <p className="text-[11px] text-muted-foreground mt-2">{AMOUNTS_INCL_VAT_NOTE}</p>
               </CardContent>
             </Card>
           </div>
@@ -600,49 +610,67 @@ export default function FullPriceVsSalePage() {
                 </thead>
                 <tbody>
                   {view === 'week'
-                    ? (weekly?.weeks || []).map((w) => (
+                    ? (weekly?.weeks || []).map((w) => {
+                        const lyOk = hasLastYearTotal(w.last_year)
+                        return (
                         <tr key={w.week} className="border-b last:border-0">
                           <td className="py-2 pr-4 font-medium text-gray-900">{weekLabel(w.week)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(w.full_price)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(w.discounted)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(w.total)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(w.full_price_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(w.last_year?.full_price_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPp(w.full_price_pct_delta)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(w.yoy_total_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(w.yoy_full_price_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                            {pct(lyOrNull(w.last_year, w.last_year?.full_price_pct))}
+                          </td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPp(lyOk ? w.full_price_pct_delta : null)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(lyOk ? w.yoy_total_pct : null)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(lyOk ? w.yoy_full_price_pct : null)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(w.weighted_discount_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
-                            {pct(w.last_year?.weighted_discount_pct)}
+                            {pct(lyOrNull(w.last_year, w.last_year?.weighted_discount_pct))}
                           </td>
                           <td className="py-2 pl-4 text-right tabular-nums">
-                            {signedPp(wdPpDelta(w.weighted_discount_pct, w.last_year?.weighted_discount_pct))}
+                            {signedPp(
+                              lyOk
+                                ? wdPpDelta(w.weighted_discount_pct, w.last_year?.weighted_discount_pct)
+                                : null,
+                            )}
                           </td>
                         </tr>
-                      ))
-                    : monthsAsc.map((m) => (
+                        )
+                      })
+                    : monthsAsc.map((m) => {
+                        const lyOk = hasLastYearTotal(m.last_year)
+                        return (
                         <tr key={m.month} className="border-b last:border-0">
                           <td className="py-2 pr-4 font-medium text-gray-900">{monthLabel(m.month)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(m.full_price)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(m.discounted)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{thousands(m.total)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(m.full_price_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">{pct(m.last_year?.full_price_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPp(m.full_price_pct_delta)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(m.yoy_total_pct)}</td>
-                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(m.yoy_full_price_pct)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                            {pct(lyOrNull(m.last_year, m.last_year?.full_price_pct))}
+                          </td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPp(lyOk ? m.full_price_pct_delta : null)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(lyOk ? m.yoy_total_pct : null)}</td>
+                          <td className="py-2 px-4 text-right tabular-nums">{signedPct(lyOk ? m.yoy_full_price_pct : null)}</td>
                           <td className="py-2 px-4 text-right tabular-nums">{pct(m.weighted_discount_pct)}</td>
                           <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
-                            {pct(m.last_year?.weighted_discount_pct)}
+                            {pct(lyOrNull(m.last_year, m.last_year?.weighted_discount_pct))}
                           </td>
                           <td className="py-2 pl-4 text-right tabular-nums">
-                            {signedPp(wdPpDelta(m.weighted_discount_pct, m.last_year?.weighted_discount_pct))}
+                            {signedPp(
+                              lyOk
+                                ? wdPpDelta(m.weighted_discount_pct, m.last_year?.weighted_discount_pct)
+                                : null,
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                 </tbody>
               </table>
-              <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_NOTE}</p>
+              <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_INCL_VAT_NOTE}</p>
             </CardContent>
           </Card>
         </>
