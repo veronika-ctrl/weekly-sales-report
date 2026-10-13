@@ -190,7 +190,7 @@ export default function DiscountTypesSection({
             </CardContent>
           </Card>
         </>
-      ) : null}}
+      ) : null}
     </div>
   )
 }
