@@ -24,7 +24,6 @@ NOTE = (
 # Display order only. Aliases match strings in the bundled mapping/daily CSVs
 # (including the numeric prefix). Old labels stay as aliases so prior files still map.
 DISPLAY_GROUPS: List[Tuple[str, str, Tuple[str, ...]]] = [
-    ("aftership", "AfterShip exchanges", ("0 AfterShip exchanges", "AfterShip exchanges")),
     ("klaviyo", "Klaviyo", ("1 Klaviyo", "Klaviyo")),
     ("customer_care", "Customer care", ("2 Customer care", "Customer care")),
     ("conjured", "Conjured referral", ("3 Conjured referral", "Conjured referral")),
@@ -40,12 +39,13 @@ DISPLAY_GROUPS: List[Tuple[str, str, Tuple[str, ...]]] = [
             "Internal friends & PR",
         ),
     ),
-    ("test", "Test orders", ("6 Test orders", "Test orders")),
     ("subscription", "Subscription codes", ("7 Subscription codes", "Subscription codes")),
+    ("test", "Test orders", ("6 Test orders", "Test orders")),
     ("other", "Other / unknown", ("8 Other / unknown", "7 Other / unknown", "Other / unknown", "Other")),
+    ("aftership", "AfterShip exchanges", ("0 AfterShip exchanges", "AfterShip exchanges")),
 ]
 
-# Curated subgroups always shown (even at 0), same pattern as Klaviyo.
+# Curated subgroups (payload still lists zeros; the UI hides empty rows).
 # Groups without an entry still emit whatever subgroups appear in the window.
 DISPLAY_SUBGROUPS: Dict[str, List[Tuple[str, str, Tuple[str, ...], bool]]] = {
     "aftership": [
@@ -56,12 +56,6 @@ DISPLAY_SUBGROUPS: Dict[str, List[Tuple[str, str, Tuple[str, ...], bool]]] = {
         ("welcome_code", "Welcome code", ("Welcome code",), False),
         ("memories", "Memories", ("Memories",), False),
         ("inactive_winback", "Inactive Winback", ("Inactive Winback",), False),
-        (
-            "free_shipping",
-            "Abandoned checkout / free shipping",
-            ("Abandoned checkout / free shipping (FS-)", "Abandoned checkout / free shipping"),
-            True,
-        ),
     ],
     "customer_care": [
         (
@@ -98,6 +92,29 @@ DISPLAY_SUBGROUPS: Dict[str, List[Tuple[str, str, Tuple[str, ...], bool]]] = {
 }
 
 KLAVIYO_SUBGROUPS = DISPLAY_SUBGROUPS["klaviyo"]
+
+# Shopify does not report value/orders for free-shipping codes. Keep aliases so
+# daily-file rows still roll into group totals, but never emit a display row.
+OMIT_SUBGROUPS: Dict[str, List[Tuple[str, str, Tuple[str, ...], bool]]] = {
+    "klaviyo": [
+        (
+            "free_shipping",
+            "Abandoned checkout / free shipping",
+            ("Abandoned checkout / free shipping (FS-)", "Abandoned checkout / free shipping"),
+            True,
+        ),
+    ],
+}
+OMIT_SUBGROUP_IDS = frozenset(sid for rows in OMIT_SUBGROUPS.values() for sid, *_ in rows)
+
+
+def _omitted_sub(gid: str, sid: str, label: str, free: bool) -> bool:
+    if sid in OMIT_SUBGROUP_IDS or free:
+        return True
+    if any(sid == hid for hid, *_ in OMIT_SUBGROUPS.get(gid, [])):
+        return True
+    lower = (label or "").lower()
+    return "abandoned checkout" in lower or "free shipping" in lower
 
 
 def _bundled_dir() -> Path:
@@ -170,7 +187,7 @@ def _canonical_group_id(raw: str) -> str:
 
 def _klaviyo_subgroup_id(raw: str) -> Optional[str]:
     text = str(raw or "").strip()
-    for sid, _label, aliases, _free in KLAVIYO_SUBGROUPS:
+    for sid, _label, aliases, _free in (*KLAVIYO_SUBGROUPS, *OMIT_SUBGROUPS.get("klaviyo", [])):
         if text in aliases:
             return sid
     lower = text.lower()
@@ -201,13 +218,14 @@ def _raw_subgroup(value: Any) -> str:
 def _resolve_sub(gid: str, raw: Any) -> Tuple[str, str, bool]:
     """Return (id, display label, is_free_shipping) for a raw subgroup string."""
     text = _raw_subgroup(raw)
-    for sid, label, aliases, free in DISPLAY_SUBGROUPS.get(gid, []):
+    catalog = list(DISPLAY_SUBGROUPS.get(gid, [])) + list(OMIT_SUBGROUPS.get(gid, []))
+    for sid, label, aliases, free in catalog:
         if text in aliases or text == label:
             return sid, label, free
     if gid == "klaviyo":
         fuzzy = _klaviyo_subgroup_id(text)
         if fuzzy:
-            for sid, label, _aliases, free in KLAVIYO_SUBGROUPS:
+            for sid, label, _aliases, free in catalog:
                 if sid == fuzzy:
                     return sid, label, free
     return _slug_sub_id(text), text or "Unspecified", False
@@ -221,6 +239,7 @@ def _empty_subgroups(gid: str, gross: float) -> List[Dict[str, Any]]:
             **_metrics(0.0, 0.0, 0.0, gross, free_shipping=free),
         }
         for sid, slabel, _a, free in DISPLAY_SUBGROUPS.get(gid, [])
+        if not _omitted_sub(gid, sid, slabel, free)
     ]
 
 
@@ -248,8 +267,12 @@ def _group_subgroups(
 
     seen: set = set()
     out: List[Dict[str, Any]] = []
+    for sid, _slabel, _a, _free in OMIT_SUBGROUPS.get(gid, []):
+        seen.add(sid)
     for sid, slabel, _a, free in DISPLAY_SUBGROUPS.get(gid, []):
         seen.add(sid)
+        if _omitted_sub(gid, sid, slabel, free):
+            continue
         out.append(
             {
                 "id": sid,
@@ -261,6 +284,8 @@ def _group_subgroups(
     extras.sort(key=lambda sid: meta.get(sid, (sid, False))[0].lower())
     for sid in extras:
         label, free = meta.get(sid, (sid, False))
+        if _omitted_sub(gid, sid, label, free):
+            continue
         out.append(
             {
                 "id": sid,

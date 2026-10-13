@@ -234,9 +234,24 @@ describe('amount footnote and discount types', () => {
       'utf8',
     )
     assert.match(types, /for \(const g of groups\)/)
-    assert.match(types, /for \(const sub of g\.subgroups/)
+    assert.match(types, /for \(const sub of visibleSubs\)/)
     assert.match(types, /indent \? 'pl-6 text-muted-foreground'/)
     assert.doesNotMatch(types, /g\.id === ['"]klaviyo['"]/)
+  })
+
+  it('hides abandoned-checkout and all-zero rows, keeps Total under AfterShip', () => {
+    const types = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../components/DiscountTypesSection.tsx'),
+      'utf8',
+    )
+    assert.match(types, /isAbandonedCheckoutRow/)
+    assert.match(types, /bothPeriodsZero/)
+    assert.match(types, /hasNonZeroChild/)
+    assert.match(types, />Total</)
+    assert.match(types, /<GroupRows groups=\{period\.groups\} lyGroups=\{period\.last_year\?\.groups\} \/>/)
+    const groupRowsIdx = types.indexOf('<GroupRows')
+    const totalIdx = types.indexOf('>Total<')
+    assert.ok(groupRowsIdx >= 0 && totalIdx > groupRowsIdx, 'Total row stays below group rows')
   })
 })
 

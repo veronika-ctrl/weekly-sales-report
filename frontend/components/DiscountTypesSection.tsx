@@ -24,6 +24,21 @@ function amountCell(row: DiscountTypeBucket) {
   return thousands(row.discount_amount)
 }
 
+function isAbandonedCheckoutRow(row: DiscountTypeBucket) {
+  if (row.id === 'free_shipping' || row.is_free_shipping) return true
+  const label = (row.label || '').toLowerCase()
+  return label.includes('abandoned checkout') || label.includes('free shipping')
+}
+
+function isAllZero(row?: DiscountTypeBucket | null) {
+  if (!row) return true
+  return (row.discount_amount || 0) === 0 && (row.orders || 0) === 0
+}
+
+function bothPeriodsZero(row?: DiscountTypeBucket | null, ly?: DiscountTypeBucket | null) {
+  return isAllZero(row) && isAllZero(ly)
+}
+
 function GroupRows({
   groups,
   lyGroups,
@@ -34,9 +49,17 @@ function GroupRows({
   const lyById = new Map((lyGroups || []).map((g) => [g.id, g]))
   const rows: Array<{ key: string; row: DiscountTypeBucket; indent: boolean; ly?: DiscountTypeBucket }> = []
   for (const g of groups) {
-    rows.push({ key: `g-${g.id}`, row: g, indent: false, ly: lyById.get(g.id) })
-    for (const sub of g.subgroups || []) {
-      const lySub = (lyById.get(g.id)?.subgroups || []).find((s) => s.id === sub.id)
+    const ly = lyById.get(g.id)
+    const visibleSubs = (g.subgroups || []).filter((sub) => {
+      if (isAbandonedCheckoutRow(sub)) return false
+      const lySub = (ly?.subgroups || []).find((s) => s.id === sub.id)
+      return !bothPeriodsZero(sub, lySub)
+    })
+    const hasNonZeroChild = visibleSubs.length > 0
+    if (bothPeriodsZero(g, ly) && !hasNonZeroChild) continue
+    rows.push({ key: `g-${g.id}`, row: g, indent: false, ly })
+    for (const sub of visibleSubs) {
+      const lySub = (ly?.subgroups || []).find((s) => s.id === sub.id)
       rows.push({ key: `sub-${g.id}-${sub.id}`, row: sub, indent: true, ly: lySub })
     }
   }
@@ -99,6 +122,18 @@ function ByTypeCard({
           </thead>
           <tbody>
             <GroupRows groups={period.groups} lyGroups={period.last_year?.groups} />
+            <tr className="border-b last:border-0 font-semibold text-gray-900">
+              <td className="py-2 pr-4">Total</td>
+              <td className="py-2 px-3 text-right tabular-nums">{thousands(period.discount_amount)}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{period.orders.toLocaleString('sv-SE')}</td>
+              <td className="py-2 px-3 text-right tabular-nums">
+                {pct(period.discount_amount > 0 ? 100 : null)}
+              </td>
+              <td className="py-2 px-3 text-right tabular-nums">{pct(period.discount_of_gross_pct)}</td>
+              <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
+                {thousands(period.last_year?.discount_amount)}
+              </td>
+            </tr>
           </tbody>
         </table>
         <p className="text-[11px] text-muted-foreground mt-3">{SHOPIFY_GROSS_EXCL_VAT_NOTE}</p>

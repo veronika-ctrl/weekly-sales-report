@@ -69,24 +69,25 @@ def test_fixture_share_and_free_shipping(tmp_path: Path):
     assert sep["discount_of_gross_pct"] == pytest.approx(3.5)
     groups = {g["id"]: g for g in sep["groups"]}
     assert [g["id"] for g in sep["groups"]] == [
-        "aftership",
         "klaviyo",
         "customer_care",
         "conjured",
         "campaign",
         "investors",
-        "test",
         "subscription",
+        "test",
         "other",
+        "aftership",
     ]
     welcome = next(s for s in groups["klaviyo"]["subgroups"] if s["id"] == "welcome_code")
-    free = next(s for s in groups["klaviyo"]["subgroups"] if s["id"] == "free_shipping")
+    klaviyo_ids = [s["id"] for s in groups["klaviyo"]["subgroups"]]
+    klaviyo_labels = [s["label"] for s in groups["klaviyo"]["subgroups"]]
+    assert "free_shipping" not in klaviyo_ids
+    assert not any("abandoned checkout" in label.lower() for label in klaviyo_labels)
     assert welcome["discount_amount"] == pytest.approx(10.0)
     assert welcome["orders"] == 2
     assert welcome["share_of_discounts_pct"] == pytest.approx(10.0 / 35.0 * 100.0)
-    assert free["is_free_shipping"] is True
-    assert free["discount_amount"] == pytest.approx(0.0)
-    assert free["orders"] == 3
+    assert groups["klaviyo"]["discount_amount"] == pytest.approx(15.0)
     assert groups["aftership"]["discount_amount"] == pytest.approx(20.0)
 
 
@@ -127,15 +128,15 @@ def test_weekly_has_last_year_slot():
 
 
 NEW_GROUP_ORDER = [
-    "aftership",
     "klaviyo",
     "customer_care",
     "conjured",
     "campaign",
     "investors",
-    "test",
     "subscription",
+    "test",
     "other",
+    "aftership",
 ]
 
 INVESTOR_SUBGROUP_LABELS = [
@@ -177,12 +178,12 @@ def test_new_groups_emit_indented_subgroups(tmp_path: Path):
     groups = {g["id"]: g for g in sep["groups"]}
 
     klaviyo_labels = [s["label"] for s in groups["klaviyo"]["subgroups"]]
-    assert klaviyo_labels[:4] == [
+    assert klaviyo_labels[:3] == [
         "Welcome code",
         "Memories",
         "Inactive Winback",
-        "Abandoned checkout / free shipping",
     ]
+    assert "Abandoned checkout / free shipping" not in klaviyo_labels
     assert groups["investors"]["discount_amount"] == pytest.approx(12.0)
     assert [s["label"] for s in groups["investors"]["subgroups"]] == INVESTOR_SUBGROUP_LABELS
     team = next(s for s in groups["investors"]["subgroups"] if s["id"] == "team")
@@ -208,4 +209,5 @@ def test_real_csv_investor_subgroups_present():
     assert groups["investors"]["discount_amount"] == pytest.approx(2838, abs=1)
     k_labels = [s["label"] for s in groups["klaviyo"]["subgroups"]]
     assert "Welcome code" in k_labels
-    assert "Abandoned checkout / free shipping" in k_labels
+    assert "Abandoned checkout / free shipping" not in k_labels
+    assert "free_shipping" not in [s["id"] for s in groups["klaviyo"]["subgroups"]]
