@@ -32,18 +32,18 @@ function GroupRows({
   lyGroups?: DiscountTypeBucket[]
 }) {
   const lyById = new Map((lyGroups || []).map((g) => [g.id, g]))
-  const rows: Array<{ row: DiscountTypeBucket; indent: boolean; ly?: DiscountTypeBucket }> = []
+  const rows: Array<{ key: string; row: DiscountTypeBucket; indent: boolean; ly?: DiscountTypeBucket }> = []
   for (const g of groups) {
-    rows.push({ row: g, indent: false, ly: lyById.get(g.id) })
+    rows.push({ key: `g-${g.id}`, row: g, indent: false, ly: lyById.get(g.id) })
     for (const sub of g.subgroups || []) {
       const lySub = (lyById.get(g.id)?.subgroups || []).find((s) => s.id === sub.id)
-      rows.push({ row: sub, indent: true, ly: lySub })
+      rows.push({ key: `sub-${g.id}-${sub.id}`, row: sub, indent: true, ly: lySub })
     }
   }
   return (
     <>
-      {rows.map(({ row, indent, ly }) => (
-        <tr key={`${indent ? 'sub' : 'g'}-${row.id}`} className="border-b last:border-0">
+      {rows.map(({ key, row, indent, ly }) => (
+        <tr key={key} className="border-b last:border-0">
           <td className={`py-2 pr-4 ${indent ? 'pl-6 text-muted-foreground' : 'font-medium text-gray-900'}`}>
             {row.label}
             {row.is_free_shipping ? (
