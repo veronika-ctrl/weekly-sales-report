@@ -35,20 +35,28 @@ def test_shopify_sessions_month_column():
     assert _shopify_sessions_in_range(df, start, end) == 150
 
 
-def test_full_price_share_revenue_over_time_format(tmp_path):
-    discounts_dir = tmp_path / "raw" / "2026-23" / "discounts"
-    discounts_dir.mkdir(parents=True)
-    csv = discounts_dir / "revenue-over-time.csv"
-    csv.write_text(
-        "Date,Full Price,Compare-at Price Sale,Total\n"
-        "2026-05-01,600,0,1000\n"
-        "2026-05-02,400,0,1000\n",
+def test_full_price_share_revenue_over_time_format(tmp_path, monkeypatch):
+    monkeypatch.setenv("DISABLE_FX_CONVERSION", "1")
+    headers = (
+        "Date,Full Price,Compare-at Price Sale,Discount Code / Auto Discount,Both,"
+        "Price Drop Sale,Total,Discount Amount,Full Price Share %,Exchange Orders,"
+        "Exchange Gross Value,Exchange Discount,Exchange Net Revenue\n"
+    )
+
+    def row(date: str, full: str, total: str) -> str:
+        compare = str(int(total) - int(full))
+        return f"{date},{full},{compare},0,0,0,{total},0,0,0,0,0,0\n"
+
+    slot = tmp_path / "raw" / "2026-23" / "full_price_vs_sale_excl_exchanges"
+    slot.mkdir(parents=True)
+    (slot / "may_2026.csv").write_text(
+        headers + row("2026-05-01", "600", "1000") + row("2026-05-02", "400", "1000"),
         encoding="utf-8",
     )
     out = calculate_full_price_share_for_date_range(
         "2026-23", tmp_path, "2026-05-01", "2026-05-31"
     )
-    assert out["source"] == "revenue_over_time"
+    assert out["source"] == "pricing_type"
     assert out["full_price_share_pct"] == 50.0
     assert out["supporting"]["days_in_range"] == 2
 
