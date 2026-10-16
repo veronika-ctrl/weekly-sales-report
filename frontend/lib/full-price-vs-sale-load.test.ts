@@ -221,11 +221,15 @@ describe('amount footnote and discount types', () => {
     assert.match(page, /FullPriceExclExchangesSection/)
     assert.match(types, /data-testid="discount-types-section"/)
     assert.match(types, /Codes and manual discounts only/)
-    assert.match(types, /Free shipping shows order/)
+    assert.match(types, /shows order counts only/)
     assert.match(types, /SHOPIFY_GROSS_EXCL_VAT_NOTE|Shopify gross sales and discounts, excl\. VAT\./)
     assert.doesNotMatch(types, /Amounts incl\. VAT, before returns\./)
     assert.match(types, /Discount Types – Monthly/)
     assert.match(types, /Discount Types – Weekly/)
+    assert.match(types, /Discount amount \(SEK\)/)
+    assert.match(types, /sekExact/)
+    assert.doesNotMatch(types, /\/ 1000/)
+    assert.doesNotMatch(types, /SEK [’']000/)
   })
 
   it('indents every group subgroup, not only Klaviyo', () => {
