@@ -6,8 +6,11 @@ import { monthlyTypesLayout, SHOPIFY_GROSS_EXCL_VAT_NOTE } from '@/lib/full-pric
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 
-const thousands = (value: number | null | undefined) =>
-  Math.round((value || 0) / 1000).toLocaleString('sv-SE')
+/** Whole SEK with thousand separators. Null/undefined → dash (not 0). */
+const sekExact = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(Number(value))) return '–'
+  return Math.round(Number(value)).toLocaleString('sv-SE')
+}
 
 const pct = (value: number | null | undefined) =>
   value == null ? '–' : `${value.toFixed(1)}%`
@@ -21,7 +24,7 @@ const monthLabel = (m: string) => {
 
 function amountCell(row: DiscountTypeBucket) {
   if (row.is_free_shipping) return '–'
-  return thousands(row.discount_amount)
+  return sekExact(row.discount_amount)
 }
 
 function isAbandonedCheckoutRow(row: DiscountTypeBucket) {
@@ -103,8 +106,8 @@ function ByTypeCard({
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <p className="text-xs text-muted-foreground">
           {extraNote ? `${extraNote} · ` : null}
-          Total {thousands(period.discount_amount)} · {pct(period.discount_of_gross_pct)} of gross{' '}
-          {thousands(period.gross_sales)} · LY {thousands(period.last_year?.discount_amount)} ·{' '}
+          Total {sekExact(period.discount_amount)} SEK · {pct(period.discount_of_gross_pct)} of gross{' '}
+          {sekExact(period.gross_sales)} SEK · LY {sekExact(period.last_year?.discount_amount)} SEK ·{' '}
           {pct(period.last_year?.discount_of_gross_pct)} of LY gross
         </p>
       </CardHeader>
@@ -113,25 +116,25 @@ function ByTypeCard({
           <thead>
             <tr className="border-b text-left text-muted-foreground">
               <th className="py-2 pr-4 font-medium">Type</th>
-              <th className="py-2 px-3 font-medium text-right">Discount</th>
+              <th className="py-2 px-3 font-medium text-right">Discount amount (SEK)</th>
               <th className="py-2 px-3 font-medium text-right">Orders</th>
               <th className="py-2 px-3 font-medium text-right">Share of discounts</th>
               <th className="py-2 px-3 font-medium text-right">% of gross</th>
-              <th className="py-2 pl-3 font-medium text-right">LY discount</th>
+              <th className="py-2 pl-3 font-medium text-right">LY discount amount (SEK)</th>
             </tr>
           </thead>
           <tbody>
             <GroupRows groups={period.groups} lyGroups={period.last_year?.groups} />
             <tr className="border-b last:border-0 font-semibold text-gray-900">
               <td className="py-2 pr-4">Total</td>
-              <td className="py-2 px-3 text-right tabular-nums">{thousands(period.discount_amount)}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{sekExact(period.discount_amount)}</td>
               <td className="py-2 px-3 text-right tabular-nums">{period.orders.toLocaleString('sv-SE')}</td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {pct(period.discount_amount > 0 ? 100 : null)}
               </td>
               <td className="py-2 px-3 text-right tabular-nums">{pct(period.discount_of_gross_pct)}</td>
               <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
-                {thousands(period.last_year?.discount_amount)}
+                {sekExact(period.last_year?.discount_amount)}
               </td>
             </tr>
           </tbody>
@@ -184,8 +187,9 @@ export default function DiscountTypesSection({
             'Codes and manual discounts only; lowered prices (markdowns) are shown on the Full Price vs Sale slides.'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Last {view === 'week' ? '8 ISO weeks' : '13 months'} vs last year. Free shipping shows order
-          counts only (0 value). {SHOPIFY_GROSS_EXCL_VAT_NOTE}
+          Last {view === 'week' ? '8 ISO weeks' : '13 months'} vs last year. Discount amount is SEK taken
+          off at checkout (not a count of discounts); Orders is the number of orders. Free shipping
+          shows order counts only (0 value). {SHOPIFY_GROSS_EXCL_VAT_NOTE}
         </p>
       </div>
 
@@ -205,7 +209,7 @@ export default function DiscountTypesSection({
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium">
-                {view === 'week' ? 'Weekly' : 'Monthly'} discount totals (SEK ’000)
+                {view === 'week' ? 'Weekly' : 'Monthly'} discount totals (SEK)
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 Codes and manual discounts vs last year. Markdowns are on the slides above.
@@ -216,9 +220,9 @@ export default function DiscountTypesSection({
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-4 font-medium">{view === 'week' ? 'Week' : 'Month'}</th>
-                    <th className="py-2 px-3 font-medium text-right">Discount</th>
+                    <th className="py-2 px-3 font-medium text-right">Discount amount (SEK)</th>
                     <th className="py-2 px-3 font-medium text-right">% of gross</th>
-                    <th className="py-2 px-3 font-medium text-right">LY discount</th>
+                    <th className="py-2 px-3 font-medium text-right">LY discount amount (SEK)</th>
                     <th className="py-2 pl-3 font-medium text-right">LY % of gross</th>
                   </tr>
                 </thead>
@@ -226,10 +230,10 @@ export default function DiscountTypesSection({
                   {periodsAsc.map((p) => (
                     <tr key={p.key} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium text-gray-900">{periodLabel(p)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums">{thousands(p.discount_amount)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{sekExact(p.discount_amount)}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{pct(p.discount_of_gross_pct)}</td>
                       <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
-                        {thousands(p.last_year?.discount_amount)}
+                        {sekExact(p.last_year?.discount_amount)}
                       </td>
                       <td className="py-2 pl-3 text-right tabular-nums text-muted-foreground">
                         {pct(p.last_year?.discount_of_gross_pct)}

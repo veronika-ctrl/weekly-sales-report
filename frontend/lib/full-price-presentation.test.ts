@@ -114,6 +114,8 @@ describe('footnote and title wiring', () => {
     const page = readFileSync(join(here, '../app/products/full-price-vs-sale/page.tsx'), 'utf8')
     assert.match(types, /Discount Types – Monthly/)
     assert.match(types, /Discount Types – Weekly/)
+    assert.match(types, /Discount amount \(SEK\)/)
+    assert.doesNotMatch(types, /SEK [’']000/)
     assert.doesNotMatch(types, /Full Price vs Sale – Monthly detail/)
     assert.match(page, /\{periodHeader\}ly detail/)
   })
