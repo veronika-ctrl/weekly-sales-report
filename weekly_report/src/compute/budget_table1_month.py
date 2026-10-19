@@ -148,7 +148,10 @@ def budget_table1_for_calendar_month(
     cos_pct = get_budget_val("COS %", "COS")
     amer = get_budget_val("aMER", "AMER", "eMER", "emer")
     new_net_new_customers = get_budget_val("New Net Revenue")
+    returning_net_returning_customers = get_budget_val("Returning Net Revenue")
     amer = derive_emer_from_budget_components(amer, new_net_new_customers, marketing_spend)
+    new_net = float(new_net_new_customers or 0)
+    returning_net = float(returning_net_returning_customers or 0)
     return {
         "online_gross_revenue": total_gross,
         "returns": returns,
@@ -160,9 +163,11 @@ def budget_table1_for_calendar_month(
         "wholesale_net_revenue": 0.0,
         "total_net_revenue": total_net,
         "returning_customers": returning_customers,
+        "returning_customers_net_revenue": returning_net,
         "new_customers": new_customers,
+        "new_customers_net_revenue": new_net,
         "marketing_spend": float(marketing_spend),
         "online_cost_of_sale_3": round(float(cos_pct), 1),
         "emer": round(float(amer), 1),
-        "new_net_revenue_new_seg": float(new_net_new_customers or 0),
+        "new_net_revenue_new_seg": new_net,
     }

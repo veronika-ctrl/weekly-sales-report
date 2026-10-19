@@ -28,6 +28,7 @@ _MONTH_ACC_KEYS = (
     "returning_customers",
     "new_customers",
     "new_net_revenue_new_seg",
+    "returning_customers_net_revenue",
 )
 
 
@@ -61,6 +62,7 @@ def _finalize_table1_from_acc(acc: Dict[str, float]) -> Dict[str, Any]:
     ret = float(acc.get("returns", 0) or 0)
     mkt = float(acc.get("marketing_spend", 0) or 0)
     nn = float(acc.get("new_net_revenue_new_seg", 0) or 0)
+    rn = float(acc.get("returning_customers_net_revenue", 0) or 0)
     onet = float(acc.get("online_net_revenue", 0) or 0)
     rc = float(acc.get("returning_customers", 0) or 0)
     nc = float(acc.get("new_customers", 0) or 0)
@@ -78,7 +80,9 @@ def _finalize_table1_from_acc(acc: Dict[str, float]) -> Dict[str, Any]:
         "wholesale_net_revenue": 0.0,
         "total_net_revenue": onet,
         "returning_customers": int(round(rc)),
+        "returning_customers_net_revenue": rn,
         "new_customers": int(round(nc)),
+        "new_customers_net_revenue": nn,
         "marketing_spend": mkt,
         "online_cost_of_sale_3": round(cos, 1),
         "emer": round(emer, 1),
@@ -124,6 +128,8 @@ def _add_long_metric_row_to_acc(label: str, v: float, acc: Dict[str, float]) -> 
         acc["returns"] = acc.get("returns", 0.0) + float(v)
     elif metric_norm == "newnetrevenue":
         acc["new_net_revenue_new_seg"] = acc.get("new_net_revenue_new_seg", 0.0) + float(v)
+    elif metric_norm == "returningnetrevenue":
+        acc["returning_customers_net_revenue"] = acc.get("returning_customers_net_revenue", 0.0) + float(v)
     elif metric_norm in ("netrevenue", "onlinenetrevenue"):
         acc["online_net_revenue"] = acc.get("online_net_revenue", 0.0) + float(v)
     elif metric_norm == "returningcustomers":

@@ -951,6 +951,24 @@ def _budget_label_is_new_net_revenue(label: str) -> bool:
     return L == "new net revenue" or (L.startswith("new ") and "net revenue" in L)
 
 
+def _budget_label_is_returning_net_revenue(label: str) -> bool:
+    """True for the returning-customer online net row (not total / new net)."""
+    L = str(label).strip().lower()
+    if not L or L.startswith("new ") or L == "new net revenue":
+        return False
+    return L == "returning net revenue" or ("returning" in L and "net revenue" in L)
+
+
+def _with_segment_net_budget_keys(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Expose new/returning net on budget payloads used by Online Summary."""
+    nn = float(payload.get("new_net_revenue_new_seg", 0) or 0)
+    rn = float(payload.get("returning_customers_net_revenue", 0) or 0)
+    payload["new_net_revenue_new_seg"] = nn
+    payload["new_customers_net_revenue"] = nn
+    payload["returning_customers_net_revenue"] = rn
+    return payload
+
+
 def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, target_month: int) -> Dict[str, Any]:
     """Parse loaded budget CSV dataframe for one calendar month (same layouts as former _load_mtd_budget_direct)."""
     try:
@@ -1103,6 +1121,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     out["return_rate_pct"] = v * 100 if abs(v) <= 1 else v
                 elif metric_norm == "newnetrevenue":
                     out["new_net_revenue_new_seg"] = v
+                elif metric_norm == "returningnetrevenue":
+                    out["returning_customers_net_revenue"] = v
                 elif metric_norm in ("netrevenue", "onlinenetrevenue"):
                     out["online_net_revenue"] = out["total_net_revenue"] = v
                 elif metric_norm == "returningcustomers":
@@ -1129,7 +1149,7 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     float(out.get("new_net_revenue_new_seg", 0) or 0),
                     float(out.get("marketing_spend", 0) or 0),
                 )
-                return {
+                return _with_segment_net_budget_keys({
                     "online_gross_revenue": out.get("online_gross_revenue", 0),
                     "returns": out.get("returns", 0),
                     "return_rate_pct": round(return_rate, 1),
@@ -1145,7 +1165,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
                     "emer": round(_emer, 1),
                     "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
-                }
+                    "returning_customers_net_revenue": float(out.get("returning_customers_net_revenue", 0) or 0),
+                })
 
     # Layout A: columns include month-like -> first column is metric, others are months
     month_cols = [c for c in df.columns if month_key_matches(c)]
@@ -1185,6 +1206,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 out["return_rate_pct"] = v
             elif _budget_label_is_new_net_revenue(label):
                 out["new_net_revenue_new_seg"] = v
+            elif _budget_label_is_returning_net_revenue(label):
+                out["returning_customers_net_revenue"] = v
             elif metric_row_matches(label, "Net Revenue"):
                 out["online_net_revenue"] = out["total_net_revenue"] = v
             elif metric_row_matches(label, "Returning Customers"):
@@ -1208,7 +1231,7 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 float(out.get("new_net_revenue_new_seg", 0) or 0),
                 float(out.get("marketing_spend", 0) or 0),
             )
-            return {
+            return _with_segment_net_budget_keys({
                 "online_gross_revenue": out.get("online_gross_revenue", 0),
                 "returns": out.get("returns", 0),
                 "return_rate_pct": round(return_rate, 1),
@@ -1224,7 +1247,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
                 "emer": round(_emer, 1),
                 "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
-            }
+                "returning_customers_net_revenue": float(out.get("returning_customers_net_revenue", 0) or 0),
+            })
     # Layout B: "Month" column -> rows are months, columns are metrics
     if "Month" in df.columns:
         month_col = "Month"
@@ -1278,6 +1302,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     out["return_rate_pct"] = v
                 elif "new net revenue" in label:
                     out["new_net_revenue_new_seg"] = v
+                elif "returning net revenue" in label:
+                    out["returning_customers_net_revenue"] = v
                 elif ("net revenue" in label and "total" in label) or label == "net revenue":
                     out["online_net_revenue"] = out["total_net_revenue"] = v
                 elif "returning customers" in label:
@@ -1296,7 +1322,7 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     float(out.get("new_net_revenue_new_seg", 0) or 0),
                     float(out.get("marketing_spend", 0) or 0),
                 )
-                return {
+                return _with_segment_net_budget_keys({
                     "online_gross_revenue": out.get("online_gross_revenue", 0),
                     "returns": out.get("returns", 0),
                     "return_rate_pct": round(out.get("return_rate_pct", 0), 1),
@@ -1312,7 +1338,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                     "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
                     "emer": round(_emer, 1),
                     "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
-                }
+                    "returning_customers_net_revenue": float(out.get("returning_customers_net_revenue", 0) or 0),
+                })
     # Layout C: two columns (Metric name, Value) - use the single value column
     if len(df.columns) >= 2:
         key_col = df.columns[0]
@@ -1331,6 +1358,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 out["return_rate_pct"] = v
             elif _budget_label_is_new_net_revenue(label):
                 out["new_net_revenue_new_seg"] = v
+            elif _budget_label_is_returning_net_revenue(label):
+                out["returning_customers_net_revenue"] = v
             elif metric_row_matches(label, "Net Revenue"):
                 out["online_net_revenue"] = out["total_net_revenue"] = v
             elif metric_row_matches(label, "Returning Customers"):
@@ -1354,7 +1383,7 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 float(out.get("new_net_revenue_new_seg", 0) or 0),
                 float(out.get("marketing_spend", 0) or 0),
             )
-            return {
+            return _with_segment_net_budget_keys({
                 "online_gross_revenue": out.get("online_gross_revenue", 0),
                 "returns": out.get("returns", 0),
                 "return_rate_pct": round(return_rate, 1),
@@ -1370,7 +1399,8 @@ def _budget_table1_from_budget_dataframe(df: pd.DataFrame, target_year: int, tar
                 "online_cost_of_sale_3": round(out.get("online_cost_of_sale_3", 0), 1),
                 "emer": round(_emer, 1),
                 "new_net_revenue_new_seg": float(out.get("new_net_revenue_new_seg", 0) or 0),
-            }
+                "returning_customers_net_revenue": float(out.get("returning_customers_net_revenue", 0) or 0),
+            })
     return {}
 
 
@@ -1406,7 +1436,7 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
     ey, em = fy_end.year, fy_end.month
     acc_gross = acc_ret = acc_net = acc_mkt = 0.0
     acc_rc = acc_nc = 0.0
-    acc_nn_emer = 0.0
+    acc_nn_emer = acc_rn = 0.0
     cos_w = cos_ww = emer_w = emer_ww = 0.0
 
     def before(ay: int, am: int, by: int, bm: int) -> bool:
@@ -1422,6 +1452,7 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
         acc_net += float(b.get("online_net_revenue", 0) or 0) * frac
         acc_mkt += float(b.get("marketing_spend", 0) or 0) * frac
         acc_nn_emer += float(b.get("new_net_revenue_new_seg", 0) or 0) * frac
+        acc_rn += float(b.get("returning_customers_net_revenue", 0) or 0) * frac
         acc_rc += float(b.get("returning_customers", 0) or 0) * frac
         acc_nc += float(b.get("new_customers", 0) or 0) * frac
 
@@ -1445,7 +1476,7 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
     else:
         em_f = (emer_w / emer_ww) if emer_ww else 0.0
 
-    return {
+    return _with_segment_net_budget_keys({
         "online_gross_revenue": acc_gross,
         "returns": acc_ret,
         "return_rate_pct": round(rr, 1),
@@ -1460,7 +1491,9 @@ def _build_ytd_budget_from_direct_csv(base_week: str, data_root: Path) -> Dict[s
         "marketing_spend": acc_mkt,
         "online_cost_of_sale_3": round(cos_f, 1),
         "emer": round(em_f, 1),
-    }
+        "new_net_revenue_new_seg": acc_nn_emer,
+        "returning_customers_net_revenue": acc_rn,
+    })
 
 
 def _prorate_mtd_budget_to_week(
@@ -1521,7 +1554,13 @@ def _table1_budget_dict_for_api(d: Dict[str, Any]) -> Dict[str, Any]:
     """Drop internal keys before exposing mtd_budget / week_budget to clients."""
     if not d:
         return d
-    return {k: v for k, v in d.items() if k != "new_net_revenue_new_seg"}
+    out = {k: v for k, v in d.items() if k != "new_net_revenue_new_seg"}
+    if "new_customers_net_revenue" not in out:
+        try:
+            out["new_customers_net_revenue"] = float(d.get("new_net_revenue_new_seg", 0) or 0)
+        except (TypeError, ValueError):
+            out["new_customers_net_revenue"] = 0.0
+    return out
 
 
 def _build_mtd_budget_from_budget_general(base_week: str, budget_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1570,7 +1609,7 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
 
     acc_gross = acc_ret = acc_net = acc_mkt = 0.0
     acc_rc = acc_nc = 0.0
-    acc_nn_emer = 0.0
+    acc_nn_emer = acc_rn = 0.0
     cos_w = cos_ww = emer_w = emer_ww = 0.0
 
     def before(ay: int, am: int, by: int, bm: int) -> bool:
@@ -1586,6 +1625,7 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
         acc_net += float(b.get("online_net_revenue", 0) or 0) * frac
         acc_mkt += float(b.get("marketing_spend", 0) or 0) * frac
         acc_nn_emer += float(b.get("new_net_revenue_new_seg", 0) or 0) * frac
+        acc_rn += float(b.get("returning_customers_net_revenue", 0) or 0) * frac
         acc_rc += float(b.get("returning_customers", 0) or 0) * frac
         acc_nc += float(b.get("new_customers", 0) or 0) * frac
 
@@ -1609,7 +1649,7 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
     else:
         em_f = (emer_w / emer_ww) if emer_ww else 0.0
 
-    return {
+    return _with_segment_net_budget_keys({
         "online_gross_revenue": acc_gross,
         "returns": acc_ret,
         "return_rate_pct": round(rr, 1),
@@ -1624,7 +1664,9 @@ def _build_ytd_budget_from_budget_general(base_week: str, budget_result: Dict[st
         "marketing_spend": acc_mkt,
         "online_cost_of_sale_3": round(cos_f, 1),
         "emer": round(em_f, 1),
-    }
+        "new_net_revenue_new_seg": acc_nn_emer,
+        "returning_customers_net_revenue": acc_rn,
+    })
 
 
 @app.get("/api/budget-mtd-debug")
