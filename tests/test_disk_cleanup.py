@@ -2,6 +2,7 @@ from pathlib import Path
 
 from weekly_report.src.storage.disk import (
     delete_ignored_pricing_uploads,
+    delete_stale_weeks_36_to_40,
     disk_usage_payload,
     is_disk_full_error,
     is_ignored_pricing_upload,
@@ -94,3 +95,58 @@ def test_disk_usage_and_delete_endpoints(tmp_path: Path, monkeypatch):
     assert keep.exists()
     assert not old.exists()
     assert result["disk"]["ignored_count"] == 0
+
+
+def test_delete_weeks_36_to_40_keeps_history_and_drops_qlik(tmp_path: Path):
+    qlik = tmp_path / "raw" / "2026-36" / "qlik" / "Qlik_W36.xlsx"
+    dema = tmp_path / "raw" / "2026-40" / "dema_spend" / "Dema_Marketing_Spend_W40.csv"
+    sessions = tmp_path / "raw" / "2026-38" / "shopify" / "Sessions_W38.csv"
+    customers = tmp_path / "raw" / "2026-36" / "shopify_customers" / "customers.csv"
+    august = tmp_path / "raw" / "2026-36" / "amer_revenue" / "Revenue_by_channel_2026-08.csv"
+    weekly_amer = tmp_path / "raw" / "2026-36" / "amer_revenue" / "Revenue_by_channel_W36.csv"
+    month_fp = tmp_path / "raw" / "2026-41" / "full_price_vs_sale_excl_exchanges" / "august_2026_full_exchanges.csv"
+    w41_qlik = tmp_path / "raw" / "2026-41" / "qlik" / "Qlik_W41.csv"
+    for p, n in (
+        (qlik, 200),
+        (dema, 80),
+        (sessions, 50),
+        (customers, 30),
+        (august, 25),
+        (weekly_amer, 20),
+        (month_fp, 15),
+        (w41_qlik, 40),
+    ):
+        _touch(p, n)
+
+    payload = disk_usage_payload(tmp_path)
+    assert payload["stale_week_count"] == 4
+    assert payload["stale_week_bytes"] == 200 + 80 + 50 + 20
+
+    result = delete_stale_weeks_36_to_40(tmp_path)
+    assert result["bytes_freed"] == 200 + 80 + 50 + 20
+    assert not qlik.exists()
+    assert not dema.exists()
+    assert not sessions.exists()
+    assert not weekly_amer.exists()
+    assert (tmp_path / "raw" / "2026-41" / "shopify_customers" / "customers.csv").exists()
+    assert (tmp_path / "raw" / "2026-41" / "amer_revenue" / "Revenue_by_channel_2026-08.csv").exists()
+    assert month_fp.exists()
+    assert w41_qlik.exists()
+    assert not (tmp_path / "raw" / "2026-36").exists()
+    assert not (tmp_path / "raw" / "2026-40").exists()
+
+
+def test_delete_weeks_36_to_40_endpoint(tmp_path: Path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    _touch(tmp_path / "raw" / "2026-37" / "qlik" / "Qlik_W37.csv", 90)
+    _touch(tmp_path / "raw" / "2026-41" / "qlik" / "Qlik_W41.csv", 10)
+    from weekly_report.api import routes
+
+    result = asyncio.run(routes.post_delete_weeks_36_to_40())
+    assert result["count"] == 1
+    assert result["bytes_freed"] == 90
+    assert not (tmp_path / "raw" / "2026-37").exists()
+    assert (tmp_path / "raw" / "2026-41" / "qlik" / "Qlik_W41.csv").exists()

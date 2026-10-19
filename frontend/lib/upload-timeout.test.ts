@@ -105,7 +105,7 @@ describe('disk full upload copy', () => {
     assert.equal(isDiskFullError('Qlik file must be .xlsx or .csv'), false)
     const msg = formatDiskFullError()
     assert.match(msg, /export on your computer is fine/i)
-    assert.match(msg, /Delete ignored old Full Price files/)
+    assert.match(msg, /Delete weeks 2026-36 to 2026-40/)
   })
 
   it('wires Settings disk panel and upload-file handler to the cleanup endpoint', () => {
@@ -113,8 +113,9 @@ describe('disk full upload copy', () => {
     const settings = readFileSync(join(here, '../app/settings/page.tsx'), 'utf8')
     const upload = readFileSync(join(here, '../components/BatchFileUpload.tsx'), 'utf8')
     assert.match(settings, /data-testid="disk-usage-panel"/)
+    assert.match(settings, /deleteWeeks36To40/)
+    assert.match(settings, /Delete weeks 2026-36 to 2026-40/)
     assert.match(settings, /deleteIgnoredPricingFiles/)
-    assert.match(settings, /Delete ignored old Full Price files/)
     assert.match(upload, /formatDiskFullError/)
     assert.match(upload, /isDiskFullError/)
   })
