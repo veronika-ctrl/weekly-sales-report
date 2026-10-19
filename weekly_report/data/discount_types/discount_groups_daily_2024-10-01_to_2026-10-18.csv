@@ -1,4 +1,1138 @@
 date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd
+2024-10-01,2 Customer care,Named / care codes,CDLP30_KRISTOFFER,1.0,85.74,25.72
+2024-10-01,1 Klaviyo,Welcome code,Welcome-4G9LVGQT,1.0,109.1,10.9
+2024-10-01,4 Campaign codes,Thanks15,Thanks15,6.0,1126.33,168.92
+2024-10-01,1 Klaviyo,Welcome code,Welcome-5LKXJSBZ,1.0,90.9,9.09
+2024-10-01,4 Campaign codes,GABS2021,GABS2021,1.0,424.98,106.25
+2024-10-01,1 Klaviyo,Welcome code,Welcome-64TB4TPW,1.0,196.0,19.6
+2024-10-01,4 Campaign codes,SOCIETECDLP,SOCIETECDLP,1.0,73.91,3.69
+2024-10-01,1 Klaviyo,Inactive Winback,WHX8QSNBD,1.0,86.32,17.26
+2024-10-01,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,3.0,1343.54,1343.54
+2024-10-01,1 Klaviyo,Welcome code,Welcome-RJWNWHL2,1.0,452.37,45.23
+2024-10-02,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,335.0,100.5
+2024-10-02,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-J9WZX6N6,0.0,0.0,-0.0
+2024-10-02,1 Klaviyo,Welcome code,Welcome-MGFVHHJD,1.0,101.14,10.11
+2024-10-02,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,66.2,9.92
+2024-10-02,1 Klaviyo,Welcome code,Welcome-CLMQ7BPN,1.0,172.63,17.26
+2024-10-02,4 Campaign codes,Thanks15,Thanks15,4.0,742.84,111.41
+2024-10-02,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,210.34,52.59
+2024-10-02,1 Klaviyo,Welcome code,Welcome-9LHQ5VSX,1.0,294.89,29.46
+2024-10-02,6 Test orders,Test codes,coitest4,1.0,80.75,80.75
+2024-10-02,4 Campaign codes,BAMBUSER2022,BAMBUSER2022,1.0,148.16,44.44
+2024-10-02,2 Customer care,Named / care codes,LONGTIME_Chan,1.0,510.0,102.0
+2024-10-02,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,399.47,399.47
+2024-10-03,1 Klaviyo,Welcome code,Welcome-VML3Z6QR,1.0,118.7,11.86
+2024-10-03,1 Klaviyo,Welcome code,Welcome-M54TT9SR,1.0,223.3,22.33
+2024-10-03,1 Klaviyo,Welcome code,Welcome-57P3XNMB,1.0,146.98,14.68
+2024-10-03,"5 Investors, team, PR & friends",Friends & family,alexosigge,1.0,132.02,13.2
+2024-10-03,4 Campaign codes,Thanks15,Thanks15,4.0,728.2,109.2
+2024-10-03,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-X4H6BXW8,0.0,0.0,-0.0
+2024-10-03,1 Klaviyo,Welcome code,Welcome-WLS988KZ,1.0,155.17,15.5
+2024-10-03,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,294.54,73.63
+2024-10-03,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,115.0,40.25
+2024-10-03,1 Klaviyo,Welcome code,Welcome-KK6568RG,1.0,145.17,14.52
+2024-10-03,1 Klaviyo,Inactive Winback,WC56TBZ67,1.0,392.0,78.4
+2024-10-03,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,4.0,1598.98,1598.98
+2024-10-04,2 Customer care,Named / care codes,CDLP25_DONATASKULBIS,1.0,391.89,97.97
+2024-10-04,1 Klaviyo,Welcome code,Welcome-4HBZVN8J,1.0,75.0,7.5
+2024-10-04,1 Klaviyo,Welcome code,Welcome-6L726FTL,1.0,159.7,15.96
+2024-10-04,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1737.44,1737.44
+2024-10-04,6 Test orders,Test codes,Daniel_Test_Order_CDLP,1.0,145.62,145.62
+2024-10-04,4 Campaign codes,Thanks15,Thanks15,3.0,782.05,117.27
+2024-10-04,1 Klaviyo,Memories,MEMORIES-C45CT8WZ,1.0,66.01,9.9
+2024-10-05,1 Klaviyo,Welcome code,Welcome-VWCK8TFH,1.0,96.43,9.64
+2024-10-05,4 Campaign codes,Thanks15,Thanks15,4.0,766.83,115.02
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Adam Wang_CDLP_200,1.0,253.61,192.39
+2024-10-06,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-68R6RBRW,0.0,0.0,-0.0
+2024-10-06,1 Klaviyo,Welcome code,Welcome-DF3PHXNB,1.0,131.15,13.11
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Rob Antle_CDLP_200,1.0,190.0,190.0
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Loc Vo_CDLP_200,1.0,190.21,163.24
+2024-10-06,1 Klaviyo,Welcome code,Welcome-XHM5P3PV,1.0,170.54,17.05
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Mazud Faiz_CDLP_200,1.0,200.58,200.58
+2024-10-06,1 Klaviyo,Welcome code,Welcome-VRJ97TK2,1.0,95.91,9.56
+2024-10-06,4 Campaign codes,FIRSTORDER,FIRSTORDER,1.0,151.28,15.12
+2024-10-06,1 Klaviyo,Welcome code,Welcome-9RTPWCCZ,1.0,195.42,19.54
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Ian Simon-Curry_CDLP_200,1.0,229.0,200.0
+2024-10-06,1 Klaviyo,Welcome code,Welcome-LZLMQDX9,1.0,484.2,48.42
+2024-10-06,"5 Investors, team, PR & friends",Other named codes (to confirm),Hampus Hägelsta_CDLP_200,1.0,202.51,202.51
+2024-10-06,4 Campaign codes,Thanks15,Thanks15,5.0,1535.28,230.3
+2024-10-07,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,250.09,12.5
+2024-10-07,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-JQGK2G3L,0.0,0.0,-0.0
+2024-10-07,2 Customer care,Named / care codes,welcomediane,1.0,195.0,19.49
+2024-10-07,"5 Investors, team, PR & friends",Other named codes (to confirm),Sam Chernoff_CDLP_200,1.0,206.0,200.0
+2024-10-07,1 Klaviyo,Welcome code,Welcome-DRKFWMHT,1.0,170.66,17.06
+2024-10-07,1 Klaviyo,Welcome code,Welcome-5J9G6666,1.0,181.32,18.12
+2024-10-07,1 Klaviyo,Inactive Winback,W453K9PWZ,1.0,191.59,38.31
+2024-10-07,1 Klaviyo,Welcome code,Welcome-MK7SQ4J6,1.0,774.13,77.42
+2024-10-07,"5 Investors, team, PR & friends",Other named codes (to confirm),Cory Vanderploeg_CDLP_200,1.0,212.0,200.0
+2024-10-07,1 Klaviyo,Welcome code,Welcome-CB9FB22T,1.0,196.0,19.6
+2024-10-07,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,178.69,178.69
+2024-10-07,1 Klaviyo,Welcome code,Welcome-5P99ZGBR,1.0,181.5,18.14
+2024-10-07,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,1533.23,1533.23
+2024-10-07,4 Campaign codes,Thanks15,Thanks15,3.0,621.62,93.23
+2024-10-07,4 Campaign codes,uncadeau20,uncadeau20,1.0,374.44,74.88
+2024-10-07,"5 Investors, team, PR & friends",Other named codes (to confirm),Izo (Isaiah)_CDLP_200,1.0,167.0,167.0
+2024-10-08,1 Klaviyo,Welcome code,Welcome-63XWD52T,1.0,197.76,19.78
+2024-10-08,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,175.0,8.75
+2024-10-08,1 Klaviyo,Inactive Winback,W5623R2C8,1.0,317.4,63.47
+2024-10-08,1 Klaviyo,Welcome code,Welcome-RJPFHXLR,1.0,232.0,23.2
+2024-10-08,1 Klaviyo,Welcome code,Welcome-VHLPFNB4,1.0,166.3,16.62
+2024-10-08,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,494.32,494.32
+2024-10-09,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-LVLF88FJ,0.0,0.0,-0.0
+2024-10-09,1 Klaviyo,Welcome code,Welcome-FXDKRQQH,1.0,242.37,24.24
+2024-10-09,1 Klaviyo,Welcome code,Welcome-27TBML55,1.0,246.24,24.61
+2024-10-09,1 Klaviyo,Welcome code,Welcome-C7WP9NKW,1.0,274.55,27.45
+2024-10-09,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,134.95,47.22
+2024-10-09,4 Campaign codes,UPGRADEMYDRAWER,UPGRADEMYDRAWER,2.0,421.0,42.1
+2024-10-09,1 Klaviyo,Inactive Winback,W96GPZV9T,1.0,271.31,54.25
+2024-10-09,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,630.37,31.5
+2024-10-09,1 Klaviyo,Welcome code,Welcome-P24DS2Z5,1.0,154.0,15.4
+2024-10-09,1 Klaviyo,Welcome code,Welcome-NTGMHWR2,1.0,96.35,9.62
+2024-10-09,"5 Investors, team, PR & friends",Friends & family,alexosigge,1.0,375.02,37.49
+2024-10-09,1 Klaviyo,Welcome code,Welcome-R4VZTDRD,1.0,126.86,12.66
+2024-10-10,1 Klaviyo,Welcome code,Welcome-BD678NVP,1.0,265.59,26.56
+2024-10-10,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,2.0,542.88,189.99
+2024-10-10,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,187.37,9.36
+2024-10-10,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-MVQ3LKTB,0.0,0.0,-0.0
+2024-10-10,1 Klaviyo,Welcome code,Welcome-JCHXXXRB,1.0,115.4,11.52
+2024-10-10,1 Klaviyo,Welcome code,Welcome-8FQV88SS,1.0,115.29,11.52
+2024-10-10,"5 Investors, team, PR & friends",Other named codes (to confirm),Cody Chapman_CDLP_200,1.0,220.0,200.0
+2024-10-10,1 Klaviyo,Welcome code,Welcome-TCCZM5CZ,1.0,143.94,14.38
+2024-10-11,"5 Investors, team, PR & friends",Friends & family,Bernardo_Silva,1.0,89.27,26.78
+2024-10-11,1 Klaviyo,Welcome code,Welcome-7WQGSRBG,1.0,169.96,17.0
+2024-10-11,"5 Investors, team, PR & friends",Other named codes (to confirm),Jeremy Moore_CDLP_200,1.0,213.0,200.0
+2024-10-11,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-9N2HT8G7,0.0,0.0,-0.0
+2024-10-11,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-2D7GVWLV,0.0,0.0,-0.0
+2024-10-11,1 Klaviyo,Welcome code,Welcome-MNJDLM9B,1.0,141.54,14.15
+2024-10-11,1 Klaviyo,Memories,MEMORIES-7MDLRG5G,1.0,431.14,64.67
+2024-10-11,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,873.6,43.68
+2024-10-11,"5 Investors, team, PR & friends",Other named codes (to confirm),Tim Suglian_CDLP_200,1.0,253.0,200.0
+2024-10-11,1 Klaviyo,Welcome code,Welcome-9JQHDJ9L,1.0,138.62,13.84
+2024-10-11,1 Klaviyo,Welcome code,Welcome-5VRNQHBK,1.0,65.51,6.55
+2024-10-11,1 Klaviyo,Welcome code,Welcome-XNR7C96Q,1.0,537.31,53.72
+2024-10-11,1 Klaviyo,Welcome code,Welcome-BMRBLSXX,1.0,45.74,4.57
+2024-10-11,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,65.44,9.81
+2024-10-11,"5 Investors, team, PR & friends",Other named codes (to confirm),Dan Saunders_CDLP_200,1.0,331.99,191.57
+2024-10-11,1 Klaviyo,Welcome code,Welcome-7X2HMG9S,1.0,41.35,4.13
+2024-10-11,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-4G5Z7HJP,0.0,0.0,-0.0
+2024-10-11,1 Klaviyo,Memories,MEMORIES-5BSZ5FDJ,1.0,108.0,16.2
+2024-10-11,1 Klaviyo,Welcome code,Welcome-VF2RDLV4,1.0,111.98,11.19
+2024-10-11,2 Customer care,Named / care codes,LONGTIME_Chan,0.0,0.0,-0.0
+2024-10-11,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-H7CTLVHL,0.0,0.0,-0.0
+2024-10-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-MJPTJRWR,0.0,0.0,-0.0
+2024-10-12,1 Klaviyo,Welcome code,Welcome-K7TNNCM4,1.0,136.14,13.61
+2024-10-12,1 Klaviyo,Memories,MEMORIES-NDF6MRBM,1.0,81.76,12.26
+2024-10-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-MP9DX3JT,0.0,0.0,-0.0
+2024-10-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-98589KLB,0.0,0.0,-0.0
+2024-10-12,2 Customer care,Named / care codes,CDLP50_JUSTINJ,1.0,460.0,230.0
+2024-10-12,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,303.0,15.15
+2024-10-12,1 Klaviyo,Welcome code,Welcome-X3NG4VBT,1.0,1286.02,128.6
+2024-10-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-4FMJCXMF,0.0,0.0,-0.0
+2024-10-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-5Z89ZP97,0.0,0.0,-0.0
+2024-10-12,1 Klaviyo,Welcome code,Welcome-6GHNH63T,1.0,239.0,23.89
+2024-10-12,1 Klaviyo,Welcome code,Welcome-68H9KQHJ,1.0,339.32,33.92
+2024-10-12,1 Klaviyo,Memories,MEMORIES-LC73NQBB,1.0,45.88,6.88
+2024-10-13,6 Test orders,Test codes,teammastertraining,1.0,65.55,13.11
+2024-10-13,1 Klaviyo,Welcome code,Welcome-HTX639WH,1.0,169.9,16.99
+2024-10-13,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-TFZNTWLK,0.0,0.0,-0.0
+2024-10-13,1 Klaviyo,Welcome code,Welcome-BG55FGFP,1.0,301.5,30.14
+2024-10-13,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-X26WKP2X,0.0,0.0,-0.0
+2024-10-13,1 Klaviyo,Welcome code,Welcome-RFPTVKGX,1.0,65.55,6.55
+2024-10-13,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-LSVGXSNN,0.0,0.0,-0.0
+2024-10-13,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,1282.11,448.73
+2024-10-13,1 Klaviyo,Welcome code,Welcome-546XS3XN,1.0,131.07,13.1
+2024-10-13,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,188.15,9.4
+2024-10-13,"5 Investors, team, PR & friends",Friends & family,Soho_House20,1.0,178.6,35.72
+2024-10-13,1 Klaviyo,Welcome code,Welcome-P8FN2QCT,1.0,287.64,28.77
+2024-10-13,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-DFSXXLBL,0.0,0.0,-0.0
+2024-10-14,1 Klaviyo,Welcome code,Welcome-52K4KG6D,1.0,285.0,28.5
+2024-10-14,1 Klaviyo,Welcome code,Welcome-MCMNPP65,1.0,125.0,12.5
+2024-10-14,1 Klaviyo,Welcome code,Welcome-7BN6H8GR,1.0,95.0,9.5
+2024-10-14,1 Klaviyo,Welcome code,Welcome-K7TNNCM4,0.0,0.0,-0.0
+2024-10-14,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,3.0,644.52,644.52
+2024-10-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-KSQGM5RV,0.0,0.0,-0.0
+2024-10-14,1 Klaviyo,Welcome code,Welcome-W7GLTHV5,1.0,241.77,24.17
+2024-10-14,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,1218.67,487.47
+2024-10-14,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,2.0,227.76,79.68
+2024-10-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-44PJPGS9,0.0,0.0,-0.0
+2024-10-14,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,600.0,30.0
+2024-10-14,1 Klaviyo,Welcome code,Welcome-5VV6QGHR,1.0,324.47,32.43
+2024-10-14,4 Campaign codes,SPREADINGTHEGOSPEL20,SPREADINGTHEGOSPEL20,1.0,236.01,47.18
+2024-10-14,1 Klaviyo,Welcome code,Welcome-SZ9F5N4W,1.0,94.81,9.47
+2024-10-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-2Q5VSZFT,0.0,0.0,-0.0
+2024-10-14,1 Klaviyo,Memories,MEMORIES-BFP8CHNH,1.0,163.46,24.52
+2024-10-14,1 Klaviyo,Welcome code,Welcome-FBK8RJ29,1.0,139.36,13.92
+2024-10-15,1 Klaviyo,Welcome code,Welcome-CNMJM8RP,1.0,69.47,6.94
+2024-10-15,1 Klaviyo,Welcome code,Welcome-77V7WGFK,1.0,195.0,19.5
+2024-10-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-B4C4Z4T3,0.0,0.0,-0.0
+2024-10-15,1 Klaviyo,Welcome code,Welcome-63BT7JW5,1.0,194.89,19.48
+2024-10-15,1 Klaviyo,Welcome code,Welcome-D9PCBPRX,1.0,161.44,16.14
+2024-10-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-T64JQ4MW,0.0,0.0,-0.0
+2024-10-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-7XQKGXFQ,0.0,0.0,-0.0
+2024-10-15,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS30,1.0,25.32,7.6
+2024-10-15,1 Klaviyo,Welcome code,Welcome-RJWNWHL2,0.0,0.0,-0.0
+2024-10-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-QC3S2D45,0.0,0.0,-0.0
+2024-10-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-LZ2H4F6S,0.0,0.0,-0.0
+2024-10-15,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,205.0,10.25
+2024-10-15,"5 Investors, team, PR & friends",Friends & family,Bernardo_Silva,1.0,431.74,129.52
+2024-10-15,1 Klaviyo,Welcome code,Welcome-C965MDSC,1.0,165.95,16.58
+2024-10-16,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,523.76,523.76
+2024-10-16,1 Klaviyo,Memories,MEMORIES-K347KX3C,1.0,164.52,24.67
+2024-10-16,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-V7J7SCKJ,0.0,0.0,-0.0
+2024-10-16,1 Klaviyo,Welcome code,Welcome-Q8G2KV2W,1.0,241.62,24.15
+2024-10-16,1 Klaviyo,Memories,MEMORIES-D68MNLGH,1.0,183.0,27.45
+2024-10-16,1 Klaviyo,Welcome code,Welcome-GT8HP3NL,1.0,190.0,19.0
+2024-10-16,1 Klaviyo,Welcome code,Welcome-9TRCCTN7,1.0,164.63,16.46
+2024-10-16,1 Klaviyo,Welcome code,Welcome-GP89S2L2,1.0,208.72,20.87
+2024-10-17,1 Klaviyo,Welcome code,Welcome-4HDSXJXJ,1.0,536.83,53.67
+2024-10-17,1 Klaviyo,Welcome code,Welcome-X3JMDSBX,1.0,378.57,37.86
+2024-10-17,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS,1.0,174.8,34.96
+2024-10-17,1 Klaviyo,Welcome code,Welcome-ZXZ52KJL,1.0,201.18,20.12
+2024-10-18,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,720.16,720.16
+2024-10-18,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,114.16,17.12
+2024-10-18,1 Klaviyo,Welcome code,Welcome-34WB7HB3,1.0,145.26,14.52
+2024-10-18,1 Klaviyo,Welcome code,Welcome-LRGT3D8T,1.0,278.0,27.8
+2024-10-18,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,466.0,23.3
+2024-10-18,1 Klaviyo,Welcome code,Welcome-KK6Z6RZC,1.0,159.25,15.92
+2024-10-18,1 Klaviyo,Welcome code,Welcome-PQBW8F4N,1.0,502.25,50.22
+2024-10-18,4 Campaign codes,GRATEFUL20,GRATEFUL20,4.0,1052.65,210.52
+2024-10-19,1 Klaviyo,Welcome code,Welcome-K669NTJF,1.0,200.6,20.06
+2024-10-19,1 Klaviyo,Welcome code,Welcome-2XR564S2,1.0,365.0,36.5
+2024-10-19,1 Klaviyo,Welcome code,Welcome-FLMQG4XL,1.0,333.0,33.3
+2024-10-19,1 Klaviyo,Welcome code,Welcome-9TSZB77R,1.0,79.95,7.99
+2024-10-19,4 Campaign codes,SPREADINGTHEGOSPEL20,SPREADINGTHEGOSPEL20,1.0,28.51,5.7
+2024-10-19,1 Klaviyo,Welcome code,Welcome-CR5KRQ88,1.0,293.32,29.33
+2024-10-19,1 Klaviyo,Welcome code,Welcome-GK3G2F6F,1.0,135.96,13.59
+2024-10-19,1 Klaviyo,Welcome code,Welcome-983Z69H5,1.0,435.63,43.56
+2024-10-19,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-FVC6CJL5,0.0,0.0,-0.0
+2024-10-19,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,176.0,8.8
+2024-10-19,1 Klaviyo,Welcome code,Welcome-ZKHTGJQ4,1.0,214.05,21.41
+2024-10-19,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,2.0,1247.0,436.45
+2024-10-19,1 Klaviyo,Welcome code,Welcome-5VV6QGHR,0.0,0.0,-0.0
+2024-10-19,4 Campaign codes,GRATEFUL20,GRATEFUL20,2.0,342.15,68.41
+2024-10-20,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,228.1,79.83
+2024-10-20,1 Klaviyo,Welcome code,Welcome-2BJL8S5S,1.0,168.87,16.89
+2024-10-20,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,6.0,1901.85,95.08
+2024-10-20,1 Klaviyo,Welcome code,Welcome-LCZLTTM2,1.0,308.94,30.88
+2024-10-20,1 Klaviyo,Welcome code,Welcome-8M3WQ2VT,1.0,284.75,28.47
+2024-10-20,1 Klaviyo,Welcome code,Welcome-B8XVHT66,1.0,177.81,17.78
+2024-10-20,1 Klaviyo,Welcome code,Welcome-HGZ9N9G2,1.0,155.36,15.54
+2024-10-20,1 Klaviyo,Welcome code,Welcome-B2W62R7G,1.0,134.19,13.41
+2024-10-20,1 Klaviyo,Welcome code,Welcome-2HCKWSR4,1.0,259.54,25.96
+2024-10-20,"5 Investors, team, PR & friends",Friends & family,Soho_House20,1.0,190.0,38.0
+2024-10-20,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,133.05,19.95
+2024-10-20,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-9BKL6G86,0.0,0.0,-0.0
+2024-10-20,1 Klaviyo,Welcome code,Welcome-2BGJGTTZ,1.0,331.0,33.1
+2024-10-20,1 Klaviyo,Welcome code,Welcome-D24X68NS,1.0,480.46,48.03
+2024-10-20,1 Klaviyo,Welcome code,Welcome-H9MLW5GP,1.0,214.03,21.4
+2024-10-20,1 Klaviyo,Memories,MEMORIES-HTXH48SV,1.0,495.0,74.25
+2024-10-21,4 Campaign codes,GRATEFUL20,GRATEFUL20,3.0,843.76,168.73
+2024-10-21,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-JDNPBCZ9,0.0,0.0,-0.0
+2024-10-21,1 Klaviyo,Welcome code,Welcome-DXNV4FBN,1.0,57.94,5.79
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,366.82,366.82
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS30,1.0,72.15,21.64
+2024-10-21,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,359.0,17.95
+2024-10-21,1 Klaviyo,Welcome code,Welcome-RPGCJ5JX,1.0,423.22,42.31
+2024-10-21,"5 Investors, team, PR & friends",Other named codes (to confirm),100%Filip,1.0,356.71,356.71
+2024-10-21,1 Klaviyo,Welcome code,Welcome-VTB755KH,1.0,190.0,19.0
+2024-10-21,4 Campaign codes,UPGRADEME365,UPGRADEME365,1.0,465.0,46.5
+2024-10-21,1 Klaviyo,Welcome code,Welcome-P8GCTCR6,1.0,316.09,31.6
+2024-10-21,1 Klaviyo,Welcome code,Welcome-VVM5WTWT,1.0,325.48,32.56
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,Soho_House20,2.0,782.29,156.45
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,alexosigge,1.0,113.65,11.36
+2024-10-21,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-PCLSBJQC,0.0,0.0,-0.0
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,2.0,345.49,103.64
+2024-10-21,"5 Investors, team, PR & friends",Friends & family,ALEXOCHSIGGE,1.0,231.83,23.17
+2024-10-22,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,3868.06,1353.83
+2024-10-22,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-RHTDNVKX,0.0,0.0,-0.0
+2024-10-22,1 Klaviyo,Welcome code,Welcome-QG9M7HFX,1.0,136.61,13.66
+2024-10-22,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,95.0,4.75
+2024-10-22,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,535.22,535.22
+2024-10-22,4 Campaign codes,UPGRADEMYDRAWER,UPGRADEMYDRAWER,1.0,115.95,11.59
+2024-10-22,1 Klaviyo,Welcome code,Welcome-BH8B68VP,1.0,184.0,18.4
+2024-10-22,1 Klaviyo,Welcome code,Welcome-TL5M9JH8,1.0,284.24,28.43
+2024-10-22,1 Klaviyo,Welcome code,Welcome-C7WP9NKW,0.0,0.0,-0.0
+2024-10-23,1 Klaviyo,Welcome code,Welcome-CTB9XF9L,1.0,178.74,17.88
+2024-10-23,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,6.0,745.85,37.28
+2024-10-23,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,586.48,586.48
+2024-10-23,1 Klaviyo,Welcome code,Welcome-95FZ9DN3,1.0,66.0,6.6
+2024-10-23,1 Klaviyo,Welcome code,Welcome-WRS6R9HV,1.0,419.72,41.97
+2024-10-23,1 Klaviyo,Welcome code,Welcome-XDBMVV6C,1.0,125.2,12.51
+2024-10-23,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,1.0,64.14,19.24
+2024-10-24,"5 Investors, team, PR & friends",Friends & family,friendz2022,1.0,147.58,29.51
+2024-10-24,1 Klaviyo,Welcome code,Welcome-TJXP8JV9,1.0,45.0,4.5
+2024-10-24,1 Klaviyo,Welcome code,Welcome-X6C4RF7G,1.0,303.92,30.39
+2024-10-24,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,625.03,31.24
+2024-10-24,1 Klaviyo,Welcome code,Welcome-7X2HMG9S,0.0,0.0,-0.0
+2024-10-24,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,260.0,260.0
+2024-10-24,1 Klaviyo,Welcome code,Welcome-ZWLVXTPD,1.0,132.22,13.22
+2024-10-24,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,435.0,152.25
+2024-10-24,1 Klaviyo,Welcome code,Welcome-PTG3PGJS,1.0,161.35,16.11
+2024-10-24,1 Klaviyo,Welcome code,Welcome-GP89S2L2,0.0,0.0,-0.0
+2024-10-24,1 Klaviyo,Welcome code,Welcome-QT448ZGX,1.0,50.0,5.0
+2024-10-24,1 Klaviyo,Welcome code,Welcome-RGFF9JHL,1.0,144.67,14.46
+2024-10-24,1 Klaviyo,Welcome code,Welcome-HGD37LQ7,1.0,552.77,55.27
+2024-10-24,1 Klaviyo,Welcome code,Welcome-2X4WX34N,1.0,337.41,33.71
+2024-10-24,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-LNPRV3K6,0.0,0.0,-0.0
+2024-10-24,1 Klaviyo,Welcome code,Welcome-XXPZCG93,1.0,230.0,23.0
+2024-10-24,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,2.0,437.84,131.35
+2024-10-24,4 Campaign codes,SPREADINGTHEGOSPEL20,SPREADINGTHEGOSPEL20,0.0,0.0,-0.0
+2024-10-24,1 Klaviyo,Welcome code,Welcome-4C9B3DRR,1.0,215.4,21.53
+2024-10-24,1 Klaviyo,Memories,MEMORIES-7MDLRG5G,0.0,0.0,-0.0
+2024-10-25,1 Klaviyo,Welcome code,Welcome-CZ5RPZXP,1.0,128.58,12.85
+2024-10-25,1 Klaviyo,Welcome code,Welcome-BSSGJKFC,1.0,128.57,12.85
+2024-10-25,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,428.0,21.4
+2024-10-25,1 Klaviyo,Welcome code,Welcome-7FMBJGN7,1.0,98.24,9.82
+2024-10-25,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,400.12,80.02
+2024-10-25,1 Klaviyo,Welcome code,Welcome-KR46N39P,1.0,196.0,19.6
+2024-10-25,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1943.55,1943.55
+2024-10-25,1 Klaviyo,Welcome code,Welcome-DMH2G5B5,1.0,351.7,35.16
+2024-10-25,1 Klaviyo,Welcome code,Welcome-BDQ87Z7X,1.0,64.04,6.4
+2024-10-25,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,128.73,19.31
+2024-10-25,3 Conjured referral,Conjured referral,FR-QAuGtQXZVCBuyWJO,1.0,207.04,31.04
+2024-10-25,"5 Investors, team, PR & friends",Friends & family,alexosigge,1.0,158.14,15.81
+2024-10-25,1 Klaviyo,Welcome code,Welcome-L84RKL9J,1.0,92.0,9.19
+2024-10-25,1 Klaviyo,Welcome code,Welcome-NJNWXD3R,1.0,292.65,29.26
+2024-10-26,1 Klaviyo,Welcome code,Welcome-55KW75F9,1.0,79.1,7.91
+2024-10-26,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,1120.12,56.0
+2024-10-26,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,204.78,40.96
+2024-10-26,1 Klaviyo,Welcome code,Welcome-JHMKMW2X,1.0,199.14,19.9
+2024-10-26,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS30,1.0,128.01,38.4
+2024-10-26,1 Klaviyo,Welcome code,Welcome-HP33T8K5,1.0,158.2,15.82
+2024-10-26,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,283.93,113.55
+2024-10-26,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-72T36WPF,0.0,0.0,-0.0
+2024-10-26,"5 Investors, team, PR & friends",Friends & family,Soho_House20,1.0,215.0,43.0
+2024-10-26,1 Klaviyo,Welcome code,Welcome-PLMPRFRH,1.0,410.19,41.04
+2024-10-26,1 Klaviyo,Welcome code,Welcome-64C837XZ,1.0,211.58,21.16
+2024-10-26,"5 Investors, team, PR & friends",Friends & family,alexosigge,1.0,143.1,14.3
+2024-10-26,4 Campaign codes,Thanks15,Thanks15,0.0,0.0,-0.0
+2024-10-26,1 Klaviyo,Welcome code,Welcome-CH4HK694,1.0,605.0,60.5
+2024-10-27,1 Klaviyo,Inactive Winback,WZB46Q2G8,1.0,177.14,35.43
+2024-10-27,1 Klaviyo,Welcome code,Welcome-MBPMWMMR,1.0,128.04,12.78
+2024-10-27,1 Klaviyo,Welcome code,Welcome-5MBC7BWB,1.0,49.68,4.96
+2024-10-27,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,769.7,38.48
+2024-10-27,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,394.55,78.89
+2024-10-27,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-Q5827HXP,0.0,0.0,-0.0
+2024-10-27,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,522.45,522.45
+2024-10-27,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,341.0,102.3
+2024-10-27,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,68.93,10.33
+2024-10-27,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,2.0,241.03,72.29
+2024-10-27,1 Klaviyo,Welcome code,Welcome-M5X7R5NC,1.0,248.28,24.83
+2024-10-27,1 Klaviyo,Welcome code,Welcome-KLRLGX22,1.0,115.0,11.5
+2024-10-27,"5 Investors, team, PR & friends",Friends & family,CDLPxJOAKIM,1.0,677.74,135.53
+2024-10-27,1 Klaviyo,Welcome code,Welcome-R4LMJNT8,1.0,215.01,21.49
+2024-10-27,1 Klaviyo,Welcome code,Welcome-6RT2SLQJ,1.0,128.06,12.8
+2024-10-28,1 Klaviyo,Welcome code,Welcome-M2CZWHLX,1.0,190.0,19.0
+2024-10-28,1 Klaviyo,Welcome code,Welcome-N6GQG939,1.0,95.0,9.5
+2024-10-28,1 Klaviyo,Welcome code,Welcome-QFD8L2BX,1.0,131.98,13.19
+2024-10-28,1 Klaviyo,Welcome code,Welcome-ZW6RWCQ5,1.0,325.64,32.56
+2024-10-28,1 Klaviyo,Welcome code,Welcome-RK5W585R,1.0,227.83,22.77
+2024-10-28,1 Klaviyo,Welcome code,Welcome-7S8QQVZ8,1.0,115.38,11.52
+2024-10-28,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,1.0,345.84,103.75
+2024-10-28,2 Customer care,Named / care codes,MatthewPeterLawrence-30,1.0,190.07,57.01
+2024-10-28,1 Klaviyo,Welcome code,Welcome-6NWNXK58,1.0,224.69,22.47
+2024-10-28,1 Klaviyo,Welcome code,Welcome-8G96ZVTL,1.0,219.83,21.96
+2024-10-28,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,4.0,803.22,40.16
+2024-10-28,1 Klaviyo,Welcome code,Welcome-79ZLVTB2,1.0,202.9,20.28
+2024-10-28,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,4.0,1646.25,1646.25
+2024-10-28,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-GCM9T3S6,0.0,0.0,-0.0
+2024-10-28,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-4DTR76N6,0.0,0.0,-0.0
+2024-10-28,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS,1.0,135.76,27.14
+2024-10-29,1 Klaviyo,Memories,MEMORIES-BPD67GGB,1.0,127.68,19.15
+2024-10-29,1 Klaviyo,Welcome code,Welcome-P8DH4DHZ,1.0,978.01,97.78
+2024-10-29,1 Klaviyo,Welcome code,Welcome-SNH7QK8L,1.0,132.23,13.21
+2024-10-29,1 Klaviyo,Welcome code,Welcome-SK96XBSZ,1.0,63.79,6.38
+2024-10-29,1 Klaviyo,Welcome code,Welcome-KMCB7X3X,1.0,80.42,8.04
+2024-10-29,1 Klaviyo,Welcome code,Welcome-MBTCL9HR,1.0,38.0,3.8
+2024-10-29,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,625.81,31.27
+2024-10-29,1 Klaviyo,Welcome code,Welcome-TBGKGN3L,1.0,127.57,12.76
+2024-10-29,1 Klaviyo,Welcome code,Welcome-CFK2GGVV,1.0,129.47,12.94
+2024-10-29,1 Klaviyo,Welcome code,Welcome-NBHVLHLM,1.0,63.6,6.36
+2024-10-29,1 Klaviyo,Welcome code,Welcome-RWR4HZHW,1.0,112.58,11.25
+2024-10-29,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,156.21,156.21
+2024-10-29,1 Klaviyo,Welcome code,Welcome-HF3FGKCL,1.0,63.77,6.37
+2024-10-29,1 Klaviyo,Welcome code,Welcome-87SR7MXP,1.0,192.2,19.22
+2024-10-30,1 Klaviyo,Welcome code,Welcome-6BPQQVGV,1.0,189.75,18.97
+2024-10-30,1 Klaviyo,Welcome code,Welcome-9JQHDJ9L,0.0,0.0,-0.0
+2024-10-30,1 Klaviyo,Welcome code,Welcome-68H9KQHJ,0.0,0.0,-0.0
+2024-10-30,1 Klaviyo,Welcome code,Welcome-9FXZ5LXR,1.0,190.0,19.0
+2024-10-30,2 Customer care,Named / care codes,welcomediane,0.0,0.0,-0.0
+2024-10-30,1 Klaviyo,Inactive Winback,WXLWC6SXD,1.0,177.0,35.4
+2024-10-30,1 Klaviyo,Welcome code,Welcome-9RV2JRXK,1.0,24.76,2.48
+2024-10-30,1 Klaviyo,Welcome code,Welcome-3FRFXZF5,1.0,161.9,16.18
+2024-10-30,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,0.0,0.0,-0.0
+2024-10-30,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,109.36,5.46
+2024-10-30,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,294.0,58.8
+2024-10-30,6 Test orders,Test codes,teammastertraining,1.0,111.01,22.19
+2024-10-30,4 Campaign codes,TEETIME,TEETIME,2.0,358.09,53.7
+2024-10-30,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS30,0.0,0.0,-0.0
+2024-10-30,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1036.23,1036.23
+2024-10-30,1 Klaviyo,Welcome code,Welcome-JKLVXQ6Q,1.0,86.47,8.65
+2024-10-31,1 Klaviyo,Welcome code,Welcome-JL53FLQQ,1.0,73.94,7.39
+2024-10-31,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,187.02,46.74
+2024-10-31,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,915.0,45.75
+2024-10-31,1 Klaviyo,Welcome code,Welcome-CW687KSX,1.0,280.41,28.05
+2024-10-31,1 Klaviyo,Welcome code,Welcome-QTQ9Z9JC,1.0,130.76,13.06
+2024-10-31,4 Campaign codes,TEETIME,TEETIME,2.0,278.0,41.7
+2024-10-31,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,467.2,467.2
+2024-10-31,1 Klaviyo,Welcome code,Welcome-W6DZ4KBS,1.0,135.0,13.5
+2024-11-01,1 Klaviyo,Welcome code,Welcome-VPZWHDBT,1.0,174.48,17.44
+2024-11-01,1 Klaviyo,Welcome code,Welcome-2NHDCC93,1.0,95.0,9.5
+2024-11-01,1 Klaviyo,Welcome code,Welcome-PZRT8M53,1.0,167.0,16.7
+2024-11-01,1 Klaviyo,Welcome code,Welcome-XJXXZ6S6,1.0,155.92,15.59
+2024-11-01,1 Klaviyo,Welcome code,Welcome-CH3Z5NLW,1.0,168.39,16.84
+2024-11-01,1 Klaviyo,Memories,MEMORIES-J2TK76SM,1.0,155.46,23.32
+2024-11-01,4 Campaign codes,TEETIME,TEETIME,1.0,250.0,37.5
+2024-11-01,1 Klaviyo,Welcome code,Welcome-CW687KSX,0.0,0.0,-0.0
+2024-11-01,1 Klaviyo,Inactive Winback,W84LNDWKX,1.0,134.18,26.83
+2024-11-01,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,3.0,705.52,35.28
+2024-11-02,1 Klaviyo,Welcome code,Welcome-9TL2XJFB,1.0,211.97,21.2
+2024-11-02,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,2.0,617.97,185.39
+2024-11-02,1 Klaviyo,Welcome code,Welcome-BT8DTTVR,1.0,150.78,15.07
+2024-11-02,1 Klaviyo,Welcome code,Welcome-NFGD2SCX,1.0,82.3,8.22
+2024-11-02,1 Klaviyo,Welcome code,Welcome-NHBP79B5,1.0,158.14,15.81
+2024-11-02,1 Klaviyo,Welcome code,Welcome-SVFR3SK7,1.0,63.28,6.32
+2024-11-02,1 Klaviyo,Welcome code,Welcome-QHXNSGN4,1.0,174.48,17.44
+2024-11-02,1 Klaviyo,Welcome code,Welcome-696KVZ2M,1.0,365.97,36.6
+2024-11-02,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-VZWSJ9H8,0.0,0.0,-0.0
+2024-11-02,1 Klaviyo,Welcome code,Welcome-TTPQ99GR,1.0,346.66,34.64
+2024-11-02,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,282.95,70.74
+2024-11-03,1 Klaviyo,Welcome code,Welcome-HZ2P5283,1.0,469.07,46.9
+2024-11-03,1 Klaviyo,Welcome code,Welcome-5DPLBS99,1.0,120.92,12.09
+2024-11-03,1 Klaviyo,Welcome code,Welcome-FJNSXSNJ,1.0,63.26,6.32
+2024-11-03,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS,1.0,234.53,46.9
+2024-11-03,1 Klaviyo,Welcome code,Welcome-8ZPVZZWJ,1.0,299.8,29.96
+2024-11-03,4 Campaign codes,TEETIME,TEETIME,2.0,295.53,44.31
+2024-11-03,4 Campaign codes,GRATEFUL20,GRATEFUL20,2.0,338.03,67.6
+2024-11-03,1 Klaviyo,Welcome code,Welcome-5SFF4P99,1.0,88.35,8.83
+2024-11-03,"5 Investors, team, PR & friends",Other named codes (to confirm),JANNE,2.0,177.94,35.58
+2024-11-03,1 Klaviyo,Welcome code,Welcome-4FRKJ8KB,1.0,141.44,14.12
+2024-11-03,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,2.0,1080.0,54.0
+2024-11-04,1 Klaviyo,Welcome code,Welcome-2NHDCC93,0.0,0.0,-0.0
+2024-11-04,"5 Investors, team, PR & friends",Friends & family,FRIENDZZZQ3,1.0,402.28,120.68
+2024-11-04,"5 Investors, team, PR & friends",Friends & family,alexosigge,2.0,261.78,26.17
+2024-11-04,1 Klaviyo,Welcome code,Welcome-2MPZQXQC,1.0,120.65,12.06
+2024-11-04,1 Klaviyo,Welcome code,Welcome-2J6QNT66,1.0,179.83,17.97
+2024-11-04,1 Klaviyo,Welcome code,Welcome-PT9H8WDB,1.0,69.0,6.88
+2024-11-04,2 Customer care,Named / care codes,CDLP10_MCCARTHY,1.0,193.0,19.3
+2024-11-04,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,854.81,854.81
+2024-11-04,1 Klaviyo,Welcome code,Welcome-CW86KMVV,1.0,152.0,15.2
+2024-11-04,1 Klaviyo,Inactive Winback,WX55V4XQB,1.0,63.77,12.75
+2024-11-04,1 Klaviyo,Welcome code,Welcome-Q385VNTT,1.0,156.8,15.68
+2024-11-04,1 Klaviyo,Welcome code,Welcome-4B7ZG67V,1.0,94.98,9.5
+2024-11-04,1 Klaviyo,Welcome code,Welcome-G2P6WXWG,1.0,111.9,11.18
+2024-11-04,1 Klaviyo,Welcome code,Welcome-2B23GSJN,1.0,179.62,17.96
+2024-11-04,1 Klaviyo,Welcome code,Welcome-8QSPF97L,1.0,63.51,6.35
+2024-11-04,1 Klaviyo,Welcome code,Welcome-ZMF88KMQ,1.0,235.21,23.52
+2024-11-04,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,261.32,65.33
+2024-11-04,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,4.0,671.06,33.54
+2024-11-04,1 Klaviyo,Welcome code,Welcome-WV7BP7XB,1.0,265.02,26.5
+2024-11-05,1 Klaviyo,Welcome code,Welcome-ZSVFMDFK,1.0,194.37,19.44
+2024-11-05,1 Klaviyo,Welcome code,Welcome-9TXMB5RD,1.0,126.87,12.68
+2024-11-05,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,331.95,331.95
+2024-11-05,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,298.0,298.0
+2024-11-05,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,126.97,19.04
+2024-11-05,1 Klaviyo,Memories,MEMORIES-RPHK5VTM,1.0,177.92,26.68
+2024-11-05,1 Klaviyo,Welcome code,Welcome-XK3RZQTT,1.0,171.61,17.15
+2024-11-05,1 Klaviyo,Welcome code,Welcome-LHWXNCHP,1.0,95.0,9.5
+2024-11-05,1 Klaviyo,Welcome code,Welcome-Z6BPRZ4D,1.0,77.53,7.75
+2024-11-05,1 Klaviyo,Welcome code,Welcome-N3PP5B27,1.0,111.88,11.18
+2024-11-05,4 Campaign codes,TEETIME,TEETIME,2.0,461.74,69.26
+2024-11-05,1 Klaviyo,Welcome code,Welcome-8HVNX4G2,1.0,126.92,12.68
+2024-11-05,2 Customer care,Named / care codes,Adilia_Pimenta,1.0,62.22,61.0
+2024-11-05,1 Klaviyo,Welcome code,Welcome-2ZQDQ48S,1.0,169.36,16.94
+2024-11-05,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,5.0,881.85,44.09
+2024-11-05,1 Klaviyo,Welcome code,Welcome-7CS99S7H,1.0,38.53,3.85
+2024-11-05,"5 Investors, team, PR & friends",Friends & family,FRIENDZZQ1,1.0,63.49,15.87
+2024-11-05,4 Campaign codes,GRATEFUL20,GRATEFUL20,2.0,487.49,97.5
+2024-11-05,1 Klaviyo,Welcome code,Welcome-6C94MF8J,1.0,190.0,19.0
+2024-11-05,1 Klaviyo,Welcome code,Welcome-9BNPH43M,1.0,171.49,17.15
+2024-11-05,"5 Investors, team, PR & friends",Other named codes (to confirm),Hanna_100,1.0,146.8,146.8
+2024-11-05,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,848.48,296.96
+2024-11-06,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,3.0,1917.97,1917.97
+2024-11-06,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,1.0,139.98,20.99
+2024-11-06,1 Klaviyo,Welcome code,Welcome-3JN65SPW,1.0,580.21,57.97
+2024-11-06,1 Klaviyo,Welcome code,Welcome-3FW5ZMS9,1.0,90.86,9.08
+2024-11-06,1 Klaviyo,Welcome code,Welcome-S33FKB4B,1.0,237.69,23.77
+2024-11-06,1 Klaviyo,Welcome code,Welcome-GSDBNLSR,1.0,300.76,30.08
+2024-11-06,4 Campaign codes,TEETIME,TEETIME,1.0,192.74,28.92
+2024-11-06,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-76K2F2DT,0.0,0.0,-0.0
+2024-11-06,"5 Investors, team, PR & friends",Friends & family,CDLPFRIENDS,1.0,145.73,29.14
+2024-11-06,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,1.0,548.26,27.42
+2024-11-06,1 Klaviyo,Welcome code,Welcome-47WDJKQ9,1.0,45.27,4.53
+2024-11-06,2 Customer care,Named / care codes,CDLP20_WALTERROTH,1.0,475.16,95.03
+2024-11-06,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,487.95,97.57
+2024-11-07,1 Klaviyo,Welcome code,Welcome-79ZLVTB2,0.0,0.0,-0.0
+2024-11-07,1 Klaviyo,Welcome code,Welcome-RPGCJ5JX,0.0,0.0,-0.0
+2024-11-07,1 Klaviyo,Welcome code,Welcome-B6972LZS,1.0,108.96,10.9
+2024-11-07,1 Klaviyo,Memories,MEMORIES-ZQ5TMLLK,1.0,237.67,35.65
+2024-11-07,1 Klaviyo,Welcome code,Welcome-5ZQ4HPHL,1.0,134.37,13.43
+2024-11-07,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-D7N76XFX,0.0,0.0,-0.0
+2024-11-07,1 Klaviyo,Welcome code,Welcome-KD6MCTDX,1.0,187.9,18.79
+2024-11-07,1 Klaviyo,Welcome code,Welcome-QFXXKDB6,1.0,230.0,23.0
+2024-11-07,1 Klaviyo,Welcome code,Welcome-MZQHDWZH,1.0,285.0,28.5
+2024-11-07,1 Klaviyo,Inactive Winback,WRX5TT8BQ,1.0,125.48,25.1
+2024-11-07,4 Campaign codes,TEETIME,TEETIME,2.0,407.93,61.19
+2024-11-07,6 Test orders,Test codes,Veronika_100%,2.0,314.62,314.62
+2024-11-07,1 Klaviyo,Welcome code,Welcome-WVF8KPQ9,1.0,134.33,13.44
+2024-11-07,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,0.0,0.0,-0.0
+2024-11-07,1 Klaviyo,Welcome code,Welcome-LDNZ4J7V,1.0,230.0,23.0
+2024-11-07,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,126.98,44.44
+2024-11-08,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,702.69,702.69
+2024-11-08,1 Klaviyo,Welcome code,Welcome-NVB2344K,1.0,192.53,19.24
+2024-11-08,1 Klaviyo,Welcome code,Welcome-42Q43TRH,1.0,62.7,6.27
+2024-11-08,1 Klaviyo,Welcome code,Welcome-SV22KH3C,1.0,247.0,24.7
+2024-11-08,4 Campaign codes,TEETIME,TEETIME,4.0,649.61,97.42
+2024-11-08,2 Customer care,Named / care codes,CDLP10_SARAHAUSTIN,1.0,338.05,33.8
+2024-11-08,1 Klaviyo,Welcome code,Welcome-TV689STQ,1.0,190.0,19.0
+2024-11-08,1 Klaviyo,Welcome code,Welcome-CKV3MK3C,1.0,190.0,19.0
+2024-11-08,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,2.0,417.61,146.14
+2024-11-08,1 Klaviyo,Welcome code,Welcome-54Z35VQB,1.0,454.39,45.41
+2024-11-09,1 Klaviyo,Welcome code,Welcome-XBXS94ZH,1.0,77.67,7.76
+2024-11-09,4 Campaign codes,GRATEFUL20,GRATEFUL20,2.0,786.35,157.26
+2024-11-09,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-SDSDVBNC,0.0,0.0,-0.0
+2024-11-09,"5 Investors, team, PR & friends",Other named codes (to confirm),CDLPxNetlight,1.0,134.26,26.84
+2024-11-09,4 Campaign codes,TEETIME,TEETIME,1.0,200.41,30.06
+2024-11-10,1 Klaviyo,Welcome code,Welcome-5FVPR5RM,1.0,1446.0,144.6
+2024-11-10,"5 Investors, team, PR & friends",Friends & family,CDLPxJOAKIM,1.0,125.74,25.14
+2024-11-10,1 Klaviyo,Welcome code,Welcome-3NMVF87R,1.0,108.92,10.89
+2024-11-10,1 Klaviyo,Welcome code,Welcome-3LV3WMQS,1.0,303.31,30.33
+2024-11-10,1 Klaviyo,Welcome code,Welcome-XCLXVNF2,1.0,1474.0,147.4
+2024-11-10,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,129.46,45.31
+2024-11-10,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,0.0,0.0,-0.0
+2024-11-10,1 Klaviyo,Welcome code,Welcome-HSHLHVH5,1.0,95.0,9.5
+2024-11-10,1 Klaviyo,Welcome code,Welcome-2HCKWSR4,0.0,0.0,-0.0
+2024-11-10,1 Klaviyo,Welcome code,Welcome-M586MLXL,1.0,190.0,19.0
+2024-11-10,4 Campaign codes,TEETIME,TEETIME,5.0,1029.21,154.36
+2024-11-11,1 Klaviyo,Inactive Winback,WQW9Z8S7R,1.0,66.27,13.25
+2024-11-11,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,443.75,443.75
+2024-11-11,1 Klaviyo,Welcome code,Welcome-L7KPRR75,1.0,24.33,2.43
+2024-11-11,2 Customer care,Named / care codes,LONGTIME_Alderbas,1.0,1380.0,276.0
+2024-11-11,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-HJ8J9466,0.0,0.0,-0.0
+2024-11-11,1 Klaviyo,Welcome code,Welcome-643B3VW3,1.0,265.0,26.5
+2024-11-11,4 Campaign codes,TEETIME,TEETIME,2.0,598.0,89.7
+2024-11-11,1 Klaviyo,Welcome code,Welcome-3DGDQFHP,1.0,190.0,19.0
+2024-11-12,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-7NHG8G35,0.0,0.0,-0.0
+2024-11-12,1 Klaviyo,Inactive Winback,WV44MBC7R,1.0,24.17,4.83
+2024-11-12,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,88.0,88.0
+2024-11-12,1 Klaviyo,Welcome code,Welcome-HZN87HQ7,1.0,83.29,8.32
+2024-11-12,6 Test orders,Test codes,Veronika_100,3.0,461.07,461.07
+2024-11-12,1 Klaviyo,Welcome code,Welcome-39926XBM,1.0,62.45,6.24
+2024-11-12,1 Klaviyo,Welcome code,Welcome-QNLBV9MR,1.0,47.76,4.77
+2024-11-12,1 Klaviyo,Welcome code,Welcome-9BNPH43M,0.0,0.0,-0.0
+2024-11-12,1 Klaviyo,Welcome code,Welcome-X2ZPPF7R,1.0,182.0,18.2
+2024-11-12,4 Campaign codes,TEETIME,TEETIME,3.0,352.4,52.85
+2024-11-12,1 Klaviyo,Welcome code,Welcome-NFGD2SCX,0.0,0.0,-0.0
+2024-11-12,1 Klaviyo,Welcome code,Welcome-RLR29J5W,1.0,231.5,23.15
+2024-11-13,4 Campaign codes,TEETIME,TEETIME,2.0,349.48,52.42
+2024-11-13,1 Klaviyo,Welcome code,Welcome-FG8FMKT5,1.0,174.05,17.4
+2024-11-13,1 Klaviyo,Welcome code,Welcome-XBC7F3L6,1.0,92.22,9.22
+2024-11-13,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-G5L7ZWWG,0.0,0.0,-0.0
+2024-11-13,6 Test orders,Test codes,coitest4,1.0,67.65,67.65
+2024-11-13,1 Klaviyo,Welcome code,Welcome-MDC7F7R9,1.0,249.7,24.96
+2024-11-13,1 Klaviyo,Welcome code,Welcome-5TLT5CLK,1.0,203.0,20.3
+2024-11-13,2 Customer care,Named / care codes,CDLP20_DUNCANNEILSON,1.0,365.0,73.0
+2024-11-13,1 Klaviyo,Welcome code,Welcome-DXP2B2WG,1.0,123.79,12.37
+2024-11-13,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,4.0,1238.08,1238.08
+2024-11-14,1 Klaviyo,Welcome code,Welcome-54Z35VQB,0.0,0.0,-0.0
+2024-11-14,1 Klaviyo,Welcome code,Welcome-SZ5D5M9K,1.0,208.33,20.83
+2024-11-14,1 Klaviyo,Welcome code,Welcome-T5GBFSPF,1.0,54.69,5.47
+2024-11-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-Z6DLRQRK,0.0,0.0,-0.0
+2024-11-14,1 Klaviyo,Welcome code,Welcome-WR8Z4QNT,1.0,136.29,13.63
+2024-11-14,1 Klaviyo,Welcome code,Welcome-PZNMN5JR,1.0,179.87,17.97
+2024-11-14,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,619.33,619.33
+2024-11-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-MJQQDTNK,0.0,0.0,-0.0
+2024-11-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-GVZ9GGTG,0.0,0.0,-0.0
+2024-11-14,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-CB498QFX,0.0,0.0,-0.0
+2024-11-15,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,193.54,58.05
+2024-11-15,4 Campaign codes,TEETIME,TEETIME,1.0,168.88,25.32
+2024-11-15,1 Klaviyo,Welcome code,Welcome-B2BQQPGQ,1.0,354.68,35.45
+2024-11-15,6 Test orders,Test codes,Veronika_100%,1.0,77.47,77.47
+2024-11-15,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-JB8XP4ZX,0.0,0.0,-0.0
+2024-11-15,1 Klaviyo,Welcome code,Welcome-VJD25346,1.0,440.0,44.0
+2024-11-15,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,654.0,654.0
+2024-11-16,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-HPCFLX8T,0.0,0.0,-0.0
+2024-11-16,1 Klaviyo,Welcome code,Welcome-LLGT87VG,1.0,258.71,25.87
+2024-11-16,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,235.0,47.0
+2024-11-16,1 Klaviyo,Memories,MEMORIES-MHZBBFGR,1.0,498.53,74.77
+2024-11-16,1 Klaviyo,Welcome code,Welcome-9WL2RPN3,1.0,209.0,20.9
+2024-11-16,1 Klaviyo,Welcome code,Welcome-GC3NZ565,1.0,172.46,17.24
+2024-11-16,1 Klaviyo,Welcome code,Welcome-QJP8ZGHS,1.0,78.84,7.88
+2024-11-17,1 Klaviyo,Welcome code,Welcome-R49P6GPP,1.0,353.18,35.32
+2024-11-17,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-H2FL7Q7R,0.0,0.0,-0.0
+2024-11-17,4 Campaign codes,TEETIME,TEETIME,3.0,287.68,43.14
+2024-11-17,1 Klaviyo,Welcome code,Welcome-L2QV7MTC,1.0,34.82,3.47
+2024-11-17,1 Klaviyo,Welcome code,Welcome-VHL7DWG5,1.0,123.88,12.38
+2024-11-17,1 Klaviyo,Memories,MEMORIES-27W7MPH5,1.0,164.04,24.6
+2024-11-17,1 Klaviyo,Welcome code,Welcome-2Z4QPBK2,1.0,88.89,8.88
+2024-11-17,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,240.47,96.18
+2024-11-17,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-R5NLVZ6L,0.0,0.0,-0.0
+2024-11-17,1 Klaviyo,Welcome code,Welcome-VNJXGHZC,1.0,86.23,8.62
+2024-11-18,1 Klaviyo,Welcome code,Welcome-XL3M96NN,1.0,290.0,29.0
+2024-11-18,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-WH93SCND,0.0,0.0,-0.0
+2024-11-18,1 Klaviyo,Welcome code,Welcome-DQVQH2F5,1.0,237.78,23.76
+2024-11-18,6 Test orders,Test codes,Veronika_100%,0.0,0.0,-0.0
+2024-11-18,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-8Q4HKJBL,0.0,0.0,-0.0
+2024-11-18,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,719.67,251.88
+2024-11-18,4 Campaign codes,TEETIME,TEETIME,1.0,105.66,15.84
+2024-11-18,2 Customer care,Named / care codes,CDLP20_MICHAELOTERO,1.0,591.24,118.26
+2024-11-18,6 Test orders,Test codes,Veronika_100,3.0,859.76,859.76
+2024-11-18,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,258.0,258.0
+2024-11-18,1 Klaviyo,Welcome code,Welcome-PZKTDBHZ,1.0,484.96,48.5
+2024-11-18,3 Conjured referral,Conjured referral,FR-U2kUHU21BJPWQqzy,1.0,82.06,12.3
+2024-11-18,1 Klaviyo,Welcome code,Welcome-PK8KCC46,1.0,82.39,8.24
+2024-11-18,1 Klaviyo,Welcome code,Welcome-CWQJ8DGG,1.0,37.49,3.73
+2024-11-19,2 Customer care,Named / care codes,CDLP100_TANNERMCAULEY,1.0,160.0,160.0
+2024-11-19,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,124.25,24.84
+2024-11-19,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,520.0,182.0
+2024-11-19,6 Test orders,Test codes,RETURNTESTING,2.0,70.81,70.81
+2024-11-19,1 Klaviyo,Welcome code,Welcome-VXQNMGHN,1.0,250.37,25.02
+2024-11-19,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,77.61,77.61
+2024-11-19,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,604.09,604.09
+2024-11-19,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-11-19,1 Klaviyo,Welcome code,Welcome-MSKZWXNB,1.0,555.0,55.5
+2024-11-19,1 Klaviyo,Welcome code,Welcome-J4JMJGSP,1.0,86.61,8.65
+2024-11-19,1 Klaviyo,Welcome code,Welcome-QWMXV7BM,1.0,423.12,42.32
+2024-11-19,1 Klaviyo,Welcome code,Welcome-TTPQ99GR,0.0,0.0,-0.0
+2024-11-19,1 Klaviyo,Welcome code,Welcome-D7PQ954J,1.0,118.0,11.8
+2024-11-19,1 Klaviyo,Welcome code,Welcome-PRPHTD87,1.0,248.77,24.88
+2024-11-20,2 Customer care,Named / care codes,CDLP20_JESPERDALGAARD,1.0,320.08,64.01
+2024-11-20,1 Klaviyo,Welcome code,Welcome-4KNM2XLG,1.0,809.0,80.9
+2024-11-20,1 Klaviyo,Welcome code,Welcome-33H8L6NW,1.0,398.56,39.83
+2024-11-20,4 Campaign codes,TEETIME,TEETIME,1.0,250.0,37.5
+2024-11-20,1 Klaviyo,Welcome code,Welcome-9LQXVJBR,1.0,587.23,58.71
+2024-11-20,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-4WT8WV32,0.0,0.0,-0.0
+2024-11-20,1 Klaviyo,Welcome code,Welcome-CW86KMVV,0.0,0.0,-0.0
+2024-11-20,1 Klaviyo,Welcome code,Welcome-J7MJ4NLS,1.0,71.4,7.14
+2024-11-20,1 Klaviyo,Welcome code,Welcome-X947WH9X,1.0,190.0,19.0
+2024-11-20,1 Klaviyo,Welcome code,Welcome-4PBDGM3B,1.0,190.0,19.0
+2024-11-20,1 Klaviyo,Welcome code,Welcome-D8GFDCKM,1.0,149.19,14.9
+2024-11-20,1 Klaviyo,Inactive Winback,WLKJ28Q7J,1.0,380.0,76.0
+2024-11-20,1 Klaviyo,Welcome code,Welcome-3HW9VL5R,1.0,194.47,19.45
+2024-11-21,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-256S5V3F,0.0,0.0,-0.0
+2024-11-21,1 Klaviyo,Memories,MEMORIES-NRXM7HK2,1.0,61.67,9.24
+2024-11-21,1 Klaviyo,Inactive Winback,W9SWS8NH3,1.0,127.16,25.42
+2024-11-21,1 Klaviyo,Welcome code,Welcome-3NGJHRNL,1.0,33.59,3.35
+2024-11-21,6 Test orders,Test codes,RETURNTESTING,0.0,0.0,-0.0
+2024-11-21,3 Conjured referral,Conjured referral,FR-0lrcMI5MuGNTRDYt,1.0,76.66,11.49
+2024-11-21,1 Klaviyo,Welcome code,Welcome-8JC79PTM,1.0,95.0,9.5
+2024-11-21,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,231.48,231.48
+2024-11-21,4 Campaign codes,EARLYBIRD,EARLYBIRD,175.0,31911.35,6381.72
+2024-11-21,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,2132.08,746.2
+2024-11-21,1 Klaviyo,Welcome code,Welcome-ZT2X5ZMT,1.0,110.48,11.04
+2024-11-21,1 Klaviyo,Welcome code,Welcome-V4VPMMSC,1.0,146.88,14.68
+2024-11-21,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,260.0,52.0
+2024-11-21,1 Klaviyo,Welcome code,Welcome-NLB9DTB5,1.0,166.51,16.64
+2024-11-22,2 Customer care,Named / care codes,CDLP20_TANNERMCAULEY,1.0,220.0,44.0
+2024-11-22,2 Customer care,Named / care codes,CDLP25_JOHNSHELLEY,1.0,1392.05,348.04
+2024-11-22,1 Klaviyo,Inactive Winback,WQ6V3R4QD,1.0,230.93,46.18
+2024-11-22,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,375.0,112.5
+2024-11-22,1 Klaviyo,Welcome code,Welcome-FPQ8BPLD,1.0,122.86,12.28
+2024-11-22,1 Klaviyo,Welcome code,Welcome-QF98R7N9,1.0,240.11,24.0
+2024-11-22,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-9D7X72BJ,0.0,0.0,-0.0
+2024-11-22,4 Campaign codes,EARLYBIRD,EARLYBIRD,77.0,13492.05,2698.22
+2024-11-22,1 Klaviyo,Welcome code,Welcome-VW7C76D5,1.0,77.01,7.7
+2024-11-22,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,153.62,30.72
+2024-11-22,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-L6N2QVL4,0.0,0.0,-0.0
+2024-11-22,1 Klaviyo,Inactive Winback,W3KKSDHM4,1.0,81.41,16.28
+2024-11-22,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-X22R44BX,0.0,0.0,-0.0
+2024-11-23,1 Klaviyo,Welcome code,Welcome-SKBV76GK,1.0,45.0,4.5
+2024-11-23,1 Klaviyo,Inactive Winback,WRXS6MKHP,1.0,30.63,6.12
+2024-11-23,4 Campaign codes,EARLYBIRD,EARLYBIRD,27.0,4951.47,990.18
+2024-11-23,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,276.0,55.2
+2024-11-23,1 Klaviyo,Welcome code,Welcome-W97WHB79,1.0,102.32,10.23
+2024-11-24,1 Klaviyo,Welcome code,Welcome-2W3M6V3J,1.0,190.0,19.0
+2024-11-24,1 Klaviyo,Inactive Winback,WXMZDXTX8,1.0,192.72,38.54
+2024-11-24,1 Klaviyo,Welcome code,Welcome-VD4ZC7D7,1.0,38.0,3.8
+2024-11-24,1 Klaviyo,Welcome code,Welcome-DDQTX6LS,1.0,215.0,21.5
+2024-11-24,1 Klaviyo,Abandoned checkout / free shipping (FS-),FS-D82ZBFSL,0.0,0.0,-0.0
+2024-11-24,1 Klaviyo,Welcome code,Welcome-WSR9BLHR,1.0,237.74,23.76
+2024-11-24,1 Klaviyo,Welcome code,Welcome-DGMP4PK7,1.0,206.77,20.67
+2024-11-24,1 Klaviyo,Welcome code,Welcome-PXQ8PPMN,1.0,137.72,13.76
+2024-11-24,2 Customer care,Named / care codes,Per_Söderström,1.0,110.21,61.19
+2024-11-24,1 Klaviyo,Welcome code,Welcome-SGVSM5CF,1.0,76.1,7.6
+2024-11-24,4 Campaign codes,EARLYBIRD,EARLYBIRD,0.0,0.0,-0.0
+2024-11-24,1 Klaviyo,Welcome code,Welcome-GZTTS5XP,1.0,95.48,9.54
+2024-11-24,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,482.43,168.85
+2024-11-24,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,223.23,44.64
+2024-11-24,1 Klaviyo,Memories,MEMORIES-4VSSMLMF,1.0,201.78,30.27
+2024-11-24,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,0.0,0.0,-0.0
+2024-11-25,1 Klaviyo,Welcome code,Welcome-VBJSS2MZ,1.0,283.39,28.34
+2024-11-25,2 Customer care,Named / care codes,Hanin_Aldin,1.0,74.14,74.14
+2024-11-25,6 Test orders,Test codes,Subscription_Veronika_100,1.0,46.65,46.65
+2024-11-25,1 Klaviyo,Welcome code,Welcome-3SWDM9P6,1.0,115.0,11.5
+2024-11-25,1 Klaviyo,Welcome code,Welcome-HMV2X8V8,1.0,86.03,8.59
+2024-11-25,1 Klaviyo,Welcome code,Welcome-W3C65CSC,1.0,72.81,7.27
+2024-11-25,7 Subscription codes,Subscription codes,AUTOMATIQUE,2.0,129.63,12.96
+2024-11-25,1 Klaviyo,Welcome code,Welcome-JM4Z6DQZ,1.0,85.98,8.59
+2024-11-25,4 Campaign codes,WELCOMECDLP,WELCOMECDLP,0.0,0.0,-0.0
+2024-11-25,1 Klaviyo,Welcome code,Welcome-GSL4K3MT,1.0,647.22,64.71
+2024-11-25,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-11-25,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,500.0,175.0
+2024-11-25,2 Customer care,Named / care codes,CDLP20_MOGOUEZIGOUX,1.0,155.52,31.1
+2024-11-25,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,238.4,47.67
+2024-11-25,2 Customer care,Named / care codes,FREESHIP_JOPPEBROERS,0.0,0.0,-0.0
+2024-11-25,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,86.03,86.03
+2024-11-25,1 Klaviyo,Welcome code,Welcome-5LKK46FZ,1.0,74.96,7.49
+2024-11-25,1 Klaviyo,Welcome code,Welcome-SXR2W9JM,1.0,78.37,7.84
+2024-11-25,1 Klaviyo,Welcome code,Welcome-SVLWVBVW,1.0,239.29,23.93
+2024-11-26,1 Klaviyo,Welcome code,Welcome-XQ3QQ7S7,1.0,256.82,25.68
+2024-11-26,1 Klaviyo,Welcome code,Welcome-ZCRKRFX6,1.0,51.88,5.18
+2024-11-26,1 Klaviyo,Inactive Winback,WLFZWT9VR,1.0,22.0,4.4
+2024-11-26,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-11-26,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,2.0,405.14,141.8
+2024-11-26,"5 Investors, team, PR & friends",Friends & family,Subscription_Joakim,1.0,65.74,65.74
+2024-11-26,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,422.34,422.34
+2024-11-26,1 Klaviyo,Welcome code,Welcome-33BD2BB8,1.0,30.47,3.04
+2024-11-27,"5 Investors, team, PR & friends",Other named codes (to confirm),Samsom5000,1.0,182.58,182.58
+2024-11-27,6 Test orders,Test codes,Subscription_Veronika_100,1.0,46.77,46.77
+2024-11-27,3 Conjured referral,Conjured referral,FR-0lrcMI5MuGNTRDYt,0.0,0.0,-0.0
+2024-11-27,"5 Investors, team, PR & friends",Friends & family,ALEXSIGGE,0.0,0.0,-0.0
+2024-11-27,1 Klaviyo,Welcome code,Welcome-H5QJCGB7,1.0,34.88,3.48
+2024-11-27,1 Klaviyo,Inactive Winback,WPN5ZMQGM,1.0,140.0,28.0
+2024-11-27,1 Klaviyo,Welcome code,Welcome-HH6RD5RT,1.0,22.0,2.2
+2024-11-27,1 Klaviyo,Inactive Winback,WFXC3CJCX,1.0,175.0,35.0
+2024-11-27,1 Klaviyo,Welcome code,Welcome-J333PC4R,1.0,83.58,8.35
+2024-11-27,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-11-27,1 Klaviyo,Welcome code,Welcome-QFXXKDB6,0.0,0.0,-0.0
+2024-11-27,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,4.0,991.4,991.4
+2024-11-27,4 Campaign codes,EARLYBIRD,EARLYBIRD,0.0,0.0,-0.0
+2024-11-27,2 Customer care,Named / care codes,CDLP20_ROBEHELENTAMMO,1.0,389.61,77.92
+2024-11-27,1 Klaviyo,Inactive Winback,WKCGZQVB5,1.0,67.2,13.44
+2024-11-28,1 Klaviyo,Welcome code,Welcome-CJX46JFN,1.0,89.25,8.92
+2024-11-28,2 Customer care,Named / care codes,Arianne_Ortiz,1.0,73.23,73.23
+2024-11-28,7 Subscription codes,Subscription codes,AUTOMATIQUE,1.0,29.75,2.98
+2024-11-28,1 Klaviyo,Welcome code,Welcome-TVBVDTBM,1.0,228.34,22.84
+2024-11-28,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,156.93,31.38
+2024-11-28,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-11-28,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1147.66,1147.66
+2024-11-28,1 Klaviyo,Welcome code,Welcome-4VR4VMLM,1.0,75.69,7.56
+2024-11-28,1 Klaviyo,Welcome code,Welcome-8ZPVZZWJ,0.0,0.0,-0.0
+2024-11-28,1 Klaviyo,Inactive Winback,WLD4C56MX,1.0,217.28,43.45
+2024-11-29,1 Klaviyo,Memories,MEMORIES-QW6MZVGX,1.0,238.74,35.8
+2024-11-29,8 Other / unknown,69P133BWSZP9,69P133BWSZP9,0.0,0.0,-0.0
+2024-11-29,1 Klaviyo,Welcome code,Welcome-KF8VQ4MQ,1.0,88.0,8.8
+2024-11-29,2 Customer care,Named / care codes,CDLP20_ALBANDASILVA,1.0,79.2,15.83
+2024-11-29,1 Klaviyo,Welcome code,Welcome-PWKLH8VW,1.0,30.8,3.08
+2024-11-29,1 Klaviyo,Welcome code,Welcome-6R3LKTBM,1.0,114.29,11.43
+2024-11-29,1 Klaviyo,Welcome code,Welcome-RKJCHWS5,1.0,75.57,7.55
+2024-11-29,1 Klaviyo,Welcome code,Welcome-NRFCSRGH,1.0,400.0,40.0
+2024-11-29,1 Klaviyo,Welcome code,Welcome-L987QL58,1.0,62.43,6.24
+2024-11-29,1 Klaviyo,Welcome code,Welcome-FQJGVSNZ,1.0,278.0,27.8
+2024-11-29,1 Klaviyo,Welcome code,Welcome-5F6ZH3MK,1.0,62.43,6.24
+2024-11-29,1 Klaviyo,Welcome code,Welcome-QDKL3HL4,1.0,139.56,13.96
+2024-11-29,1 Klaviyo,Welcome code,Welcome-5CBBDZ5F,1.0,168.82,16.87
+2024-11-29,1 Klaviyo,Welcome code,Welcome-WGKBF9DD,1.0,550.16,55.01
+2024-11-29,1 Klaviyo,Welcome code,Welcome-KC7N3FGG,1.0,86.97,8.7
+2024-11-30,1 Klaviyo,Inactive Winback,WT7V924ZN,1.0,165.0,33.0
+2024-11-30,1 Klaviyo,Welcome code,Welcome-SN9HGXB4,1.0,74.29,7.42
+2024-11-30,1 Klaviyo,Welcome code,Welcome-ZBJMLRQD,1.0,51.36,5.13
+2024-11-30,1 Klaviyo,Welcome code,Welcome-L59QM3FM,1.0,55.04,5.5
+2024-11-30,1 Klaviyo,Welcome code,Welcome-X47LJPC5,1.0,96.98,9.7
+2024-11-30,1 Klaviyo,Welcome code,Welcome-35WBJKKR,1.0,282.73,28.27
+2024-11-30,1 Klaviyo,Welcome code,Welcome-G32J3MMX,1.0,71.91,7.19
+2024-11-30,1 Klaviyo,Welcome code,Welcome-FPVRKP7V,1.0,106.12,10.61
+2024-11-30,1 Klaviyo,Welcome code,Welcome-FWN3327Z,1.0,80.73,8.07
+2024-11-30,1 Klaviyo,Welcome code,Welcome-VGR2SL8L,1.0,78.67,7.86
+2024-11-30,1 Klaviyo,Welcome code,Welcome-WL5MJ2GB,1.0,98.0,9.8
+2024-11-30,2 Customer care,Named / care codes,Hanin_Aldin,1.0,111.57,97.92
+2024-12-01,2 Customer care,Named / care codes,Hannan_Spasevski,1.0,62.38,62.38
+2024-12-01,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,2.0,989.23,989.23
+2024-12-01,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,196.0,58.8
+2024-12-01,1 Klaviyo,Inactive Winback,WHGJXHZWT,1.0,87.03,17.4
+2024-12-01,1 Klaviyo,Welcome code,Welcome-RFGRZQCP,1.0,22.0,2.2
+2024-12-01,1 Klaviyo,Welcome code,Welcome-7XMQ7ZQ3,1.0,88.91,8.89
+2024-12-01,2 Customer care,Named / care codes,Bahar_Cetin,1.0,72.75,72.75
+2024-12-02,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-02,1 Klaviyo,Inactive Winback,WFX85BX7C,1.0,120.0,24.0
+2024-12-02,1 Klaviyo,Welcome code,Welcome-P53W7HD5,1.0,76.65,7.66
+2024-12-02,1 Klaviyo,Welcome code,Welcome-ZZT2HQBV,1.0,84.97,8.5
+2024-12-02,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,167.67,167.67
+2024-12-02,2 Customer care,Named / care codes,Andromachi_Boliou,1.0,166.56,166.56
+2024-12-02,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1311.0,1311.0
+2024-12-02,7 Subscription codes,Subscription codes,AUTOMATIQUE,1.0,74.8,7.48
+2024-12-02,1 Klaviyo,Welcome code,Welcome-DNBT42PN,1.0,62.05,6.2
+2024-12-02,1 Klaviyo,Inactive Winback,WHK5WMM6K,1.0,136.78,27.35
+2024-12-03,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,1134.09,1134.09
+2024-12-03,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-03,1 Klaviyo,Welcome code,Welcome-WVTCLBS9,1.0,259.76,25.98
+2024-12-03,1 Klaviyo,Welcome code,Welcome-NDTK9P8D,1.0,178.3,17.83
+2024-12-03,1 Klaviyo,Welcome code,Welcome-KLMTZNDN,1.0,86.74,8.67
+2024-12-04,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,1874.09,1874.09
+2024-12-04,2 Customer care,Named / care codes,Amanda_Persson,1.0,148.19,138.74
+2024-12-04,1 Klaviyo,Memories,MEMORIES-X4Q8S4CD,1.0,103.51,15.52
+2024-12-04,1 Klaviyo,Welcome code,Welcome-9MX3623F,1.0,406.22,40.62
+2024-12-04,1 Klaviyo,Inactive Winback,WXDQKJ9MG,1.0,108.0,21.6
+2024-12-05,1 Klaviyo,Inactive Winback,W9XT2CTF4,1.0,330.0,66.0
+2024-12-05,1 Klaviyo,Welcome code,Welcome-74ZJ7XXH,1.0,230.86,23.08
+2024-12-05,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,414.56,414.56
+2024-12-05,1 Klaviyo,Welcome code,Welcome-QHXNSGN4,0.0,0.0,-0.0
+2024-12-05,2 Customer care,Named / care codes,Eileen_Alter,1.0,108.0,75.0
+2024-12-05,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-05,1 Klaviyo,Welcome code,Welcome-NP2WH9KH,1.0,86.27,8.63
+2024-12-05,1 Klaviyo,Welcome code,Welcome-87T3NRFB,1.0,118.98,11.89
+2024-12-05,4 Campaign codes,TEETIME,TEETIME,0.0,0.0,-0.0
+2024-12-05,1 Klaviyo,Welcome code,Welcome-DF8ZH5VL,1.0,111.88,11.18
+2024-12-05,1 Klaviyo,Welcome code,Welcome-SD53DCNF,1.0,77.23,7.72
+2024-12-05,1 Klaviyo,Welcome code,Welcome-H7HSQQW7,1.0,77.44,7.74
+2024-12-05,"5 Investors, team, PR & friends",PR,SOFIAFRIENDS,1.0,317.93,95.37
+2024-12-05,1 Klaviyo,Welcome code,Welcome-MNZQ6KJ9,1.0,180.0,18.0
+2024-12-05,1 Klaviyo,Welcome code,Welcome-GMT879H8,1.0,86.29,8.62
+2024-12-06,1 Klaviyo,Welcome code,Welcome-8797R8LK,1.0,900.0,90.0
+2024-12-06,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,253.88,253.88
+2024-12-06,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-06,1 Klaviyo,Welcome code,Welcome-LJ3SM2RG,1.0,124.88,12.48
+2024-12-06,1 Klaviyo,Inactive Winback,W79J8GFKM,1.0,175.41,35.08
+2024-12-06,1 Klaviyo,Memories,MEMORIES-DS62M9T9,1.0,334.14,50.12
+2024-12-06,1 Klaviyo,Welcome code,Welcome-W6NN97FW,1.0,84.12,8.41
+2024-12-07,1 Klaviyo,Welcome code,Welcome-VRDZLWZW,1.0,110.0,11.0
+2024-12-07,1 Klaviyo,Inactive Winback,WTLQNHNKJ,1.0,746.0,149.2
+2024-12-07,1 Klaviyo,Welcome code,Welcome-WCS72G3P,1.0,62.17,6.21
+2024-12-07,1 Klaviyo,Memories,MEMORIES-7FWMVPS4,1.0,248.68,37.3
+2024-12-07,1 Klaviyo,Welcome code,Welcome-26ZLVKLM,1.0,143.34,14.32
+2024-12-07,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,195.0,39.0
+2024-12-07,"5 Investors, team, PR & friends",Other named codes (to confirm),JANNE,1.0,124.35,24.87
+2024-12-07,1 Klaviyo,Inactive Winback,WSF4VSPGM,1.0,103.49,20.69
+2024-12-07,1 Klaviyo,Inactive Winback,WHGR79PZ3,1.0,134.6,26.92
+2024-12-07,1 Klaviyo,Welcome code,Welcome-687S54C8,1.0,76.48,7.65
+2024-12-08,1 Klaviyo,Welcome code,Welcome-NRD3V9SX,1.0,117.81,11.78
+2024-12-08,1 Klaviyo,Welcome code,Welcome-4PXMJF6K,1.0,45.0,4.5
+2024-12-08,1 Klaviyo,Welcome code,Welcome-V29L7J9Q,1.0,198.08,19.79
+2024-12-08,1 Klaviyo,Inactive Winback,WCH7LPH4B,1.0,124.35,24.87
+2024-12-08,1 Klaviyo,Welcome code,Welcome-WN5QP2QT,1.0,62.17,6.21
+2024-12-09,1 Klaviyo,Welcome code,Welcome-DSPJPHMW,1.0,195.5,19.55
+2024-12-09,1 Klaviyo,Welcome code,Welcome-J5TG973Z,1.0,88.0,8.8
+2024-12-09,1 Klaviyo,Welcome code,Welcome-4RNG6B5K,1.0,345.0,34.5
+2024-12-09,1 Klaviyo,Welcome code,Welcome-GVG3MZSP,1.0,89.54,8.94
+2024-12-09,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,359.24,143.69
+2024-12-09,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,158.22,31.64
+2024-12-09,1 Klaviyo,Inactive Winback,W5V22GVSW,1.0,174.88,34.98
+2024-12-09,1 Klaviyo,Welcome code,Welcome-TJSZ7NZT,1.0,117.34,11.73
+2024-12-09,1 Klaviyo,Welcome code,Welcome-7W2PHR93,1.0,231.26,23.12
+2024-12-09,2 Customer care,Named / care codes,WELCOME_AXEL,1.0,282.53,282.53
+2024-12-09,4 Campaign codes,TEETIME,TEETIME,0.0,0.0,-0.0
+2024-12-10,1 Klaviyo,Welcome code,Welcome-7PGFG3SN,1.0,107.97,10.8
+2024-12-10,1 Klaviyo,Welcome code,Welcome-H3DWBTPM,1.0,55.75,5.57
+2024-12-10,1 Klaviyo,Welcome code,Welcome-43N9QTVG,1.0,124.28,12.42
+2024-12-10,1 Klaviyo,Welcome code,Welcome-HCZVHD5X,1.0,124.62,12.46
+2024-12-10,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,821.04,287.35
+2024-12-10,1 Klaviyo,Welcome code,Welcome-8CVJJKC6,1.0,110.98,11.1
+2024-12-10,1 Klaviyo,Welcome code,Welcome-NWWJQSHN,1.0,266.0,26.6
+2024-12-10,1 Klaviyo,Welcome code,Welcome-29CZLQKC,1.0,215.0,21.5
+2024-12-10,1 Klaviyo,Welcome code,Welcome-TNVS85D8,1.0,190.0,19.0
+2024-12-10,1 Klaviyo,Welcome code,Welcome-5D6T8ZQH,1.0,294.0,29.4
+2024-12-10,1 Klaviyo,Welcome code,Welcome-L5Z6NR66,1.0,507.47,50.75
+2024-12-10,8 Other / unknown,NRG1FK78HF1G,NRG1FK78HF1G,0.0,0.0,-0.0
+2024-12-10,1 Klaviyo,Welcome code,Welcome-QT463J6R,1.0,330.0,33.0
+2024-12-11,1 Klaviyo,Welcome code,Welcome-9DXHPMFP,1.0,77.8,7.78
+2024-12-11,1 Klaviyo,Welcome code,Welcome-N7SBV9NV,1.0,259.14,25.9
+2024-12-11,1 Klaviyo,Welcome code,Welcome-2RSVW6WR,1.0,195.0,19.5
+2024-12-11,1 Klaviyo,Inactive Winback,W9JB5H9CX,1.0,185.35,37.07
+2024-12-11,1 Klaviyo,Welcome code,Welcome-WPFJWKFM,1.0,154.0,15.38
+2024-12-11,1 Klaviyo,Welcome code,Welcome-MJ68HNRB,1.0,61.86,6.18
+2024-12-11,1 Klaviyo,Welcome code,Welcome-6HVFBHM5,1.0,115.98,11.59
+2024-12-11,1 Klaviyo,Welcome code,Welcome-GW4J847J,1.0,88.0,8.8
+2024-12-11,1 Klaviyo,Welcome code,Welcome-4C2829PD,1.0,34.0,3.4
+2024-12-11,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,399.31,139.75
+2024-12-11,1 Klaviyo,Welcome code,Welcome-VL5H239S,1.0,24.06,2.4
+2024-12-11,1 Klaviyo,Welcome code,Welcome-2JHGFVFC,1.0,190.0,19.0
+2024-12-12,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,343.67,137.45
+2024-12-12,1 Klaviyo,Welcome code,Welcome-Q8DCFNM8,1.0,62.05,6.2
+2024-12-12,1 Klaviyo,Welcome code,Welcome-CTQF3RGL,1.0,61.8,6.17
+2024-12-12,1 Klaviyo,Welcome code,Welcome-6PQSR3L5,1.0,305.0,30.5
+2024-12-12,1 Klaviyo,Welcome code,Welcome-V4363L6W,1.0,442.68,44.26
+2024-12-12,1 Klaviyo,Welcome code,Welcome-HXGLHNHM,1.0,146.71,14.65
+2024-12-12,1 Klaviyo,Welcome code,Welcome-F7MM7JDM,1.0,95.0,9.5
+2024-12-12,1 Klaviyo,Welcome code,Welcome-WXQ9W7PH,1.0,87.13,8.71
+2024-12-12,1 Klaviyo,Welcome code,Welcome-RPKTN8XX,1.0,834.6,83.46
+2024-12-12,1 Klaviyo,Welcome code,Welcome-VQ7TRXSG,1.0,107.9,10.79
+2024-12-12,1 Klaviyo,Welcome code,Welcome-MN5PQWFC,1.0,410.0,41.0
+2024-12-12,1 Klaviyo,Inactive Winback,WR7KWSFDK,1.0,198.99,39.8
+2024-12-12,1 Klaviyo,Welcome code,Welcome-JW3627B9,1.0,208.74,20.87
+2024-12-13,1 Klaviyo,Welcome code,Welcome-ZW7N9ZP4,1.0,88.0,8.8
+2024-12-13,1 Klaviyo,Welcome code,Welcome-WK3RX6ZM,1.0,388.17,38.8
+2024-12-13,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,313.15,313.15
+2024-12-13,1 Klaviyo,Welcome code,Welcome-X947WH9X,0.0,0.0,-0.0
+2024-12-13,1 Klaviyo,Welcome code,Welcome-TJ3959LJ,1.0,165.78,16.56
+2024-12-13,3 Conjured referral,Conjured referral,FR-kKPKFG9g2J7o4eJT,1.0,61.94,9.28
+2024-12-13,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-13,1 Klaviyo,Welcome code,Welcome-KFXFWMTR,1.0,33.69,3.36
+2024-12-13,1 Klaviyo,Welcome code,Welcome-8C2JGW4B,1.0,62.71,6.25
+2024-12-14,1 Klaviyo,Welcome code,Welcome-RJV89VBF,1.0,69.22,6.92
+2024-12-14,1 Klaviyo,Welcome code,Welcome-K5KRQVFW,1.0,280.47,28.05
+2024-12-14,1 Klaviyo,Welcome code,Welcome-HB3BGTWH,1.0,330.9,33.09
+2024-12-14,2 Customer care,Named / care codes,CDLP20_MCCAHILL,1.0,76.01,15.2
+2024-12-14,3 Conjured referral,Conjured referral,FR-XUypnmucI9GXaUPk,1.0,24.04,3.6
+2024-12-14,1 Klaviyo,Welcome code,Welcome-P78V7R5J,1.0,131.49,13.15
+2024-12-14,1 Klaviyo,Welcome code,Welcome-ZL3BH8V6,1.0,275.57,27.55
+2024-12-14,1 Klaviyo,Welcome code,Welcome-Q3KR7FHJ,1.0,390.0,39.0
+2024-12-14,1 Klaviyo,Welcome code,Welcome-92X8RS46,1.0,123.88,12.38
+2024-12-14,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,171.57,34.31
+2024-12-15,1 Klaviyo,Welcome code,Welcome-SVQWTNJ8,1.0,95.0,9.5
+2024-12-15,1 Klaviyo,Welcome code,Welcome-3WTVLV28,1.0,155.64,15.56
+2024-12-15,1 Klaviyo,Welcome code,Welcome-8ZJ9N8KP,1.0,182.18,18.21
+2024-12-15,3 Conjured referral,Conjured referral,FR-1A2DawFNow0iyxe6,1.0,115.28,17.28
+2024-12-15,1 Klaviyo,Welcome code,Welcome-3C5MW7S2,1.0,61.94,6.19
+2024-12-15,1 Klaviyo,Welcome code,Welcome-38HTWSQ4,1.0,229.22,22.92
+2024-12-15,1 Klaviyo,Welcome code,Welcome-P7Z83FX5,1.0,190.0,19.0
+2024-12-15,1 Klaviyo,Welcome code,Welcome-MNSFH7SD,1.0,86.21,8.62
+2024-12-15,1 Klaviyo,Welcome code,Welcome-HJ2ZS4HW,1.0,24.04,2.4
+2024-12-15,"5 Investors, team, PR & friends",Team,Karl-Rikard_Johansson,1.0,81.16,81.16
+2024-12-15,1 Klaviyo,Welcome code,Welcome-NBTSB38J,1.0,111.48,11.14
+2024-12-15,1 Klaviyo,Welcome code,Welcome-WV3XL682,1.0,229.53,22.95
+2024-12-15,1 Klaviyo,Welcome code,Welcome-PQLZ5RGS,1.0,245.42,24.54
+2024-12-15,1 Klaviyo,Welcome code,Welcome-KRRCXKW8,1.0,61.94,6.19
+2024-12-16,1 Klaviyo,Welcome code,Welcome-H7HSQQW7,0.0,0.0,-0.0
+2024-12-16,1 Klaviyo,Welcome code,Welcome-Z4FXTMGW,1.0,88.0,8.8
+2024-12-16,1 Klaviyo,Welcome code,Welcome-XXSP8FF2,1.0,80.06,8.0
+2024-12-16,1 Klaviyo,Welcome code,Welcome-SS75TK7P,1.0,55.14,5.5
+2024-12-16,6 Test orders,Test codes,TESTORDERSBYJOAKIM,3.0,581.62,581.62
+2024-12-16,1 Klaviyo,Welcome code,Welcome-67V9QFLV,1.0,62.35,6.23
+2024-12-16,"5 Investors, team, PR & friends",Team,Lucas_Kalda,1.0,84.41,77.47
+2024-12-16,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,142.45,28.49
+2024-12-16,2 Customer care,Named / care codes,Per Söderström,1.0,118.41,77.51
+2024-12-16,2 Customer care,Named / care codes,Amanda_Peters,1.0,95.04,95.04
+2024-12-16,1 Klaviyo,Welcome code,Welcome-MV25SBJV,1.0,76.05,7.6
+2024-12-16,6 Test orders,Test codes,Subscription_Veronika_100,1.0,94.67,94.67
+2024-12-16,1 Klaviyo,Welcome code,Welcome-SM9B8JGQ,1.0,69.35,6.93
+2024-12-16,1 Klaviyo,Welcome code,Welcome-LLRTGJ4H,1.0,86.69,8.66
+2024-12-16,1 Klaviyo,Welcome code,Welcome-J3TG2HZP,1.0,31.63,3.16
+2024-12-16,1 Klaviyo,Welcome code,Welcome-8NGXM4N2,1.0,13.57,1.36
+2024-12-16,1 Klaviyo,Welcome code,Welcome-7FH6CXLV,1.0,123.92,12.38
+2024-12-16,1 Klaviyo,Welcome code,Welcome-WR9QM4M2,1.0,194.46,19.42
+2024-12-16,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,3.0,1091.35,1091.35
+2024-12-16,1 Klaviyo,Welcome code,Welcome-3Q2KPGPS,1.0,62.5,6.24
+2024-12-16,1 Klaviyo,Welcome code,Welcome-MTFNKBGH,1.0,83.12,8.31
+2024-12-16,1 Klaviyo,Welcome code,Welcome-CPJDPRXP,1.0,54.72,5.47
+2024-12-16,1 Klaviyo,Welcome code,Welcome-6PBQXVF9,1.0,144.22,14.41
+2024-12-16,1 Klaviyo,Welcome code,Welcome-RHXRMFR8,1.0,205.0,20.5
+2024-12-16,1 Klaviyo,Welcome code,Welcome-Z926NZ2N,1.0,346.66,34.66
+2024-12-16,7 Subscription codes,Subscription codes,elliotautomatique,1.0,98.32,98.32
+2024-12-16,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-16,2 Customer care,Named / care codes,CDLP25_LISADANIELI,1.0,190.42,47.6
+2024-12-17,6 Test orders,Test codes,TESTORDERSBYJOAKIM,4.0,764.58,764.58
+2024-12-17,1 Klaviyo,Welcome code,Welcome-89JJ5V4W,1.0,21.98,2.19
+2024-12-17,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,91.16,18.22
+2024-12-17,1 Klaviyo,Welcome code,Welcome-77PRSXPQ,1.0,165.0,16.5
+2024-12-17,4 Campaign codes,EARLYBIRD,EARLYBIRD,0.0,0.0,-0.0
+2024-12-17,2 Customer care,Named / care codes,Brad_Fox,1.0,215.0,32.25
+2024-12-17,1 Klaviyo,Welcome code,Welcome-RXWMTTR5,1.0,62.19,6.21
+2024-12-17,1 Klaviyo,Welcome code,Welcome-R66NB8GF,1.0,187.14,18.72
+2024-12-17,1 Klaviyo,Welcome code,Welcome-R873KBRH,1.0,54.7,5.47
+2024-12-17,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,3.0,721.0,721.0
+2024-12-17,1 Klaviyo,Welcome code,Welcome-545VM6DH,1.0,124.65,12.46
+2024-12-17,1 Klaviyo,Welcome code,Welcome-D33CHZ6G,1.0,70.0,7.0
+2024-12-17,1 Klaviyo,Welcome code,Welcome-DDV3X6PQ,1.0,240.68,24.06
+2024-12-17,1 Klaviyo,Welcome code,Welcome-9JTVDMQ6,1.0,210.0,21.0
+2024-12-17,6 Test orders,Test codes,Veronika_100,1.0,164.44,164.44
+2024-12-17,4 Campaign codes,Un_Cadeau_15%,Un_Cadeau_15%,1.0,78.65,11.79
+2024-12-17,2 Customer care,Named / care codes,Thomas Pettersson,1.0,85.23,77.51
+2024-12-17,1 Klaviyo,Welcome code,Welcome-M3L75PNQ,1.0,190.0,19.0
+2024-12-17,1 Klaviyo,Welcome code,Welcome-6PSHJKF8,1.0,78.51,7.84
+2024-12-17,1 Klaviyo,Welcome code,Welcome-WHJ2BD92,1.0,62.06,6.2
+2024-12-17,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-17,7 Subscription codes,Subscription codes,AUTOMATIQUE,1.0,222.35,22.24
+2024-12-17,1 Klaviyo,Welcome code,Welcome-FL2XF6KW,1.0,119.66,11.96
+2024-12-17,1 Klaviyo,Welcome code,Welcome-VQZHDBR2,1.0,139.07,13.89
+2024-12-18,1 Klaviyo,Welcome code,Welcome-KXM5C84Z,1.0,153.46,15.33
+2024-12-18,2 Customer care,Named / care codes,Diedrik_Germer,1.0,91.14,91.14
+2024-12-18,1 Klaviyo,Welcome code,Welcome-7XMQ7ZQ3,0.0,0.0,-0.0
+2024-12-18,1 Klaviyo,Welcome code,Welcome-9MX3623F,0.0,0.0,-0.0
+2024-12-18,1 Klaviyo,Welcome code,Welcome-W4RSKD5F,1.0,131.48,13.14
+2024-12-18,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,226.88,79.39
+2024-12-18,4 Campaign codes,EARLYBIRD,EARLYBIRD,0.0,0.0,-0.0
+2024-12-18,2 Customer care,Named / care codes,CDLP20_MARCUSLOGANDER,1.0,62.08,12.41
+2024-12-18,1 Klaviyo,Welcome code,Welcome-G88238CQ,1.0,253.0,25.3
+2024-12-18,1 Klaviyo,Welcome code,Welcome-VHL7DWG5,0.0,0.0,-0.0
+2024-12-18,1 Klaviyo,Welcome code,Welcome-GQT779W3,1.0,69.42,6.94
+2024-12-18,1 Klaviyo,Welcome code,Welcome-P2BWBCPN,1.0,198.96,19.89
+2024-12-18,1 Klaviyo,Inactive Winback,W24CVNP5N,1.0,87.56,17.51
+2024-12-18,1 Klaviyo,Welcome code,Welcome-KHHP2CQV,1.0,95.0,9.5
+2024-12-18,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,7.0,2120.76,2120.76
+2024-12-18,1 Klaviyo,Welcome code,Welcome-3BHM49M5,1.0,24.06,2.4
+2024-12-18,2 Customer care,Named / care codes,Janeth_CDLP,1.0,80.95,80.95
+2024-12-18,1 Klaviyo,Welcome code,Welcome-GSL4K3MT,0.0,0.0,-0.0
+2024-12-18,1 Klaviyo,Welcome code,Welcome-DZ4ZJR72,1.0,346.91,34.68
+2024-12-18,1 Klaviyo,Welcome code,Welcome-GGQMW8F7,1.0,62.12,6.21
+2024-12-18,1 Klaviyo,Welcome code,Welcome-3GPR4VBC,1.0,173.66,17.36
+2024-12-18,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-18,1 Klaviyo,Memories,MEMORIES-X4Q8S4CD,0.0,0.0,-0.0
+2024-12-19,6 Test orders,Test codes,Subscription_Veronika_100,1.0,133.96,133.96
+2024-12-19,1 Klaviyo,Welcome code,Welcome-KK4J5ZXD,1.0,75.0,7.5
+2024-12-19,1 Klaviyo,Welcome code,Welcome-T549DGTD,1.0,228.0,22.8
+2024-12-19,6 Test orders,Test codes,TESTORDERSBYJOAKIM,3.0,531.6,531.6
+2024-12-19,1 Klaviyo,Welcome code,Welcome-HDMPMLJD,1.0,138.61,13.84
+2024-12-19,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-19,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,2.0,720.0,720.0
+2024-12-19,4 Campaign codes,Un_Cadeau_15%,Un_Cadeau_15%,1.0,47.77,7.16
+2024-12-20,1 Klaviyo,Welcome code,Welcome-X5BLBK92,1.0,283.06,28.29
+2024-12-20,2 Customer care,Named / care codes,Nicolas_Spiers,1.0,81.55,81.55
+2024-12-20,1 Klaviyo,Welcome code,Welcome-FSZW52RT,1.0,228.31,22.83
+2024-12-20,1 Klaviyo,Welcome code,Welcome-TWWTSDHN,1.0,153.74,15.37
+2024-12-20,1 Klaviyo,Welcome code,Welcome-FC96T3CT,1.0,59.14,5.91
+2024-12-20,1 Klaviyo,Welcome code,Welcome-SZLQBPMC,1.0,150.36,15.02
+2024-12-20,1 Klaviyo,Welcome code,Welcome-HL36HZPJ,1.0,77.18,7.71
+2024-12-21,1 Klaviyo,Welcome code,Welcome-JJM7MGQC,1.0,159.48,15.94
+2024-12-21,1 Klaviyo,Welcome code,Welcome-269Q63FC,1.0,149.04,14.89
+2024-12-21,1 Klaviyo,Welcome code,Welcome-JPQHS4NT,1.0,115.0,11.5
+2024-12-21,1 Klaviyo,Welcome code,Welcome-5K2GC4PX,1.0,230.62,23.05
+2024-12-21,1 Klaviyo,Welcome code,Welcome-SD3FTGVX,1.0,196.0,19.6
+2024-12-21,1 Klaviyo,Welcome code,Welcome-ZPTQTPDS,1.0,77.51,7.74
+2024-12-21,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,130.52,52.2
+2024-12-21,1 Klaviyo,Welcome code,Welcome-P6GPJVFT,1.0,95.0,9.5
+2024-12-22,4 Campaign codes,GRATEFUL20,GRATEFUL20,1.0,65.25,13.04
+2024-12-22,1 Klaviyo,Welcome code,Welcome-3NV6HCBZ,1.0,152.18,15.21
+2024-12-22,1 Klaviyo,Inactive Winback,WMG8NX4T4,1.0,329.54,65.9
+2024-12-22,1 Klaviyo,Welcome code,Welcome-WKZR22RJ,1.0,365.0,36.5
+2024-12-22,1 Klaviyo,Welcome code,Welcome-V5DP23BW,1.0,152.26,15.22
+2024-12-22,"5 Investors, team, PR & friends",Other named codes (to confirm),CORNELIACHRISGIFT,0.0,0.0,-0.0
+2024-12-22,1 Klaviyo,Welcome code,Welcome-FHD9K679,1.0,171.76,17.17
+2024-12-22,1 Klaviyo,Welcome code,Welcome-2FKB4892,1.0,117.01,11.7
+2024-12-22,1 Klaviyo,Welcome code,Welcome-5R95NGK9,1.0,103.05,10.29
+2024-12-22,"5 Investors, team, PR & friends",Friends & family,CDLP_Friends2016,1.0,306.0,306.0
+2024-12-22,1 Klaviyo,Welcome code,Welcome-LGM9V63B,1.0,91.88,9.19
+2024-12-22,2 Customer care,Named / care codes,Jimmy_Fållby,1.0,78.01,77.15
+2024-12-23,1 Klaviyo,Welcome code,Welcome-PQ2HJCXT,1.0,135.0,13.5
+2024-12-23,1 Klaviyo,Welcome code,Welcome-RWFH5X7R,1.0,190.0,19.0
+2024-12-23,2 Customer care,Named / care codes,CDLP20_ANDREASMUNDT,1.0,70.91,14.18
+2024-12-23,1 Klaviyo,Welcome code,Welcome-RKWMZTR2,1.0,291.29,29.12
+2024-12-23,1 Klaviyo,Welcome code,Welcome-R7XB3RH9,1.0,25.34,2.53
+2024-12-24,1 Klaviyo,Welcome code,Welcome-NTXV3VZV,1.0,138.32,13.83
+2024-12-25,2 Customer care,Named / care codes,Tina_Peyvand,1.0,90.25,90.25
+2024-12-25,7 Subscription codes,Subscription codes,AUTOMATIQUE,1.0,161.5,16.15
+2024-12-25,2 Customer care,Named / care codes,Simon_Gustafsson,1.0,85.74,85.74
+2024-12-25,1 Klaviyo,Welcome code,Welcome-2KTLXWL8,1.0,345.07,34.5
+2024-12-25,1 Klaviyo,Welcome code,Welcome-GK3S6L8C,1.0,54.15,5.41
+2024-12-26,1 Klaviyo,Welcome code,Welcome-4NMW4FVK,1.0,365.0,36.5
+2024-12-26,1 Klaviyo,Welcome code,Welcome-RWDSP54D,1.0,190.0,19.0
+2024-12-26,1 Klaviyo,Welcome code,Welcome-KXF4WCJL,1.0,85.71,8.57
+2024-12-26,1 Klaviyo,Welcome code,Welcome-BQ8TNX3H,1.0,271.23,27.11
+2024-12-26,1 Klaviyo,Welcome code,Welcome-2C2V9JSB,1.0,323.44,32.34
+2024-12-26,1 Klaviyo,Welcome code,Welcome-LCQ94WCS,1.0,29.59,2.95
+2024-12-26,1 Klaviyo,Welcome code,Welcome-QV8SN94R,1.0,157.3,15.73
+2024-12-27,1 Klaviyo,Welcome code,Welcome-LK94VTMW,1.0,229.95,22.98
+2024-12-27,1 Klaviyo,Welcome code,Welcome-NZL4B7V2,1.0,33.42,3.34
+2024-12-27,1 Klaviyo,Welcome code,Welcome-2F5QTH3L,1.0,120.12,12.01
+2024-12-27,1 Klaviyo,Welcome code,Welcome-ZW7N9ZP4,0.0,0.0,-0.0
+2024-12-27,1 Klaviyo,Welcome code,Welcome-XJCJQ25F,1.0,443.12,44.31
+2024-12-27,1 Klaviyo,Welcome code,Welcome-98WBMMPC,1.0,91.38,9.14
+2024-12-27,1 Klaviyo,Welcome code,Welcome-FVZ9HNJ7,1.0,197.46,19.75
+2024-12-27,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER,1.0,151.15,52.9
+2024-12-27,1 Klaviyo,Welcome code,Welcome-RS9RGR2Q,1.0,349.55,34.95
+2024-12-28,1 Klaviyo,Memories,MEMORIES-GSW9MHKF,1.0,239.83,35.97
+2024-12-28,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,151.21,60.48
+2024-12-28,1 Klaviyo,Welcome code,Welcome-RLQ4QSXL,1.0,76.68,7.66
+2024-12-28,1 Klaviyo,Welcome code,Welcome-5QB7PXLS,1.0,111.85,11.18
+2024-12-28,1 Klaviyo,Welcome code,Welcome-3DCTNDRN,1.0,70.66,7.06
+2024-12-28,1 Klaviyo,Inactive Winback,WGWB7LV26,1.0,123.6,24.72
+2024-12-28,1 Klaviyo,Welcome code,Welcome-86G9VVBV,1.0,23.98,2.39
+2024-12-28,1 Klaviyo,Welcome code,Welcome-7B7QTBG9,1.0,85.92,8.59
+2024-12-28,1 Klaviyo,Welcome code,Welcome-ZL8F4FM2,1.0,123.58,12.36
+2024-12-28,1 Klaviyo,Welcome code,Welcome-ZTLBVF79,1.0,154.64,15.46
+2024-12-29,7 Subscription codes,Subscription codes,AUTOMATIQUE,1.0,97.75,9.77
+2024-12-29,1 Klaviyo,Inactive Winback,W65LR86SZ,1.0,255.22,51.04
+2024-12-29,1 Klaviyo,Welcome code,Welcome-8MN6W4M2,1.0,194.89,19.48
+2024-12-29,1 Klaviyo,Welcome code,Welcome-Q3XV864T,1.0,290.81,29.08
+2024-12-29,"5 Investors, team, PR & friends",Friends & family,Soho_House20,1.0,152.68,30.53
+2024-12-29,1 Klaviyo,Welcome code,Welcome-LNCTW8ZJ,1.0,349.32,34.93
+2024-12-29,1 Klaviyo,Welcome code,Welcome-BFTVHRML,1.0,73.85,7.38
+2024-12-29,2 Customer care,Named / care codes,Matilda_Höglund,1.0,74.07,74.07
+2024-12-29,1 Klaviyo,Welcome code,Welcome-94542G3C,1.0,130.9,13.09
+2024-12-29,1 Klaviyo,Welcome code,Welcome-WQ66N9ZG,1.0,240.97,24.1
+2024-12-29,1 Klaviyo,Welcome code,Welcome-TRCRFF6F,1.0,131.0,13.1
+2024-12-29,1 Klaviyo,Welcome code,Welcome-3V5DMZVP,1.0,106.83,10.67
+2024-12-29,1 Klaviyo,Welcome code,Welcome-J7XQGX8L,1.0,187.71,18.77
+2024-12-29,1 Klaviyo,Welcome code,Welcome-H8BLKNLT,1.0,595.0,59.5
+2024-12-29,1 Klaviyo,Welcome code,Welcome-MVVF2945,1.0,61.79,6.18
+2024-12-30,1 Klaviyo,Welcome code,Welcome-SD3FTGVX,0.0,0.0,-0.0
+2024-12-30,1 Klaviyo,Welcome code,Welcome-DFFXVGZ2,1.0,65.54,6.55
+2024-12-30,1 Klaviyo,Welcome code,Welcome-D5HZL75X,1.0,85.71,8.57
+2024-12-30,"5 Investors, team, PR & friends",Team,Axel_Engström,1.0,95.51,77.49
+2024-12-30,4 Campaign codes,Un_Cadeau_15%,Un_Cadeau_15%,1.0,281.0,42.15
+2024-12-30,1 Klaviyo,Memories,MEMORIES-2Q7CWVM9,1.0,84.09,12.61
+2024-12-30,2 Customer care,Named / care codes,Manni Thofte,1.0,92.33,92.33
+2024-12-30,1 Klaviyo,Welcome code,Welcome-8GKSB6H2,1.0,141.3,14.12
+2024-12-30,1 Klaviyo,Welcome code,Welcome-R7V4R7D2,1.0,38.0,3.8
+2024-12-30,1 Klaviyo,Welcome code,Welcome-KBMQ7ZKG,1.0,113.91,11.38
+2024-12-30,1 Klaviyo,Welcome code,Welcome-P6P729KC,1.0,88.0,8.8
+2024-12-30,1 Klaviyo,Welcome code,Welcome-79WJHBGP,1.0,155.96,15.59
+2024-12-30,1 Klaviyo,Welcome code,Welcome-HMBD7M7Q,1.0,294.0,29.4
+2024-12-31,"5 Investors, team, PR & friends","Investors, owner & founder",Frängsmyr_Knut100,1.0,707.04,707.04
+2024-12-31,1 Klaviyo,Welcome code,Welcome-BD265NDT,1.0,61.68,6.16
+2024-12-31,1 Klaviyo,Welcome code,Welcome-JKMB8JH8,1.0,135.0,13.5
+2024-12-31,1 Klaviyo,Memories,MEMORIES-PL6C9X6V,1.0,148.62,22.29
+2024-12-31,1 Klaviyo,Welcome code,Welcome-Q5D4DWC7,1.0,172.24,17.19
+2024-12-31,1 Klaviyo,Welcome code,Welcome-X742P8VZ,1.0,122.88,12.28
+2024-10-01,0 AfterShip exchanges,Manual exchange codes,replace with the same item,3.0,502.79,502.79
+2024-10-01,0 AfterShip exchanges,Manual exchange codes,exchange for other items,3.0,460.76,460.76
+2024-10-02,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,116.93,116.93
+2024-10-03,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,406.0,370.45
+2024-10-03,0 AfterShip exchanges,Manual exchange codes,replace with the same item,3.0,390.25,390.25
+2024-10-04,2 Customer care,Manual discount on order (draft/edit),12-pack,1.0,308.25,61.64
+2024-10-06,2 Customer care,Manual discount on order (draft/edit),Welcome discount,1.0,56.3,5.62
+2024-10-08,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,164.05,164.05
+2024-10-08,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,405.23,405.23
+2024-10-09,0 AfterShip exchanges,Manual exchange codes,replace with the same item,2.0,443.41,443.41
+2024-10-09,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,182.55,178.16
+2024-10-10,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,202.37,189.4
+2024-10-11,0 AfterShip exchanges,Manual exchange codes,exchange for other items,4.0,749.66,701.66
+2024-10-11,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,108.0,108.0
+2024-10-14,2 Customer care,Manual discount on order (draft/edit),LONGTIME,1.0,103.0,20.6
+2024-10-15,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,5.77,5.77
+2024-10-15,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,110.0,110.0
+2024-10-16,7 Subscription codes,Subscription codes,subscription,1.0,79.58,23.87
+2024-10-16,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,79.13,69.53
+2024-10-17,2 Customer care,Manual discount on order (draft/edit),Free shipping,1.0,58.82,17.47
+2024-10-17,0 AfterShip exchanges,Manual exchange codes,replace with the same item,3.0,220.16,220.16
+2024-10-17,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,389.07,355.39
+2024-10-17,2 Customer care,Manual discount on order (draft/edit),Multipack discount,1.0,148.72,22.45
+2024-10-18,2 Customer care,Manual discount on order (draft/edit),sale price,1.0,205.0,90.0
+2024-10-19,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,218.09,203.86
+2024-10-20,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,86.4,28.0
+2024-10-21,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,56.96,28.48
+2024-10-22,7 Subscription codes,Subscription codes,subscription,1.0,81.63,12.53
+2024-10-22,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,1043.0,1043.0
+2024-10-22,0 AfterShip exchanges,Manual exchange codes,exchange for other items,2.0,222.12,192.77
+2024-10-24,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,69.32,69.32
+2024-10-24,0 AfterShip exchanges,Manual exchange codes,exchange for other items,5.0,1015.83,905.77
+2024-10-24,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,520.0,78.0
+2024-10-26,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,254.35,254.35
+2024-10-29,0 AfterShip exchanges,Manual exchange codes,replace with the same item,1.0,210.53,210.53
+2024-10-30,2 Customer care,Manual discount on order (draft/edit),Custom discount,2.0,461.24,103.9
+2024-10-30,2 Customer care,Manual discount on order (draft/edit),3-packs,1.0,302.67,45.39
+2024-10-30,0 AfterShip exchanges,Manual exchange codes,replace with the same item,3.0,152.79,152.79
+2024-10-30,0 AfterShip exchanges,Manual exchange codes,exchange for other items,1.0,201.94,180.81
+2024-11-02,7 Subscription codes,Subscription codes,andreasautomatique,1.0,97.75,97.75
+2024-11-07,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,4.0,721.6,651.44
+2024-11-10,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,4.0,952.11,424.35
+2024-11-10,7 Subscription codes,Subscription codes,subscription discount,1.0,114.0,34.0
+2024-11-12,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,2.0,183.62,236.54
+2024-11-12,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,52.09,1.0
+2024-11-15,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,172.52,17.25
+2024-11-16,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,77.09,23.12
+2024-11-19,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,2.0,287.68,210.72
+2024-11-20,2 Customer care,Manual discount on order (draft/edit),delay compensation,1.0,529.87,105.97
+2024-11-20,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,3.0,190.96,226.85
+2024-11-24,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,67.0,43.75
+2024-11-25,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,2.0,285.0,365.65
+2024-11-27,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,26.17,33.99
+2024-11-29,2 Customer care,Manual discount on order (draft/edit),claim,1.0,98.0,98.0
+2024-11-29,2 Customer care,Manual discount on order (draft/edit),shipping,1.0,130.0,113.0
+2024-12-01,2 Customer care,Manual discount on order (draft/edit),Checkout complications,1.0,110.85,16.61
+2024-12-02,2 Customer care,Manual discount on order (draft/edit),previous order incomplete ,1.0,89.58,89.58
+2024-12-04,2 Customer care,Manual discount on order (draft/edit),shipping,1.0,100.0,15.0
+2024-12-05,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,5.0,834.22,619.96
+2024-12-09,2 Customer care,Manual discount on order (draft/edit),black friday 12 pack sale,1.0,380.0,124.0
+2024-12-13,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,108.0,108.0
+2024-12-13,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,230.0,46.0
+2024-12-16,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,-302.01,-281.87
+2024-12-17,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,2.0,-477.24,-497.45
+2024-12-18,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,10.0,151.34,53.41
+2024-12-20,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,48.49,48.49
+2024-12-26,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,-122.7,-115.48
+2024-12-27,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,163.57,163.57
+2024-12-29,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,42.89,54.29
+2024-12-30,2 Customer care,Manual discount on order (draft/edit),Custom discount,1.0,196.0,32.0
 2025-01-01,1 Klaviyo,Welcome code,Welcome-LBCRPXLL,1.0,76.76,7.67
 2025-01-01,1 Klaviyo,Welcome code,Welcome-93W64HG6,1.0,116.86,11.68
 2025-01-01,1 Klaviyo,Welcome code,Welcome-F9W3X5W6,1.0,97.32,9.73
@@ -7793,3 +8927,53 @@ date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd
 2026-10-12,1 Klaviyo,Inactive Winback,WTC566GKM,1.0,101.44,20.28
 2026-10-12,1 Klaviyo,Welcome code,Welcome-H4ZT6C7W,1.0,148.83,14.85
 2026-10-12,2 Customer care,Named / care codes,CDLP20_AnthonyBangham,1.0,165.43,33.07
+2026-10-13,1 Klaviyo,Welcome code,Welcome-JBXB49G4,1.0,285.91,28.58
+2026-10-13,1 Klaviyo,Welcome code,Welcome-R268DXQ2,1.0,264.97,26.5
+2026-10-13,1 Klaviyo,Welcome code,Welcome-HNXBQ992,1.0,338.04,33.8
+2026-10-13,1 Klaviyo,Welcome code,Welcome-3BQF99ZM,1.0,265.0,26.5
+2026-10-14,1 Klaviyo,Welcome code,Welcome-7F9W3KKD,1.0,895.0,89.5
+2026-10-14,1 Klaviyo,Welcome code,Welcome-TM7X3MHQ,1.0,2280.0,228.0
+2026-10-14,1 Klaviyo,Welcome code,Welcome-KDXP36VR,1.0,265.0,26.5
+2026-10-14,1 Klaviyo,Inactive Winback,WFFW3KRJ4,1.0,75.47,15.09
+2026-10-14,1 Klaviyo,Welcome code,Welcome-VRGVZ73B,1.0,197.0,19.68
+2026-10-14,1 Klaviyo,Welcome code,Welcome-9R788NLS,1.0,270.0,27.0
+2026-10-14,1 Klaviyo,Welcome code,Welcome-RSNLF5DS,1.0,567.23,56.72
+2026-10-14,1 Klaviyo,Welcome code,Welcome-28PDBL52,1.0,235.0,23.5
+2026-10-15,1 Klaviyo,Welcome code,Welcome-ZFCWSJCN,1.0,265.05,26.5
+2026-10-15,1 Klaviyo,Welcome code,Welcome-VPKJQLDD,1.0,216.37,21.63
+2026-10-15,1 Klaviyo,Welcome code,Welcome-ND3SGMRJ,1.0,103.48,10.35
+2026-10-15,1 Klaviyo,Welcome code,Welcome-CQX72G3Z,1.0,101.9,10.16
+2026-10-15,1 Klaviyo,Welcome code,Welcome-C56LQ32L,1.0,121.69,12.16
+2026-10-16,1 Klaviyo,Welcome code,Welcome-86CD6TM2,1.0,325.74,32.58
+2026-10-16,1 Klaviyo,Welcome code,Welcome-FJ8ZWLS2,1.0,204.66,20.45
+2026-10-16,1 Klaviyo,Welcome code,Welcome-27WRCNW7,1.0,420.0,42.0
+2026-10-16,1 Klaviyo,Welcome code,Welcome-SNW9BSFG,1.0,247.81,24.77
+2026-10-16,1 Klaviyo,Welcome code,Welcome-NHTV6BQ3,1.0,224.57,22.45
+2026-10-16,1 Klaviyo,Welcome code,Welcome-B7KK6D92,1.0,183.21,18.32
+2026-10-16,"5 Investors, team, PR & friends",Team,TEAMKALLING,1.0,149.33,44.79
+2026-10-16,1 Klaviyo,Welcome code,Welcome-P5NQL2GH,1.0,204.32,20.42
+2026-10-16,1 Klaviyo,Welcome code,Welcome-X2893FQJ,1.0,80.28,8.02
+2026-10-17,1 Klaviyo,Welcome code,Welcome-PV83N9VF,1.0,73.71,7.36
+2026-10-17,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER26!!,1.0,133.28,46.64
+2026-10-17,1 Klaviyo,Welcome code,Welcome-XR5HHLJS,1.0,335.86,33.59
+2026-10-18,1 Klaviyo,Welcome code,Welcome-RQRDSZ4Q,1.0,114.12,11.41
+2026-10-18,1 Klaviyo,Welcome code,Welcome-G8W95F9T,1.0,148.64,14.86
+2026-10-18,1 Klaviyo,Welcome code,Welcome-ZND7LVWM,1.0,89.75,8.96
+2026-10-18,1 Klaviyo,Welcome code,Welcome-MPT3WD9X,1.0,733.0,73.3
+2026-10-18,1 Klaviyo,Welcome code,Welcome-47P8V6CB,1.0,198.46,19.84
+2026-10-18,1 Klaviyo,Welcome code,Welcome-VCRQLP2Q,1.0,149.96,14.99
+2026-10-18,1 Klaviyo,Welcome code,Welcome-ZV72L7RP,1.0,174.77,17.47
+2026-10-18,1 Klaviyo,Welcome code,Welcome-XTJ2HBKR,1.0,102.19,10.22
+2026-10-18,1 Klaviyo,Welcome code,Welcome-F9BNGWVL,1.0,177.55,17.75
+2026-10-18,"5 Investors, team, PR & friends","Investors, owner & founder",CDLPINSIDER26!!,2.0,623.04,218.03
+2026-10-18,1 Klaviyo,Welcome code,Welcome-S5XPR6CD,1.0,329.27,32.92
+2026-10-18,1 Klaviyo,Welcome code,Welcome-ZWLP34FP,1.0,200.85,20.08
+2026-10-18,1 Klaviyo,Welcome code,Welcome-GQNCRCHK,1.0,235.0,23.5
+2026-10-18,2 Customer care,Named / care codes,CDLP20_FrankieDuckworth,1.0,559.76,111.94
+2026-10-18,1 Klaviyo,Welcome code,Welcome-72XB7WB9,1.0,122.17,12.2
+2026-10-13,2 Customer care,Manual discount on order (draft/edit),Rabatt,1.0,121.55,120.34
+2026-10-13,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,600.0,600.0
+2026-10-14,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,264.199,264.2
+2026-10-15,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,1.0,210.0,210.0
+2026-10-16,0 AfterShip exchanges,AfterShip exchange orders,AfterShip Returns exchange,2.0,470.827,509.69
+2026-10-16,2 Customer care,Manual discount on order (draft/edit),2 pack,1.0,394.68,35.88
