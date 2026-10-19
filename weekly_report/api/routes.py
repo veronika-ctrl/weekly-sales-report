@@ -97,6 +97,12 @@ from weekly_report.src.storage.uploads import (
     list_slot_files,
     prepare_slot_for_upload,
 )
+from weekly_report.src.storage.disk import (
+    DISK_FULL_DETAIL,
+    delete_ignored_pricing_uploads,
+    disk_usage_payload,
+    is_disk_full_error,
+)
 
 
 # Pydantic models
@@ -2572,6 +2578,33 @@ async def get_weeks_with_uploads():
         return {"weeks": []}
 
 
+@app.get("/api/disk-usage")
+async def get_disk_usage():
+    """Render DATA_ROOT used/free space and ignored old Full Price vs Sale files."""
+    try:
+        config = load_config()
+        return disk_usage_payload(Path(config.data_root))
+    except Exception as e:
+        logger.error(f"disk-usage failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read disk usage")
+
+
+@app.post("/api/disk/delete-ignored-pricing-files")
+async def post_delete_ignored_pricing_files():
+    """Delete ignored weekly Full Price vs Sale files. Month-named 2026-41 files stay."""
+    try:
+        config = load_config()
+        result = delete_ignored_pricing_uploads(Path(config.data_root))
+        result["disk"] = disk_usage_payload(Path(config.data_root))
+        logger.info(
+            f"Deleted {result['count']} ignored pricing files, freed {result['bytes_freed']} bytes"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"delete-ignored-pricing-files failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete ignored pricing files")
+
+
 @app.get("/api/debug/markets")
 async def debug_markets(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
@@ -4079,14 +4112,18 @@ async def persist_upload_file(upload: UploadFile, dest: Path) -> int:
     """Write the upload in 1 MB chunks so a large Qlik xlsx yields to other requests."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     size = 0
-    with dest.open("wb") as buffer:
-        while True:
-            chunk = await upload.read(UPLOAD_CHUNK_BYTES)
-            if not chunk:
-                break
-            buffer.write(chunk)
-            size += len(chunk)
-    return size
+    try:
+        with dest.open("wb") as buffer:
+            while True:
+                chunk = await upload.read(UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                buffer.write(chunk)
+                size += len(chunk)
+        return size
+    except OSError:
+        dest.unlink(missing_ok=True)
+        raise
 
 
 @app.post("/api/upload-file")
@@ -4295,6 +4332,8 @@ async def upload_file(
         raise
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
+        if is_disk_full_error(e):
+            raise HTTPException(status_code=507, detail=DISK_FULL_DETAIL)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 

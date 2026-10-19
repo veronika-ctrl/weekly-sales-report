@@ -10,10 +10,12 @@ import { getApiBaseUrl } from '@/lib/api'
 import { releaseUploadLock, tryAcquireUploadLock } from '@/lib/upload-lock'
 import {
   computeUploadTimeoutMs,
+  formatDiskFullError,
   formatOtherCardUploadingError,
   formatSkippedAfterTimeoutError,
   formatUploadFileSize,
   formatUploadTimeoutError,
+  isDiskFullError,
   isRemoteApiUrl,
   shouldAbortRemainingUploads,
 } from '@/lib/upload-timeout'
@@ -219,6 +221,8 @@ export default function BatchFileUpload({
           `Network error while uploading "${file.name}" (${formatUploadFileSize(file.size)}). ` +
           'Free hosts often sleep or a previous file is still blocking the worker—wait ~1 min and retry this file alone. ' +
           'Confirm NEXT_PUBLIC_API_URL points at Render (not a Vercel /api rewrite).'
+      } else if (isDiskFullError(errorMessage)) {
+        errorMessage = formatDiskFullError()
       } else if (error.message?.includes('signal is aborted') || error.message?.includes('aborted without reason')) {
         errorMessage = `Upload was cancelled or timed out. Please try again with this one file.`
       }

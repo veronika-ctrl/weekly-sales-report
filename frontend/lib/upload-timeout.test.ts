@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import {
   SMALL_HOSTED_UPLOAD_TIMEOUT_MS,
   computeUploadTimeoutMs,
@@ -7,6 +10,8 @@ import {
   formatSkippedAfterTimeoutError,
   formatUploadFileSize,
   formatUploadTimeoutError,
+  formatDiskFullError,
+  isDiskFullError,
   isRemoteApiUrl,
   shouldAbortRemainingUploads,
 } from './upload-timeout'
@@ -85,6 +90,32 @@ describe('shouldAbortRemainingUploads', () => {
       true
     )
     assert.equal(shouldAbortRemainingUploads('Network error: API unreachable at https://example'), true)
+    assert.equal(
+      shouldAbortRemainingUploads('Upload failed: [Errno 28] No space left on device'),
+      true,
+    )
     assert.equal(shouldAbortRemainingUploads('Qlik file must be .xlsx or .csv'), false)
+  })
+})
+
+describe('disk full upload copy', () => {
+  it('recognizes Render ENOSPC and tells the user the export is fine', () => {
+    assert.equal(isDiskFullError('Upload failed: [Errno 28] No space left on device'), true)
+    assert.equal(isDiskFullError('Render disk is full (no space left on device).'), true)
+    assert.equal(isDiskFullError('Qlik file must be .xlsx or .csv'), false)
+    const msg = formatDiskFullError()
+    assert.match(msg, /export on your computer is fine/i)
+    assert.match(msg, /Delete ignored old Full Price files/)
+  })
+
+  it('wires Settings disk panel and upload-file handler to the cleanup endpoint', () => {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const settings = readFileSync(join(here, '../app/settings/page.tsx'), 'utf8')
+    const upload = readFileSync(join(here, '../components/BatchFileUpload.tsx'), 'utf8')
+    assert.match(settings, /data-testid="disk-usage-panel"/)
+    assert.match(settings, /deleteIgnoredPricingFiles/)
+    assert.match(settings, /Delete ignored old Full Price files/)
+    assert.match(upload, /formatDiskFullError/)
+    assert.match(upload, /isDiskFullError/)
   })
 })
