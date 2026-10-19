@@ -94,7 +94,7 @@ export function isDiskFullError(message: string): boolean {
 export function formatDiskFullError(): string {
   return (
     'Render disk is full — the export on your computer is fine. ' +
-    'In Settings, click “Delete ignored old Full Price files” (month-named 2026-41 files stay), ' +
-    'or increase the Render disk, then re-upload this file alone.'
+    'In Settings, click “Delete weeks 2026-36 to 2026-40” (Qlik/DEMA for those weeks), ' +
+    'then re-upload this file alone. Month-named 2026-41 files stay.'
   )
 }

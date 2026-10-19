@@ -100,6 +100,7 @@ from weekly_report.src.storage.uploads import (
 from weekly_report.src.storage.disk import (
     DISK_FULL_DETAIL,
     delete_ignored_pricing_uploads,
+    delete_stale_weeks_36_to_40,
     disk_usage_payload,
     is_disk_full_error,
 )
@@ -2603,6 +2604,23 @@ async def post_delete_ignored_pricing_files():
     except Exception as e:
         logger.error(f"delete-ignored-pricing-files failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete ignored pricing files")
+
+
+@app.post("/api/disk/delete-weeks-36-to-40")
+async def post_delete_weeks_36_to_40():
+    """Delete W36–W40 weekly Qlik/DEMA/Shopify. Keep aMER/retention/CAC/Klaviyo history."""
+    try:
+        config = load_config()
+        result = delete_stale_weeks_36_to_40(Path(config.data_root))
+        result["disk"] = disk_usage_payload(Path(config.data_root))
+        logger.info(
+            f"Deleted {result['count']} W36–W40 files, freed {result['bytes_freed']} bytes, "
+            f"moved {len(result.get('moved') or [])} history files"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"delete-weeks-36-to-40 failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete weeks 2026-36 to 2026-40")
 
 
 @app.get("/api/debug/markets")

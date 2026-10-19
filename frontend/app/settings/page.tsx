@@ -21,6 +21,7 @@ import {
   verifySupabase,
   getDiskUsage,
   deleteIgnoredPricingFiles,
+  deleteWeeks36To40,
   type DiscountsHistoryInfo,
   type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
@@ -62,6 +63,7 @@ export default function Settings() {
   const [diskUsageError, setDiskUsageError] = useState<string | null>(null)
   const [diskUsageLoading, setDiskUsageLoading] = useState(false)
   const [deletingIgnored, setDeletingIgnored] = useState(false)
+  const [deletingStaleWeeks, setDeletingStaleWeeks] = useState(false)
   const [pageHost, setPageHost] = useState('')
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
   const apiTarget = describeApiTarget(getApiBaseUrl(), pageHost)
@@ -492,7 +494,10 @@ export default function Settings() {
             </p>
           </div>
 
-          {(diskUsage?.near_full || (diskUsage?.ignored_count ?? 0) > 0 || diskUsageError) && (
+          {(diskUsage?.near_full ||
+            (diskUsage?.ignored_count ?? 0) > 0 ||
+            (diskUsage?.stale_week_count ?? 0) > 0 ||
+            diskUsageError) && (
             <div
               className={
                 diskUsage?.near_full
@@ -520,7 +525,7 @@ export default function Settings() {
                 {diskUsageError
                   ? diskUsageError
                   : diskUsage
-                    ? `Disk ${diskUsage.used_pct ?? '–'}% used · ${formatUploadFileSize(diskUsage.free_bytes)} free · ${diskUsage.ignored_count} ignored weekly Full Price file(s) (${formatUploadFileSize(diskUsage.ignored_bytes)}). A DEMA/Qlik export on your computer is fine; Errno 28 means Render cannot save another file. Month-named files in 2026-41 stay.`
+                    ? `Disk ${diskUsage.used_pct ?? '–'}% used · ${formatUploadFileSize(diskUsage.free_bytes)} free · ${diskUsage.ignored_count} ignored Full Price file(s) (${formatUploadFileSize(diskUsage.ignored_bytes)}) · W36–W40 weekly files ${diskUsage.stale_week_count ?? 0} (${formatUploadFileSize(diskUsage.stale_week_bytes || 0)}). Deleting W36–W40 removes Qlik/DEMA/Shopify for those weeks so W42 can upload. Month-named 2026-41 files and aMER/retention/CAC/Klaviyo history stay.`
                     : 'Checking API disk…'}
               </p>
               {diskUsage && diskUsage.ignored_files.length > 0 && (
@@ -549,11 +554,43 @@ export default function Settings() {
                   variant="outline"
                   size="sm"
                   className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                  disabled={deletingStaleWeeks || !(diskUsage?.stale_week_count)}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `Delete weeks 2026-36 to 2026-40 (${diskUsage?.stale_week_count ?? 0} files, ${formatUploadFileSize(diskUsage?.stale_week_bytes || 0)})? Qlik, weekly DEMA, and Shopify sessions for those weeks are removed. Last-8-week Qlik charts will only show W41+. aMER month files, customer/retention/CAC/Klaviyo history, and month-named Full Price files in 2026-41 stay.`,
+                      )
+                    ) {
+                      return
+                    }
+                    setDeletingStaleWeeks(true)
+                    try {
+                      const result = await deleteWeeks36To40()
+                      setDiskUsage(result.disk)
+                      await loadMetadata(true)
+                      window.alert(
+                        `Deleted ${result.count} file(s), freed ${formatUploadFileSize(result.bytes_freed)}. Re-upload the W42 DEMA file.`,
+                      )
+                    } catch (err) {
+                      window.alert(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setDeletingStaleWeeks(false)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deletingStaleWeeks ? 'Deleting…' : 'Delete weeks 2026-36 to 2026-40'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
                   disabled={deletingIgnored || !diskUsage?.ignored_count}
                   onClick={async () => {
                     if (
                       !window.confirm(
-                        `Delete ${diskUsage?.ignored_count ?? 0} ignored old weekly Full Price vs Sale file(s) (${formatUploadFileSize(diskUsage?.ignored_bytes || 0)})? Month-named files in 2026-41 and Qlik/DEMA/Shopify week files stay.`,
+                        `Delete ${diskUsage?.ignored_count ?? 0} ignored old weekly Full Price vs Sale file(s) (${formatUploadFileSize(diskUsage?.ignored_bytes || 0)})? Month-named files in 2026-41 stay.`,
                       )
                     ) {
                       return

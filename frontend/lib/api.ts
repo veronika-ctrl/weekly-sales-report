@@ -921,6 +921,9 @@ export interface DiskUsageResponse {
   raw_bytes: number
   ignored_bytes: number
   ignored_count: number
+  stale_weeks?: string[]
+  stale_week_bytes?: number
+  stale_week_count?: number
   near_full: boolean
   largest: DiskUsageFile[]
   ignored_files: DiskUsageFile[]
@@ -940,6 +943,27 @@ export async function deleteIgnoredPricingFiles(): Promise<{
   const response = await fetchWithTimeout(`${API_BASE_URL}/api/disk/delete-ignored-pricing-files`, {
     method: 'POST',
   })
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(describeHttpError(response.status, t))
+  }
+  return response.json()
+}
+
+export async function deleteWeeks36To40(): Promise<{
+  deleted: string[]
+  moved: string[]
+  count: number
+  bytes_freed: number
+  shelter_week: string
+  errors: string[]
+  disk: DiskUsageResponse
+}> {
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/disk/delete-weeks-36-to-40`,
+    { method: 'POST' },
+    180_000,
+  )
   if (!response.ok) {
     const t = await response.text()
     throw new Error(describeHttpError(response.status, t))
