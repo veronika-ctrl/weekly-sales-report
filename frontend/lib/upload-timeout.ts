@@ -82,7 +82,19 @@ export function formatOtherCardUploadingError(): string {
 }
 
 export function shouldAbortRemainingUploads(errorMessage: string): boolean {
-  return /timeout|timed out|still processing|failed to fetch|network error|unreachable|gateway|aborted/i.test(
+  return /timeout|timed out|still processing|failed to fetch|network error|unreachable|gateway|aborted|no space left|disk is full|errno 28/i.test(
     errorMessage || ''
+  )
+}
+
+export function isDiskFullError(message: string): boolean {
+  return /no space left on device|errno 28|disk is full|insufficient storage/i.test(message || '')
+}
+
+export function formatDiskFullError(): string {
+  return (
+    'Render disk is full — the export on your computer is fine. ' +
+    'In Settings, click “Delete ignored old Full Price files” (month-named 2026-41 files stay), ' +
+    'or increase the Render disk, then re-upload this file alone.'
   )
 }

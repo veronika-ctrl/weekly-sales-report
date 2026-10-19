@@ -906,6 +906,47 @@ export async function getWeeksWithUploads(): Promise<string[]> {
   }
 }
 
+export type DiskUsageFile = {
+  path: string
+  bytes: number
+  ignored?: boolean
+}
+
+export interface DiskUsageResponse {
+  data_root: string
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  used_pct: number | null
+  raw_bytes: number
+  ignored_bytes: number
+  ignored_count: number
+  near_full: boolean
+  largest: DiskUsageFile[]
+  ignored_files: DiskUsageFile[]
+}
+
+export async function getDiskUsage(): Promise<DiskUsageResponse> {
+  return fetchJsonWithTimeout(`${API_BASE_URL}/api/disk-usage`, LIGHT_REQUEST_TIMEOUT_MS, '/api/disk-usage')
+}
+
+export async function deleteIgnoredPricingFiles(): Promise<{
+  deleted: string[]
+  count: number
+  bytes_freed: number
+  errors: string[]
+  disk: DiskUsageResponse
+}> {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/disk/delete-ignored-pricing-files`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(describeHttpError(response.status, t))
+  }
+  return response.json()
+}
+
 export async function getBatchMetrics(baseWeek: string, numWeeks: number = 8): Promise<BatchMetricsResponse> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), BATCH_METRICS_TIMEOUT_MS)

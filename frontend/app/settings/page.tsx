@@ -19,10 +19,14 @@ import {
   getExclExchangesHistoryInfo,
   getKlaviyoStatus,
   verifySupabase,
+  getDiskUsage,
+  deleteIgnoredPricingFiles,
   type DiscountsHistoryInfo,
   type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
+  type DiskUsageResponse,
 } from '@/lib/api'
+import { formatUploadFileSize } from '@/lib/upload-timeout'
 import { describeApiTarget, getApiStorageWarning } from '@/lib/api-storage'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
@@ -54,6 +58,10 @@ export default function Settings() {
   const [exclHistoryLoading, setExclHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
   const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
+  const [diskUsage, setDiskUsage] = useState<DiskUsageResponse | null>(null)
+  const [diskUsageError, setDiskUsageError] = useState<string | null>(null)
+  const [diskUsageLoading, setDiskUsageLoading] = useState(false)
+  const [deletingIgnored, setDeletingIgnored] = useState(false)
   const [pageHost, setPageHost] = useState('')
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
   const apiTarget = describeApiTarget(getApiBaseUrl(), pageHost)
@@ -129,6 +137,23 @@ export default function Settings() {
       cancelled = true
     }
   }, [supabaseDisabled])
+
+  const loadDiskUsage = useCallback(async () => {
+    if (!hasBackend) return
+    setDiskUsageLoading(true)
+    setDiskUsageError(null)
+    try {
+      setDiskUsage(await getDiskUsage())
+    } catch (err) {
+      setDiskUsageError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDiskUsageLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadDiskUsage()
+  }, [loadDiskUsage])
 
   // Sync selectedWeek with baseWeek from context
   useEffect(() => {
@@ -466,6 +491,94 @@ export default function Settings() {
               Adjusted aMER, retention, and CAC read CSVs from this API’s disk only.
             </p>
           </div>
+
+          {(diskUsage?.near_full || (diskUsage?.ignored_count ?? 0) > 0 || diskUsageError) && (
+            <div
+              className={
+                diskUsage?.near_full
+                  ? 'rounded-md border border-red-300 bg-red-50 p-3 space-y-2'
+                  : 'rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2'
+              }
+              data-testid="disk-usage-panel"
+            >
+              <div
+                className={
+                  diskUsage?.near_full
+                    ? 'text-sm font-medium text-red-900'
+                    : 'text-sm font-medium text-amber-900'
+                }
+              >
+                {diskUsage?.near_full
+                  ? 'API disk is full — uploads will fail until space is freed'
+                  : 'Old unused Full Price vs Sale files are still on the API disk'}
+              </div>
+              <p
+                className={
+                  diskUsage?.near_full ? 'text-xs text-red-800' : 'text-xs text-amber-800'
+                }
+              >
+                {diskUsageError
+                  ? diskUsageError
+                  : diskUsage
+                    ? `Disk ${diskUsage.used_pct ?? '–'}% used · ${formatUploadFileSize(diskUsage.free_bytes)} free · ${diskUsage.ignored_count} ignored weekly Full Price file(s) (${formatUploadFileSize(diskUsage.ignored_bytes)}). A DEMA/Qlik export on your computer is fine; Errno 28 means Render cannot save another file. Month-named files in 2026-41 stay.`
+                    : 'Checking API disk…'}
+              </p>
+              {diskUsage && diskUsage.ignored_files.length > 0 && (
+                <ul className="text-xs text-muted-foreground list-disc pl-5 max-h-24 overflow-auto">
+                  {diskUsage.ignored_files.slice(0, 12).map((f) => (
+                    <li key={f.path}>
+                      {f.path} ({formatUploadFileSize(f.bytes)})
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  disabled={diskUsageLoading}
+                  onClick={() => void loadDiskUsage()}
+                >
+                  <RefreshCw className={`h-4 w-4 ${diskUsageLoading ? 'animate-spin' : ''}`} />
+                  Refresh disk
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                  disabled={deletingIgnored || !diskUsage?.ignored_count}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `Delete ${diskUsage?.ignored_count ?? 0} ignored old weekly Full Price vs Sale file(s) (${formatUploadFileSize(diskUsage?.ignored_bytes || 0)})? Month-named files in 2026-41 and Qlik/DEMA/Shopify week files stay.`,
+                      )
+                    ) {
+                      return
+                    }
+                    setDeletingIgnored(true)
+                    try {
+                      const result = await deleteIgnoredPricingFiles()
+                      setDiskUsage(result.disk)
+                      await loadMetadata(true)
+                      window.alert(
+                        `Deleted ${result.count} file(s), freed ${formatUploadFileSize(result.bytes_freed)}. Re-upload the W42 DEMA file.`,
+                      )
+                    } catch (err) {
+                      window.alert(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setDeletingIgnored(false)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deletingIgnored ? 'Deleting…' : 'Delete ignored old Full Price files'}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {apiStorageWarning && (
             <div
