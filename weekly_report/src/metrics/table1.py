@@ -23,6 +23,19 @@ from weekly_report.src.cache.manager import raw_data_cache
 _raw_data_load_lock = threading.Lock()
 
 
+def _online_segment_net_revenue(qlik_df: pd.DataFrame, cust_seg: pd.Series) -> tuple[float, float]:
+    """Online net revenue for new vs returning customers. Returns (new_net, returning_net)."""
+    if qlik_df is None or qlik_df.empty:
+        return 0.0, 0.0
+    if "Sales Channel" not in qlik_df.columns or "Net Revenue" not in qlik_df.columns:
+        return 0.0, 0.0
+    online = qlik_df["Sales Channel"].astype(str).str.strip().str.lower().eq("online")
+    net = pd.to_numeric(qlik_df["Net Revenue"], errors="coerce").fillna(0.0)
+    new_net = float(net.loc[online & cust_seg.eq("new")].sum())
+    ret_net = float(net.loc[online & cust_seg.eq("returning")].sum())
+    return new_net, ret_net
+
+
 def calculate_table1_metrics(
     qlik_df: pd.DataFrame, 
     dema_spend_df: pd.DataFrame, 
@@ -51,7 +64,9 @@ def calculate_table1_metrics(
             'wholesale_net_revenue': 0,
             'total_net_revenue': 1176000,
             'returning_customers': 418,
+            'returning_customers_net_revenue': 800000,
             'new_customers': 189,
+            'new_customers_net_revenue': 321000,
             'marketing_spend': 359000,
             'online_cost_of_sale_3': 99000
         }
@@ -189,13 +204,12 @@ def calculate_table1_metrics(
     new_customers = qlik_filtered.loc[_cust_seg.eq('new'), 'Customer E-mail'].nunique()
     metrics['new_customers'] = int(new_customers)
 
-    # New customers net sales = SUM(Net Revenue WHERE Sales Channel = 'Online' AND segment = new)
-    if all(c in qlik_filtered.columns for c in ('Sales Channel', 'New/Returning Customer', 'Net Revenue')):
-        _online = qlik_filtered['Sales Channel'].astype(str).str.strip().str.lower().eq('online')
-        new_customers_net_sales = qlik_filtered.loc[_online & _cust_seg.eq('new'), 'Net Revenue'].sum()
-    else:
-        new_customers_net_sales = 0.0
-    new_customers_net_sales = float(new_customers_net_sales)
+    # Segment net sales = SUM(Net Revenue WHERE Sales Channel = 'Online' AND New/Returning Customer)
+    new_customers_net_sales, returning_customers_net_sales = _online_segment_net_revenue(
+        qlik_filtered, _cust_seg
+    )
+    metrics['new_customers_net_revenue'] = new_customers_net_sales
+    metrics['returning_customers_net_revenue'] = returning_customers_net_sales
     
     # 12. Marketing Spend = SUM(Marketing spend från dema_spend)
     marketing_spend = dema_spend_filtered['Marketing spend'].sum()
@@ -553,12 +567,11 @@ def calculate_table1_metrics_for_date_range(
     new_customers = qlik_df.loc[_cust_seg_dr.eq('new'), 'Customer E-mail'].nunique()
     metrics['new_customers'] = int(new_customers)
 
-    if all(c in qlik_df.columns for c in ('Sales Channel', 'New/Returning Customer', 'Net Revenue')):
-        _online_dr = qlik_df['Sales Channel'].astype(str).str.strip().str.lower().eq('online')
-        new_customers_net_sales = qlik_df.loc[_online_dr & _cust_seg_dr.eq('new'), 'Net Revenue'].sum()
-    else:
-        new_customers_net_sales = 0.0
-    new_customers_net_sales = float(new_customers_net_sales)
+    new_customers_net_sales, returning_customers_net_sales = _online_segment_net_revenue(
+        qlik_df, _cust_seg_dr
+    )
+    metrics['new_customers_net_revenue'] = new_customers_net_sales
+    metrics['returning_customers_net_revenue'] = returning_customers_net_sales
     
     # 12. Marketing Spend = SUM(Marketing spend från dema_spend)
     marketing_spend = dema_spend_df['Marketing spend'].sum()
@@ -790,7 +803,9 @@ def _get_zero_metrics() -> Dict[str, Any]:
         'wholesale_net_revenue': 0.0,
         'total_net_revenue': 0.0,
         'returning_customers': 0,
+        'returning_customers_net_revenue': 0.0,
         'new_customers': 0,
+        'new_customers_net_revenue': 0.0,
         'marketing_spend': 0.0,
         'online_cost_of_sale_3': 0.0,
         'emer': 0.0
@@ -970,23 +985,7 @@ def calculate_table1_for_periods(
             
         except Exception as e:
             logger.warning(f"Failed to process {period_name} ({period_week}): {e}")
-            # Return zeros for missing data
-            results[period_name] = {
-                'online_gross_revenue': 0.0,
-                'returns': 0.0,
-                'return_rate_pct': 0.0,
-                'online_net_revenue': 0.0,
-                'retail_concept_store': 0.0,
-                'retail_popups_outlets': 0.0,
-                'retail_net_revenue': 0.0,
-                'wholesale_net_revenue': 0.0,
-                'total_net_revenue': 0.0,
-                'returning_customers': 0,
-                'new_customers': 0,
-                'marketing_spend': 0.0,
-                'online_cost_of_sale_3': 0.0,
-                'emer': 0.0
-            }
+            results[period_name] = _get_zero_metrics()
     
     logger.info(f"Completed metrics calculation for {len(results)} periods")
     return results
