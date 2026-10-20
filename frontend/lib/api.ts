@@ -445,6 +445,94 @@ export async function getWomenCategorySales(baseWeek: string, numWeeks: number =
   )
 }
 
+export interface MonthlyTrendPoint {
+  month: string
+  label: string
+  start: string
+  end: string
+  gross_revenue: number
+  sales_qty: number
+  last_year_gross_revenue: number
+  last_year_sales_qty: number
+  yoy_pct: number | null
+}
+
+export interface MonthlyProductRow {
+  rank: number
+  gender: string
+  category: string
+  product: string
+  color: string
+  gross_revenue: number
+  sales_qty: number
+  last_year_gross_revenue: number
+  last_year_sales_qty: number
+  yoy_pct: number | null
+  sob: number
+}
+
+export interface MonthlyTotals {
+  gross_revenue: number
+  sales_qty: number
+  sob: number
+  last_year_gross_revenue: number
+  last_year_sales_qty: number
+  yoy_pct: number | null
+}
+
+export interface WomenMonthlyResponse {
+  base_week: string
+  focus_month: string
+  focus_label: string
+  focus_start: string
+  focus_end: string
+  note: string
+  headline: {
+    gross_revenue: number
+    sales_qty: number
+    last_year_gross_revenue: number
+    last_year_sales_qty: number
+    yoy_pct: number | null
+    online_share_pct: number
+    online_gross_revenue: number
+  }
+  trend: MonthlyTrendPoint[]
+  categories: Array<{
+    category: string
+    gross_revenue: number
+    sales_qty: number
+    last_year_gross_revenue: number
+    last_year_sales_qty: number
+    yoy_pct: number | null
+    share_pct: number
+  }>
+  top_products: MonthlyProductRow[]
+  top_total: MonthlyTotals
+  grand_total: MonthlyTotals
+}
+
+export interface TopProductsMonthlyResponse {
+  base_week: string
+  gender_filter: 'men' | 'women' | string
+  focus_month: string
+  focus_label: string
+  focus_start: string
+  focus_end: string
+  note: string
+  trend: MonthlyTrendPoint[]
+  products: MonthlyProductRow[]
+  top_total: MonthlyTotals
+  grand_total: MonthlyTotals
+}
+
+export async function getWomenMonthly(baseWeek: string, months: number = 13, topN: number = 15): Promise<WomenMonthlyResponse> {
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/women-monthly?base_week=${encodeURIComponent(baseWeek)}&months=${months}&top_n=${topN}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/women-monthly',
+  )
+}
+
 export async function getCategorySales(baseWeek: string, numWeeks: number = 8): Promise<CategorySalesResponse> {
   const response = await fetch(`${API_BASE_URL}/api/category-sales?base_week=${baseWeek}&num_weeks=${numWeeks}`)
   if (!response.ok) {
@@ -757,6 +845,19 @@ export async function getTopProductsByGender(baseWeek: string, numWeeks: number 
     }
     return response.json()
   })
+}
+
+export async function getTopProductsMonthly(
+  baseWeek: string,
+  genderFilter: 'men' | 'women' = 'men',
+  months: number = 13,
+  topN: number = 30,
+): Promise<TopProductsMonthlyResponse> {
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/top-products-monthly?base_week=${encodeURIComponent(baseWeek)}&gender_filter=${genderFilter}&months=${months}&top_n=${topN}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/top-products-monthly',
+  )
 }
 
 export async function getSessionsPerCountry(baseWeek: string, numWeeks: number = 8): Promise<SessionsPerCountryResponse> {

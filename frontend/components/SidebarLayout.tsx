@@ -28,9 +28,11 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/gender-sales': { title: 'Gender Sales', subtitle: 'Sales breakdown by gender' },
       '/men-category-sales': { title: 'Men Category Sales', subtitle: 'Sales by men product categories' },
       '/women-category-sales': { title: 'Women Category Sales', subtitle: 'Sales by women product categories' },
+      '/women-monthly': { title: 'Women’s monthly', subtitle: 'Completed month vs last year — how it sells and what is selling' },
       '/category-sales': { title: 'Category Sales', subtitle: 'Sales by category with YoY growth' },
       '/products-new': { title: 'Products New', subtitle: 'Top products for new and returning customers' },
       '/products-gender': { title: 'Top selling products', subtitle: 'Top products by gender' },
+      '/products-gender-monthly': { title: 'Top selling products monthly', subtitle: 'Completed month vs last year — sales, growth and decline' },
       '/sessions-per-country': { title: 'Sessions per Country', subtitle: '(‘000)' },
       '/conversion-per-country': { title: 'Conversion per Country', subtitle: 'Conversion rates by country' },
       '/new-customers-per-country': { title: 'New Customers per Country', subtitle: 'New customer acquisition by country' },
@@ -116,8 +118,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') || isActive('/online-kpis') || 
                     isActive('/contribution') || isActive('/gender-sales') || isActive('/men-category-sales') || 
-                    isActive('/women-category-sales') || isActive('/category-sales') || isActive('/products-new') || 
-                    isActive('/products-gender') || isActive('/sessions-per-country') || isActive('/conversion-per-country') || 
+                    isActive('/women-category-sales') || isActive('/women-monthly') || isActive('/category-sales') || isActive('/products-new') || 
+                    isActive('/products-gender') || isActive('/products-gender-monthly') || isActive('/sessions-per-country') || isActive('/conversion-per-country') || 
                     isActive('/new-customers-per-country') || isActive('/returning-customers-per-country') || 
                     isActive('/aov-new-customers-per-country') || isActive('/aov-returning-customers-per-country') || 
                     isActive('/marketing-spend-per-country') || isActive('/ncac-per-country') || 
@@ -152,7 +154,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                   className={`w-full flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') ||
                     isActive('/gender-sales') || isActive('/men-category-sales') ||
-                    isActive('/women-category-sales') || isActive('/products-gender') ||
+                    isActive('/women-category-sales') || isActive('/women-monthly') || isActive('/products-gender') || isActive('/products-gender-monthly') ||
                     isActive('/audience-total') || pathname?.startsWith('/audience/')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -230,6 +232,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                       {!isCollapsed && <span>Women Category Sales</span>}
                     </Link>
                     <Link
+                      href="/women-monthly"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/women-monthly')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Women’s monthly</span>}
+                    </Link>
+                    <Link
                       href="/products-gender"
                       prefetch={true}
                       className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -240,6 +254,18 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconChartBar className="h-4 w-4" />
                       {!isCollapsed && <span>Top selling products</span>}
+                    </Link>
+                    <Link
+                      href="/products-gender-monthly"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/products-gender-monthly')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Top selling products monthly</span>}
                     </Link>
 
                     <Link

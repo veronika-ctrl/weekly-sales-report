@@ -67,6 +67,10 @@ from weekly_report.src.metrics.women_category_sales import calculate_women_categ
 from weekly_report.src.metrics.category_sales import calculate_category_sales_for_weeks
 from weekly_report.src.metrics.top_products import calculate_top_products_for_weeks
 from weekly_report.src.metrics.top_products_gender import calculate_top_products_by_gender_for_weeks
+from weekly_report.src.metrics.monthly_women_and_products import (
+    calculate_top_products_monthly,
+    calculate_women_monthly,
+)
 from weekly_report.src.metrics.sessions_per_country import calculate_sessions_per_country_for_weeks
 from weekly_report.src.metrics.conversion_per_country import calculate_conversion_per_country_for_weeks
 from weekly_report.src.metrics.new_customers_per_country import calculate_new_customers_per_country_for_weeks
@@ -275,6 +279,35 @@ class TopProductsData(BaseModel):
 class TopProductsResponse(BaseModel):
     top_products: List[TopProductsData]
     period_info: Dict[str, Any]
+
+
+class WomenMonthlyResponse(BaseModel):
+    base_week: str
+    focus_month: str
+    focus_label: str
+    focus_start: str
+    focus_end: str
+    note: str
+    headline: Dict[str, Any]
+    trend: List[Dict[str, Any]]
+    categories: List[Dict[str, Any]]
+    top_products: List[Dict[str, Any]]
+    top_total: Dict[str, Any]
+    grand_total: Dict[str, Any]
+
+
+class TopProductsMonthlyResponse(BaseModel):
+    base_week: str
+    gender_filter: str
+    focus_month: str
+    focus_label: str
+    focus_start: str
+    focus_end: str
+    note: str
+    trend: List[Dict[str, Any]]
+    products: List[Dict[str, Any]]
+    top_total: Dict[str, Any]
+    grand_total: Dict[str, Any]
 
 
 class SessionsPerCountryData(BaseModel):
@@ -3391,6 +3424,65 @@ async def get_top_products_by_gender(
         import traceback
         logger.error(f"Error getting Top Products by Gender metrics for {base_week}: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/women-monthly", response_model=WomenMonthlyResponse)
+async def get_women_monthly(
+    base_week: str = Query(..., description="Base ISO week like '2026-42'"),
+    months: int = Query(13, description="Number of completed months in the trend"),
+    top_n: int = Query(15, description="Top women's products in the completed month"),
+):
+    """Women's monthly performance for the last completed calendar month vs last year."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        if months < 1 or months > 24:
+            raise HTTPException(status_code=400, detail="months must be between 1 and 24")
+        if top_n < 1 or top_n > 50:
+            raise HTTPException(status_code=400, detail="top_n must be between 1 and 50")
+        config = load_config(week=base_week)
+        return calculate_women_monthly(base_week, Path(config.data_root), months=months, top_n=top_n)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        logger.error(f"Error getting women monthly metrics for {base_week}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/top-products-monthly", response_model=TopProductsMonthlyResponse)
+async def get_top_products_monthly(
+    base_week: str = Query(..., description="Base ISO week like '2026-42'"),
+    gender_filter: str = Query("men", description="Gender filter: 'men' or 'women'"),
+    months: int = Query(13, description="Number of completed months in the trend"),
+    top_n: int = Query(30, description="Number of top products"),
+):
+    """Top selling products for the last completed calendar month vs last year."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail=f"Invalid ISO week format: {base_week}")
+        if gender_filter not in ("men", "women"):
+            raise HTTPException(status_code=400, detail="gender_filter must be 'men' or 'women'")
+        if months < 1 or months > 24:
+            raise HTTPException(status_code=400, detail="months must be between 1 and 24")
+        if top_n < 1 or top_n > 100:
+            raise HTTPException(status_code=400, detail="top_n must be between 1 and 100")
+        config = load_config(week=base_week)
+        return calculate_top_products_monthly(
+            base_week, Path(config.data_root), gender_filter=gender_filter, months=months, top_n=top_n
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        logger.error(f"Error getting monthly top products for {base_week}: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
