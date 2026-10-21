@@ -1615,6 +1615,8 @@ export interface CommercialFullPriceBucket {
   weighted_discount_pct: number | null
   investor_net_moved: number
   investor_discount_removed: number
+  klaviyo_discount?: number
+  customer_care_discount?: number
 }
 
 export interface CommercialFullPricePeriod extends CommercialFullPriceBucket {
