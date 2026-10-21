@@ -1592,6 +1592,62 @@ export async function getExclExchangesHistoryInfo(baseWeek: string): Promise<Exc
   return response.json()
 }
 
+export interface CommercialFullPriceBucket {
+  full_price: number
+  discounted: number
+  total: number
+  full_price_pct: number | null
+  discount_amount: number | null
+  weighted_discount_pct: number | null
+  investor_net_moved: number
+  investor_discount_removed: number
+}
+
+export interface CommercialFullPricePeriod extends CommercialFullPriceBucket {
+  key: string
+  week?: string
+  month?: string
+  start: string
+  end: string
+  last_year?: (CommercialFullPriceBucket & { week?: string; month?: string }) | null
+  yoy_total_pct: number | null
+  yoy_full_price_pct: number | null
+  full_price_pct_delta: number | null
+}
+
+export interface CommercialFullPriceResponse {
+  base_week: string
+  granularity: 'week' | 'month'
+  note: string
+  currency?: string
+  has_last_year: boolean
+  has_discount: boolean
+  files_used: string[]
+  history_range?: { start: string; end: string } | null
+  investor_net_moved: number
+  investor_discount_removed: number
+  periods: CommercialFullPricePeriod[]
+}
+
+export async function getCommercialFullPrice(
+  baseWeek: string,
+  granularity: 'week' | 'month',
+  numWeeks: number = 8,
+  months: number = 13,
+): Promise<CommercialFullPriceResponse> {
+  const params = new URLSearchParams({
+    base_week: baseWeek,
+    granularity,
+    num_weeks: String(numWeeks),
+    months: String(months),
+  })
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/discounts/commercial-full-price?${params}`,
+    FULL_PRICE_TIMEOUT_MS,
+    '/api/discounts/commercial-full-price',
+  )
+}
+
 export interface DiscountsHistoryInfo {
   files: { name: string; week: string; uploaded_at: string }[]
   count: number
