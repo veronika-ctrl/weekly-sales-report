@@ -43,13 +43,15 @@ describe('gender sales self-load wiring', () => {
     assert.doesNotMatch(body, /\bawait fetch\(/)
   })
 
-  it('retries a dropped women category sales connection once', () => {
+  it('keeps retrying a dropped women category sales connection while the result is saved', () => {
     const api = readFileSync(join(here, 'api.ts'), 'utf8')
     const start = api.indexOf('export async function getWomenCategorySales')
     assert.ok(start >= 0)
-    const body = api.slice(start, start + 900)
+    const body = api.slice(start, start + 1400)
     assert.match(body, /\/api\/women-category-sales/)
     assert.match(body, /failed to fetch/)
+    assert.match(body, /timed out/)
+    assert.match(body, /180_000/)
     assert.match(body, /setTimeout/)
   })
 

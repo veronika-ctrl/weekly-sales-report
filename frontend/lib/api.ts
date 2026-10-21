@@ -439,18 +439,24 @@ export async function getMenCategorySales(baseWeek: string, numWeeks: number = 8
 
 export async function getWomenCategorySales(baseWeek: string, numWeeks: number = 8): Promise<WomenCategorySalesResponse> {
   const url = `${API_BASE_URL}/api/women-category-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`
-  try {
-    return await fetchJsonWithTimeout(url, HEAVY_METRICS_TIMEOUT_MS, '/api/women-category-sales')
-  } catch (err) {
-    // The first open can still lose the connection if a proxy closes it while
-    // the server finishes and saves the result. One retry then reads that save.
-    const message = err instanceof Error ? err.message : String(err)
-    if (!/failed to fetch|could not reach|networkerror|network request failed|load failed/i.test(message)) {
-      throw err
+  // The live Qlik file is a large Excel export. The first request after a
+  // restart can lose the connection while the API finishes and saves the
+  // result. Stay on the loading state and retry until that save answers.
+  const deadline = Date.now() + 180_000
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      return await fetchJsonWithTimeout(url, 90_000, '/api/women-category-sales')
+    } catch (err) {
+      lastError = err
+      const message = err instanceof Error ? err.message : String(err)
+      if (!/failed to fetch|could not reach|networkerror|network request failed|load failed|timed out/i.test(message)) {
+        throw err
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    return fetchJsonWithTimeout(url, HEAVY_METRICS_TIMEOUT_MS, '/api/women-category-sales')
   }
+  throw lastError instanceof Error ? lastError : new Error('Failed to load women category sales')
 }
 
 export interface MonthlyTrendPoint {
