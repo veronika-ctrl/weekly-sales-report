@@ -4917,7 +4917,7 @@ async def get_commercial_full_price(
     num_weeks: int = Query(8),
     months: int = Query(13),
 ):
-    """Full price share with exchanges removed and team/investor discounts counted as full price."""
+    """Full price share with exchanges removed, team/investor counted as full price, and Klaviyo plus Customer Care discount amounts broken out."""
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")

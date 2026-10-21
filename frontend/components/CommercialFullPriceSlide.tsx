@@ -27,8 +27,17 @@ const splitConfig = {
   discounted: { label: 'Discounted', color: '#F97316' },
 } satisfies ChartConfig
 
+const triggerConfig = {
+  klaviyo: { label: 'Klaviyo', color: '#0F766E' },
+  klaviyoLy: { label: 'LY Klaviyo', color: '#5EEAD4' },
+  customerCare: { label: 'Customer care (CC)', color: '#7C3AED' },
+  customerCareLy: { label: 'LY Customer care (CC)', color: '#C4B5FD' },
+} satisfies ChartConfig
+
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
+
+const thousandsOrDash = (value: number | null | undefined) => (value == null ? '–' : thousands(value))
 
 const pct = (value: number | null | undefined) => (value == null ? '–' : `${value.toFixed(1)}%`)
 
@@ -115,6 +124,17 @@ export default function CommercialFullPriceSlide({
       })),
     [rows, granularity],
   )
+  const triggerData = useMemo(
+    () =>
+      rows.map((row) => ({
+        label: periodLabel(row, granularity),
+        klaviyo: row.klaviyo_discount || 0,
+        klaviyoLy: row.last_year?.klaviyo_discount || 0,
+        customerCare: row.customer_care_discount || 0,
+        customerCareLy: row.last_year?.customer_care_discount || 0,
+      })),
+    [rows, granularity],
+  )
 
   const periodWord = granularity === 'week' ? 'week' : 'month'
   const title =
@@ -130,7 +150,7 @@ export default function CommercialFullPriceSlide({
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         <p className="text-sm text-muted-foreground mt-1">
           {data?.note ||
-            'Exchanges are excluded. Investors, team, PR & friends discounts are counted as full price. Klaviyo and Customer Care stay in the discount. The existing Full Price vs Sale slides are unchanged.'}
+            'Exchanges are excluded. Investors, team, PR & friends discounts are counted as full price. Klaviyo and Customer Care (CC) discount amounts are shown separately and still sit inside the commercial discount. The existing Full Price vs Sale slides are unchanged.'}
         </p>
         {data?.history_range && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -210,7 +230,7 @@ export default function CommercialFullPriceSlide({
               <CardTitle className="text-sm font-medium">Net sales split (SEK ’000) — by {periodWord}</CardTitle>
               <p className="text-xs text-muted-foreground">
                 Full price (dark) plus the commercial discount that remains (orange). Team and investor sales sit in full
-                price.
+                price. Klaviyo and Customer Care amounts are in the chart below, not split out of these bars.
               </p>
             </CardHeader>
             <CardContent className="overflow-visible">
@@ -229,6 +249,40 @@ export default function CommercialFullPriceSlide({
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {!loading && !error && rows.length > 0 && slide === 'charts' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">
+              Klaviyo and Customer Care discounts (SEK ’000) — by {periodWord}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Discount amount from the discount-type export, not net sales. Customer care is CC. Lighter bars are the
+              same {periodWord} last year. These amounts stay inside the orange Discounted bar above.
+            </p>
+          </CardHeader>
+          <CardContent className="overflow-visible">
+            <ChartContainer config={triggerConfig} className="h-[300px] w-full min-w-0 overflow-visible">
+              <BarChart data={triggerData} margin={{ top: 16, right: 12, left: 12, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={(v: number) => thousands(v)} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(v: unknown) => thousands(Number(v ?? 0))} />} />
+                <Legend />
+                <Bar dataKey="klaviyo" fill="#0F766E" name="Klaviyo" isAnimationActive={isAnimationActive} />
+                <Bar dataKey="klaviyoLy" fill="#5EEAD4" name="LY Klaviyo" isAnimationActive={isAnimationActive} />
+                <Bar dataKey="customerCare" fill="#7C3AED" name="Customer care (CC)" isAnimationActive={isAnimationActive} />
+                <Bar
+                  dataKey="customerCareLy"
+                  fill="#C4B5FD"
+                  name="LY Customer care (CC)"
+                  isAnimationActive={isAnimationActive}
+                />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
       )}
 
       {!loading && !error && rows.length > 0 && slide === 'table' && (
@@ -251,6 +305,10 @@ export default function CommercialFullPriceSlide({
                   <th className="py-2 pr-4 font-medium">{granularity === 'week' ? 'Week' : 'Month'}</th>
                   <th className="py-2 px-4 font-medium text-right">Full price</th>
                   <th className="py-2 px-4 font-medium text-right">Discounted</th>
+                  <th className="py-2 px-4 font-medium text-right">Klaviyo</th>
+                  <th className="py-2 px-4 font-medium text-right">LY Klaviyo</th>
+                  <th className="py-2 px-4 font-medium text-right">Customer care (CC)</th>
+                  <th className="py-2 px-4 font-medium text-right">LY Customer care (CC)</th>
                   <th className="py-2 px-4 font-medium text-right">Total</th>
                   <th className="py-2 px-4 font-medium text-right">Full price %</th>
                   <th className="py-2 px-4 font-medium text-right">LY full price %</th>
@@ -269,6 +327,14 @@ export default function CommercialFullPriceSlide({
                       <td className="py-2 pr-4 font-medium text-gray-900">{periodLabel(row, granularity)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{thousands(row.full_price)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{thousands(row.discounted)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums">{thousands(row.klaviyo_discount)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                        {thousandsOrDash(lyOrNull(row.last_year, row.last_year?.klaviyo_discount))}
+                      </td>
+                      <td className="py-2 px-4 text-right tabular-nums">{thousands(row.customer_care_discount)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                        {thousandsOrDash(lyOrNull(row.last_year, row.last_year?.customer_care_discount))}
+                      </td>
                       <td className="py-2 px-4 text-right tabular-nums">{thousands(row.total)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{pct(row.full_price_pct)}</td>
                       <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
@@ -286,7 +352,10 @@ export default function CommercialFullPriceSlide({
                 })}
               </tbody>
             </table>
-            <p className="text-[11px] text-muted-foreground mt-3">{AMOUNTS_INCL_VAT_NOTE}</p>
+            <p className="text-[11px] text-muted-foreground mt-3">
+              Klaviyo and Customer care (CC) are discount amounts in SEK ’000, not net sales. They remain inside
+              Discounted. {AMOUNTS_INCL_VAT_NOTE}
+            </p>
           </CardContent>
         </Card>
       )}
