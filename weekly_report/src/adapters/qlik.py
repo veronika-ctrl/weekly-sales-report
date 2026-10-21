@@ -286,6 +286,73 @@ def _parquet_column_names(path: Path) -> Optional[List[str]]:
     return _parquet_footer_column_names(path)
 
 
+def _header_keep(columns: Sequence[str]):
+    """usecols callback: keep only the headers this report aggregates."""
+    wanted = {str(col).strip() for col in columns}
+
+    def keep(name: object) -> bool:
+        return str(name).strip() in wanted
+
+    return keep
+
+
+def _read_csv_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+    """Read a CSV without pulling the unused Qlik columns into memory."""
+    keep = _header_keep(columns)
+    last_error: Optional[BaseException] = None
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        for sep in (",", ";", "\t", "|"):
+            try:
+                frame = pd.read_csv(
+                    path,
+                    sep=sep,
+                    encoding=encoding,
+                    usecols=keep,
+                    na_values=NA_VALUES,
+                    low_memory=False,
+                )
+            except Exception as exc:
+                last_error = exc
+                continue
+            frame.columns = [str(col).strip() for col in frame.columns]
+            if frame.shape[1] == 0:
+                continue
+            return frame
+    logger.warning(f"Column CSV read failed for {path.name} ({last_error}); reading full file")
+    wide = read_csv_auto(path, na_values=NA_VALUES)
+    return _take_columns(wide, columns)
+
+
+def _read_excel_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+    """Read an Excel export by column.
+
+    The live week file is a ~100MB xlsx. openpyxl on the whole workbook takes
+    long enough that Cloudflare drops the browser connection. calamine reads
+    the same sheet in seconds; openpyxl remains the fallback.
+    """
+    keep = _header_keep(columns)
+    last_error: Optional[BaseException] = None
+    for engine in ("calamine", "openpyxl"):
+        try:
+            frame = pd.read_excel(path, engine=engine, usecols=keep, na_values=NA_VALUES)
+        except Exception as exc:
+            last_error = exc
+            continue
+        frame.columns = [str(col).strip() for col in frame.columns]
+        if frame.shape[1] == 0:
+            continue
+        logger.info(f"Loaded Excel columns from {path.name} via {engine}: {frame.shape}")
+        return frame
+    logger.warning(
+        f"Column Excel read failed for {path.name} ({last_error}); reading full sheet and dropping unused columns"
+    )
+    wide = pd.read_excel(path, na_values=NA_VALUES)
+    slim = _take_columns(wide, columns)
+    del wide
+    gc.collect()
+    return slim
+
+
 def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
     """Own a copy of the requested columns. Caller must drop the wide frame."""
     frame.columns = [str(col).strip() for col in frame.columns]
@@ -362,10 +429,19 @@ def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFra
             logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(columns)}")
             frame = _read_parquet_columns(path, columns)
         else:
-            wide = load_csv_files(source, "qlik")
-            frame = _take_columns(wide, columns)
-            del wide
-            gc.collect()
+            files = list(source.glob("*.csv")) + list(source.glob("*.xlsx"))
+            if not files:
+                raise FileNotFoundError(
+                    f"No CSV/Excel files found in {source}\n"
+                    f"Expected CSV/Excel files in: {source}/*.csv or {source}/*.xlsx"
+                )
+            frames = [
+                _read_excel_columns(path, columns)
+                if path.suffix.lower() == ".xlsx"
+                else _read_csv_columns(path, columns)
+                for path in files
+            ]
+            frame = frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
         return _attach_iso_week(frame)
 
 

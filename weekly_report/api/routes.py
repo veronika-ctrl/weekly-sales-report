@@ -596,9 +596,33 @@ def _supabase_enabled() -> bool:
     return os.getenv("DISABLE_SUPABASE", "").lower() not in ("1", "true", "yes")
 
 
+def _warm_women_category_cache() -> None:
+    """Build the saved women-category result before the first browser request.
+
+    The Qlik export for the current week is a large Excel file. Doing that
+    read on the request that opens the page is what the browser drops.
+    """
+    try:
+        from weekly_report.src.storage.uploads import list_weeks_with_uploads
+
+        config = load_config()
+        weeks = list_weeks_with_uploads(Path(config.data_root))
+        if not weeks:
+            return
+        latest = weeks[0]
+        logger.info(f"Warming women category sales for {latest}")
+        calculate_women_category_sales_for_weeks(latest, 8, Path(config.data_root))
+        logger.info(f"Warmed women category sales for {latest}")
+    except Exception as exc:
+        logger.warning(f"Women category warm skipped: {exc}")
+
+
 @app.on_event("startup")
 def _log_supabase_status():
     """Log whether Supabase is configured and enabled."""
+    import threading
+
+    threading.Thread(target=_warm_women_category_cache, name="warm-women-category", daemon=True).start()
     if not _supabase_enabled():
         logger.info("Supabase: disabled (DISABLE_SUPABASE=true). All Supabase read/write skipped.")
         return

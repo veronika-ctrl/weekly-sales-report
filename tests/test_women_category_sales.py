@@ -323,3 +323,32 @@ def test_summary_frames_do_not_read_shopify(tmp_path: Path, monkeypatch):
     assert "GM2" not in frames["dema_gm2"].columns
     assert "iso_week" in frames["qlik"].columns
     assert list(table1_metrics.raw_data_cache.cache) == []
+
+
+def test_excel_qlik_reads_requested_columns_with_calamine(tmp_path: Path, monkeypatch):
+    qlik_dir = tmp_path / "raw" / "2026-42" / "qlik"
+    qlik_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "Date": ["2026-10-14", "2026-10-14"],
+            "Sales Channel": ["Online", "Retail"],
+            "Gender": ["WOMEN", "WOMEN"],
+            "Product Category": ["TOPS", "TOPS"],
+            "Gross Revenue": [80.0, 500.0],
+            "Notes": ["x" * 200, "y" * 200],
+        }
+    ).to_excel(qlik_dir / "Qlik_W42.xlsx", index=False)
+
+    engines = []
+    real = pd.read_excel
+
+    def spy(*args, **kwargs):
+        engines.append(kwargs.get("engine"))
+        assert kwargs.get("usecols") is not None
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("weekly_report.src.adapters.qlik.pd.read_excel", spy)
+    rows = calculate_women_category_sales_for_weeks("2026-42", 1, tmp_path)
+    assert engines[0] == "calamine"
+    assert rows[0]["week"] == "2026-42"
+    assert rows[0]["categories"] == {"TOPS": 80.0}
