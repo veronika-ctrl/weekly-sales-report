@@ -4882,6 +4882,36 @@ async def get_full_price_vs_sale_excl_exchanges(
         raise HTTPException(status_code=500, detail="Failed to load exchange-excluded full price vs sale")
 
 
+@app.get("/api/discounts/commercial-full-price")
+async def get_commercial_full_price(
+    base_week: str = Query(...),
+    granularity: str = Query("week", description="week or month"),
+    num_weeks: int = Query(8),
+    months: int = Query(13),
+):
+    """Full price share with exchanges removed and team/investor discounts counted as full price."""
+    try:
+        if not validate_iso_week(base_week):
+            raise HTTPException(status_code=400, detail="Invalid ISO week format")
+        if granularity not in ("week", "month"):
+            raise HTTPException(status_code=400, detail="granularity must be week or month")
+        config = load_config(week=base_week)
+        from weekly_report.src.metrics.commercial_full_price import calculate_commercial_full_price
+
+        return calculate_commercial_full_price(
+            base_week,
+            Path(config.data_root),
+            granularity=granularity,
+            num_weeks=num_weeks,
+            months=months,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading commercial full price for {base_week}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load commercial full price")
+
+
 @app.get("/api/discounts/full-price-vs-sale/excel")
 async def get_discounts_full_price_vs_sale_excel(
     base_week: str = Query(...),

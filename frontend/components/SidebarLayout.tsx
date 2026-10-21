@@ -33,6 +33,10 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/products-new': { title: 'Products New', subtitle: 'Top products for new and returning customers' },
       '/products-gender': { title: 'Top selling products', subtitle: 'Top products by gender' },
       '/products-gender-monthly': { title: 'Top selling products monthly', subtitle: 'Completed month vs last year — sales, growth and decline' },
+      '/full-price-commercial/week-charts': { title: 'Full price share · week', subtitle: 'Commercial full price vs discount, exchanges and team/investor out' },
+      '/full-price-commercial/week-table': { title: 'Full price table · week', subtitle: 'Weekly commercial full price vs discount' },
+      '/full-price-commercial/month-charts': { title: 'Full price share · month', subtitle: 'Commercial full price vs discount, exchanges and team/investor out' },
+      '/full-price-commercial/month-table': { title: 'Full price table · month', subtitle: 'Monthly commercial full price vs discount' },
       '/sessions-per-country': { title: 'Sessions per Country', subtitle: '(‘000)' },
       '/conversion-per-country': { title: 'Conversion per Country', subtitle: 'Conversion rates by country' },
       '/new-customers-per-country': { title: 'New Customers per Country', subtitle: 'New customer acquisition by country' },
@@ -119,7 +123,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') || isActive('/online-kpis') || 
                     isActive('/contribution') || isActive('/gender-sales') || isActive('/men-category-sales') || 
                     isActive('/women-category-sales') || isActive('/women-monthly') || isActive('/category-sales') || isActive('/products-new') || 
-                    isActive('/products-gender') || isActive('/products-gender-monthly') || isActive('/sessions-per-country') || isActive('/conversion-per-country') || 
+                    isActive('/products-gender') || isActive('/products-gender-monthly') || pathname?.startsWith('/full-price-commercial') || isActive('/sessions-per-country') || isActive('/conversion-per-country') || 
                     isActive('/new-customers-per-country') || isActive('/returning-customers-per-country') || 
                     isActive('/aov-new-customers-per-country') || isActive('/aov-returning-customers-per-country') || 
                     isActive('/marketing-spend-per-country') || isActive('/ncac-per-country') || 
@@ -155,6 +159,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     isActive('/summary') || isActive('/summary-mtd') || isActive('/top-markets') ||
                     isActive('/gender-sales') || isActive('/men-category-sales') ||
                     isActive('/women-category-sales') || isActive('/women-monthly') || isActive('/products-gender') || isActive('/products-gender-monthly') ||
+                    pathname?.startsWith('/full-price-commercial') ||
                     isActive('/audience-total') || pathname?.startsWith('/audience/')
                       ? 'bg-gray-200 text-gray-900'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -266,6 +271,54 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                     >
                       <IconChartBar className="h-4 w-4" />
                       {!isCollapsed && <span>Top selling products monthly</span>}
+                    </Link>
+                    <Link
+                      href="/full-price-commercial/week-charts"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/full-price-commercial/week-charts')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Full price share · week</span>}
+                    </Link>
+                    <Link
+                      href="/full-price-commercial/week-table"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/full-price-commercial/week-table')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Full price table · week</span>}
+                    </Link>
+                    <Link
+                      href="/full-price-commercial/month-charts"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/full-price-commercial/month-charts')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Full price share · month</span>}
+                    </Link>
+                    <Link
+                      href="/full-price-commercial/month-table"
+                      prefetch={true}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                        isActive('/full-price-commercial/month-table')
+                          ? 'bg-gray-200 text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <IconChartBar className="h-4 w-4" />
+                      {!isCollapsed && <span>Full price table · month</span>}
                     </Link>
 
                     <Link
