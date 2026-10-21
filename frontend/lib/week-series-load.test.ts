@@ -95,6 +95,20 @@ describe('audience total self-load wiring', () => {
     assert.doesNotMatch(page, /isDataReady/)
   })
 
+  it('does not open Summary raw data when a sales report has its own loader', () => {
+    for (const file of [
+      '../app/women-category-sales/page.tsx',
+      '../app/products-gender/page.tsx',
+      '../app/products-new/page.tsx',
+      '../app/top-markets/page.tsx',
+    ]) {
+      const src = readFileSync(join(here, file), 'utf8')
+      assert.doesNotMatch(src, /loadAllData/)
+    }
+    const markets = readFileSync(join(here, '../components/TopMarketsTable.tsx'), 'utf8')
+    assert.match(markets, /getTopMarkets/)
+  })
+
   it('does not label the week bar empty just because Summary table1 has not run', () => {
     const layout = readFileSync(join(here, '../components/LayoutContent.tsx'), 'utf8')
     assert.match(layout, /weeksWithData\.has\(baseWeek\)/)

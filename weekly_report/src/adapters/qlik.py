@@ -1,13 +1,21 @@
 """CSV adapters for loading data from different sources."""
 
+import gc
 import hashlib
+import struct
+import threading
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 import pandas as pd
 from loguru import logger
 
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
+from weekly_report.src.cache.manager import raw_data_cache
+
+# One projected read at a time. A second full export beside a cached week
+# is what restarted the 2GB Render instance.
+_qlik_read_lock = threading.Lock()
 
 # Columns the category and gender slides aggregate. Reading just these avoids
 # loading Dema, Shopify, and the rest of the Qlik export into memory.
@@ -98,8 +106,171 @@ def load_data(raw_data_path: Path) -> pd.DataFrame:
     return load_csv_files(_resolve_qlik_dir(raw_data_path), "qlik")
 
 
+def _read_varint(buf: bytes, index: int) -> Tuple[int, int]:
+    shift = 0
+    result = 0
+    while index < len(buf) and shift <= 63:
+        byte = buf[index]
+        index += 1
+        result |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return result, index
+        shift += 7
+    raise ValueError("truncated parquet footer varint")
+
+
+def _read_zigzag(buf: bytes, index: int) -> Tuple[int, int]:
+    value, index = _read_varint(buf, index)
+    return (value >> 1) ^ -(value & 1), index
+
+
+def _read_list_header(buf: bytes, index: int) -> Tuple[int, int, int]:
+    byte = buf[index]
+    index += 1
+    element_type = byte & 0x0F
+    size = byte >> 4
+    if size == 15:
+        size, index = _read_varint(buf, index)
+    return element_type, size, index
+
+
+def _skip_value(buf: bytes, index: int, field_type: int) -> int:
+    """Skip one Thrift compact value. Used only to walk a parquet footer."""
+    if field_type in (1, 2):
+        return index
+    if field_type in (3, 4, 5, 6):
+        _, index = _read_varint(buf, index)
+        return index
+    if field_type == 7:
+        return index + 8
+    if field_type == 8:
+        length, index = _read_varint(buf, index)
+        return index + length
+    if field_type in (9, 10):
+        element_type, size, index = _read_list_header(buf, index)
+        for _ in range(size):
+            index = _skip_value(buf, index, element_type)
+        return index
+    if field_type == 11:
+        byte = buf[index]
+        index += 1
+        key_type = byte & 0x0F
+        value_type = byte >> 4
+        size, index = _read_varint(buf, index)
+        for _ in range(size):
+            index = _skip_value(buf, index, key_type)
+            index = _skip_value(buf, index, value_type)
+        return index
+    if field_type == 12:
+        return _skip_struct(buf, index)
+    raise ValueError(f"unsupported parquet footer type {field_type}")
+
+
+def _skip_struct(buf: bytes, index: int) -> int:
+    last_id = 0
+    while index < len(buf):
+        byte = buf[index]
+        index += 1
+        field_type = byte & 0x0F
+        delta = byte >> 4
+        if field_type == 0:
+            return index
+        if delta == 0:
+            field_id, index = _read_zigzag(buf, index)
+        else:
+            field_id = last_id + delta
+        last_id = field_id
+        index = _skip_value(buf, index, field_type)
+    raise ValueError("truncated parquet footer struct")
+
+
+def _schema_element(buf: bytes, index: int) -> Tuple[Optional[str], Optional[int], int]:
+    """One parquet SchemaElement: name, num_children, and the next offset."""
+    last_id = 0
+    name: Optional[str] = None
+    num_children: Optional[int] = None
+    while index < len(buf):
+        byte = buf[index]
+        index += 1
+        field_type = byte & 0x0F
+        delta = byte >> 4
+        if field_type == 0:
+            return name, num_children, index
+        if delta == 0:
+            field_id, index = _read_zigzag(buf, index)
+        else:
+            field_id = last_id + delta
+        last_id = field_id
+        if field_id == 4 and field_type == 8:
+            length, index = _read_varint(buf, index)
+            name = buf[index : index + length].decode("utf-8", errors="replace")
+            index += length
+        elif field_id == 5 and field_type in (3, 4, 5, 6):
+            num_children, index = _read_zigzag(buf, index)
+        else:
+            index = _skip_value(buf, index, field_type)
+    raise ValueError("truncated parquet schema element")
+
+
+def _schema_names_from_footer(footer: bytes) -> Optional[List[str]]:
+    """Leaf column names from a parquet FileMetaData footer."""
+    index = 0
+    last_id = 0
+    while index < len(footer):
+        byte = footer[index]
+        index += 1
+        field_type = byte & 0x0F
+        delta = byte >> 4
+        if field_type == 0:
+            return None
+        if delta == 0:
+            field_id, index = _read_zigzag(footer, index)
+        else:
+            field_id = last_id + delta
+        last_id = field_id
+        if field_id == 2 and field_type in (9, 10):
+            element_type, size, index = _read_list_header(footer, index)
+            if element_type != 12:
+                return None
+            leaves: List[str] = []
+            for _ in range(size):
+                name, num_children, index = _schema_element(footer, index)
+                if name and not num_children:
+                    leaves.append(name)
+            return leaves
+        index = _skip_value(footer, index, field_type)
+        if field_id > 2:
+            return None
+    return None
+
+
+def _parquet_footer_column_names(path: Path) -> Optional[List[str]]:
+    """Column names from the parquet footer. Does not import pyarrow or numpy."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            if size < 12:
+                return None
+            handle.seek(-8, 2)
+            footer_len, magic = struct.unpack("<I4s", handle.read(8))
+            if magic != b"PAR1" or footer_len <= 0 or footer_len + 8 > size:
+                return None
+            handle.seek(-(8 + footer_len), 2)
+            footer = handle.read(footer_len)
+        return _schema_names_from_footer(footer)
+    except Exception as exc:
+        logger.debug(f"Parquet footer schema unread for {path.name}: {exc}")
+        return None
+
+
 def _parquet_column_names(path: Path) -> Optional[List[str]]:
-    """Column names from parquet metadata, without reading the row groups."""
+    """Column names without reading row groups.
+
+    pyarrow's schema API needs a working pyarrow build. When that import fails
+    (numpy 2 mismatch, or pyarrow not installed) the footer is parsed directly
+    so projection can still be requested from whichever engine can read data.
+    """
     try:
         import pyarrow.parquet as pq
 
@@ -111,63 +282,91 @@ def _parquet_column_names(path: Path) -> Optional[List[str]]:
 
         return [str(name) for name in ParquetFile(str(path)).columns]
     except Exception:
-        return None
+        pass
+    return _parquet_footer_column_names(path)
+
+
+def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
+    """Own a copy of the requested columns. Caller must drop the wide frame."""
+    frame.columns = [str(col).strip() for col in frame.columns]
+    keep = [col for col in wanted if col in frame.columns]
+    if not keep:
+        return frame
+    return frame.loc[:, keep].copy()
 
 
 def _read_parquet_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
-    """Read a parquet file, projecting to the requested columns when possible."""
+    """Read a parquet file, projecting to the requested columns when possible.
+
+    If the engine cannot project, the full file is read and unused columns are
+    dropped before any other work. The wide frame is not returned.
+    """
     wanted = [str(col).strip() for col in columns]
     names = _parquet_column_names(path)
-    if names is None:
-        try:
-            frame = pd.read_parquet(path, columns=wanted)
-        except Exception as exc:
-            logger.warning(f"Column projection failed for {path.name} ({exc}); reading full file")
-            frame = pd.read_parquet(path)
-    else:
+    selected: Optional[List[str]] = None
+    if names is not None:
         by_name = {str(name).strip(): name for name in names}
         selected = [by_name[col] for col in wanted if col in by_name]
         if not selected:
             raise ValueError(f"None of {wanted} found in {path.name}")
-        frame = pd.read_parquet(path, columns=selected)
-    frame.columns = [str(col).strip() for col in frame.columns]
-    keep = [col for col in wanted if col in frame.columns]
-    if keep:
-        return frame.loc[:, keep]
-    return frame
+    try:
+        projected = pd.read_parquet(path, columns=selected or wanted)
+    except Exception as exc:
+        logger.warning(
+            f"Column projection failed for {path.name} ({exc}); reading full file and dropping unused columns"
+        )
+        wide = pd.read_parquet(path)
+        slim = _take_columns(wide, wanted)
+        del wide
+        gc.collect()
+        return slim
+    projected.columns = [str(col).strip() for col in projected.columns]
+    keep = [col for col in wanted if col in projected.columns]
+    if keep and list(projected.columns) != keep:
+        slim = _take_columns(projected, wanted)
+        del projected
+        gc.collect()
+        return slim
+    return projected
 
 
 def _attach_iso_week(frame: pd.DataFrame) -> pd.DataFrame:
-    """Same ISO-week column load_all_raw_data adds before metrics run."""
+    """Same ISO-week column load_all_raw_data adds before metrics run.
+
+    Adds the column on the frame that was already narrowed. Does not copy the
+    wide export.
+    """
     if frame.empty or "iso_week" in frame.columns or "Date" not in frame.columns:
         return frame
-    out = frame.copy()
-    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
-    iso_cal = out["Date"].dt.isocalendar()
-    out["iso_week"] = iso_cal["year"].astype(str) + "-" + iso_cal["week"].astype(str).str.zfill(2)
-    return out
+    dates = pd.to_datetime(frame["Date"], errors="coerce")
+    iso_cal = dates.dt.isocalendar()
+    frame["Date"] = dates
+    frame["iso_week"] = iso_cal["year"].astype(str) + "-" + iso_cal["week"].astype(str).str.zfill(2)
+    return frame
 
 
 def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFrame:
     """Load selected Qlik columns for one week folder.
 
-    Parquet reads only those columns. CSV and Excel fall back to a full read
-    and then drop the rest. Does not load Dema or Shopify and does not touch
-    the shared raw-data cache.
+    Parquet reads only those columns. CSV and Excel fall back to a full read,
+    then immediately drop the rest. Does not load Dema or Shopify. Drops any
+    cached full raw week first so this read does not sit beside it.
     """
-    source = _resolve_qlik_dir(raw_data_path)
-    parquet_files = list(source.glob("**/*.parquet"))
-    if parquet_files:
-        path = parquet_files[0]
-        logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(columns)}")
-        frame = _read_parquet_columns(path, columns)
-    else:
-        frame = load_csv_files(source, "qlik")
-        frame.columns = [str(col).strip() for col in frame.columns]
-        keep = [col for col in columns if col in frame.columns]
-        if keep:
-            frame = frame.loc[:, keep].copy()
-    return _attach_iso_week(frame)
+    with _qlik_read_lock:
+        raw_data_cache.clear()
+        gc.collect()
+        source = _resolve_qlik_dir(raw_data_path)
+        parquet_files = list(source.glob("**/*.parquet"))
+        if parquet_files:
+            path = parquet_files[0]
+            logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(columns)}")
+            frame = _read_parquet_columns(path, columns)
+        else:
+            wide = load_csv_files(source, "qlik")
+            frame = _take_columns(wide, columns)
+            del wide
+            gc.collect()
+        return _attach_iso_week(frame)
 
 
 def load_category_qlik(raw_data_path: Path) -> pd.DataFrame:

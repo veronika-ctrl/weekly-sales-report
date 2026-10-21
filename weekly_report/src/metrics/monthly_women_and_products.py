@@ -14,8 +14,19 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from loguru import logger
 
-from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.adapters.qlik import load_qlik_columns
 from weekly_report.src.periods.calculator import get_week_date_range
+
+_MONTHLY_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Gender",
+    "Product Category",
+    "Product",
+    "Color",
+    "Gross Revenue",
+    "Sales Qty",
+)
 
 NOTE = (
     "Last completed calendar month vs the same month last year. "
@@ -260,16 +271,14 @@ def _trend_points(
 def _load_qlik(base_week: str, data_root: Path) -> pd.DataFrame:
     raw_path = Path(data_root) / "raw" / base_week
     try:
-        raw = load_all_raw_data(raw_path)
+        frame = load_qlik_columns(raw_path, _MONTHLY_QLIK_COLUMNS)
     except Exception as exc:
         logger.warning("monthly women/products: could not load Qlik for %s: %s", base_week, exc)
         return pd.DataFrame()
-    qlik = raw.get("qlik", pd.DataFrame())
-    if qlik is None or qlik.empty:
+    if frame is None or frame.empty:
         return pd.DataFrame()
-    out = qlik.copy()
-    out.columns = out.columns.str.strip()
-    return out
+    frame.columns = frame.columns.astype(str).str.strip()
+    return frame
 
 
 def _window_meta(base_week: str, months: int) -> Dict[str, Any]:

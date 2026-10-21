@@ -781,7 +781,7 @@ async def get_actuals_markets_detailed(week: str = Query(...)):
 
 
 @app.get("/api/metrics/table1", response_model=MetricsResponse)
-async def get_table1_metrics(
+def get_table1_metrics(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     periods: str = Query("actual,last_week,last_year", description="Comma-separated list of periods"),
     include_ytd: bool = Query(True, description="Include YTD columns")
@@ -1775,7 +1775,7 @@ async def get_budget_mtd_debug(base_week: str = Query(..., description="Base ISO
 
 
 @app.get("/api/metrics/table1-mtd", response_model=MetricsMtdResponse)
-async def get_table1_mtd_metrics(
+def get_table1_mtd_metrics(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
 ):
     """Get Table 1 metrics for month-to-date report. Budget: daily-uniform from monthly plan (or Date+Metric+Value daily rows), summed for ISO week / MTD / fiscal YTD windows matching actuals."""
@@ -2721,7 +2721,7 @@ def _empty_markets_response(base_week: str) -> MarketsResponse:
 
 
 @app.get("/api/markets/top", response_model=MarketsResponse)
-async def get_top_markets(
+def get_top_markets(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze"),
     recalculate: bool = Query(False, description="If true, skip Supabase cache and recalculate (for fresh Y/Y data)")
@@ -2785,7 +2785,7 @@ def _online_net_budget_total(b: Optional[Dict[str, Any]]) -> Optional[float]:
 
 
 @app.get("/api/markets/top-net-mtd", response_model=TopMarketsNetMtdResponse)
-async def get_top_markets_net_mtd(
+def get_top_markets_net_mtd(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, ge=1, le=52, description="Weeks for ranking (same as top markets gross)"),
 ):
@@ -2865,7 +2865,7 @@ async def get_top_markets_net_mtd(
 
 
 @app.get("/api/online-kpis", response_model=OnlineKPIsResponse)
-async def get_online_kpis(
+def get_online_kpis(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
@@ -3183,7 +3183,7 @@ async def get_contribution(
 
 
 @app.get("/api/gender-sales", response_model=GenderSalesResponse)
-async def get_gender_sales(
+def get_gender_sales(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
@@ -3220,7 +3220,7 @@ async def get_gender_sales(
 
 
 @app.get("/api/men-category-sales", response_model=MenCategorySalesResponse)
-async def get_men_category_sales(
+def get_men_category_sales(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
@@ -3298,7 +3298,7 @@ def get_women_category_sales(
 
 
 @app.get("/api/category-sales", response_model=CategorySalesResponse)
-async def get_category_sales(
+def get_category_sales(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
@@ -3342,7 +3342,7 @@ async def get_category_sales(
 
 
 @app.get("/api/top-products", response_model=TopProductsResponse)
-async def get_top_products(
+def get_top_products(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(1, description="Number of weeks to analyze"),
     top_n: int = Query(30, description="Number of top products to return"),
@@ -3387,7 +3387,7 @@ async def get_top_products(
 
 
 @app.get("/api/top-products-gender", response_model=TopProductsResponse)
-async def get_top_products_by_gender(
+def get_top_products_by_gender(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(1, description="Number of weeks to analyze"),
     top_n: int = Query(30, description="Number of top products to return"),
@@ -3432,7 +3432,7 @@ async def get_top_products_by_gender(
 
 
 @app.get("/api/women-monthly", response_model=WomenMonthlyResponse)
-async def get_women_monthly(
+def get_women_monthly(
     base_week: str = Query(..., description="Base ISO week like '2026-42'"),
     months: int = Query(13, description="Number of completed months in the trend"),
     top_n: int = Query(15, description="Top women's products in the completed month"),
@@ -3459,7 +3459,7 @@ async def get_women_monthly(
 
 
 @app.get("/api/top-products-monthly", response_model=TopProductsMonthlyResponse)
-async def get_top_products_monthly(
+def get_top_products_monthly(
     base_week: str = Query(..., description="Base ISO week like '2026-42'"),
     gender_filter: str = Query("men", description="Gender filter: 'men' or 'women'"),
     months: int = Query(13, description="Number of completed months in the trend"),

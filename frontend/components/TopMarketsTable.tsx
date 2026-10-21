@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useMarkets } from '@/contexts/DataCacheContext'
+import { getTopMarkets } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2 } from 'lucide-react'
 
@@ -11,6 +13,33 @@ interface TopMarketsTableProps {
 
 export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMarketsTableProps) {
   const { markets: marketsData } = useMarkets()
+  const [fetched, setFetched] = useState<unknown>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!baseWeek || marketsData) {
+      setFetched(null)
+      setFetchError(null)
+      return
+    }
+    let cancelled = false
+    setFetchError(null)
+    getTopMarkets(baseWeek, 8)
+      .then((data) => {
+        if (!cancelled) setFetched(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setFetched(null)
+          setFetchError(err instanceof Error ? err.message : 'Failed to load markets')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [baseWeek, marketsData])
+
+  const resolvedMarkets = marketsData || fetched
 
   const formatValue = (value: number): string => {
     if (value === 0) return '0'
@@ -103,18 +132,16 @@ export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMark
   let markets: any[] = []
   let period_info: any = null
   
-  if (marketsData) {
-    if (Array.isArray(marketsData)) {
-      // Structure: direct array
-      markets = marketsData
-    } else if (marketsData.markets && Array.isArray(marketsData.markets)) {
-      // Structure: { markets: [...], period_info: {...} }
-      markets = marketsData.markets
-      period_info = marketsData.period_info
-    } else if (marketsData.markets && typeof marketsData.markets === 'object') {
-      // Structure: { markets: {...} } - might be an object instead of array
-      markets = Object.values(marketsData.markets) as any[]
-      period_info = marketsData.period_info
+  const source = resolvedMarkets as { markets?: unknown; period_info?: unknown } | unknown[] | null
+  if (source) {
+    if (Array.isArray(source)) {
+      markets = source
+    } else if (Array.isArray(source.markets)) {
+      markets = source.markets
+      period_info = source.period_info
+    } else if (source.markets && typeof source.markets === 'object') {
+      markets = Object.values(source.markets as Record<string, unknown>) as any[]
+      period_info = source.period_info
     }
   }
 
@@ -122,8 +149,8 @@ export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMark
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="text-gray-600">Loading markets data...</span>
+          {fetchError ? null : <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+          <span className="text-gray-600">{fetchError || 'Loading markets data...'}</span>
         </div>
         <div className="space-y-2">
           <Skeleton className="h-12 w-full" />

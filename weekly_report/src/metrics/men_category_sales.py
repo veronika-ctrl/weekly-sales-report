@@ -1,10 +1,14 @@
 """Men category sales metrics calculation."""
+import gc
 from typing import Dict, Any, List
 import pandas as pd
 from loguru import logger
 from pathlib import Path
 
 from weekly_report.src.adapters.qlik import load_category_qlik
+from weekly_report.src.metrics.result_cache import ResultCache
+
+_cache = ResultCache("men-category-sales")
 
 
 def calculate_men_category_sales_for_week(qlik_df: pd.DataFrame, week_str: str) -> Dict[str, Any]:
@@ -38,14 +42,35 @@ def calculate_men_category_sales_for_week(qlik_df: pd.DataFrame, week_str: str) 
 
 def calculate_men_category_sales_for_weeks(base_week: str, num_weeks: int, data_root: Path) -> List[Dict[str, Any]]:
     """Calculate men category sales for multiple weeks."""
-    
+    raw_data_path = Path(data_root) / "raw" / base_week
+    return _cache.get_or_compute(
+        Path(data_root),
+        raw_data_path,
+        base_week,
+        num_weeks,
+        lambda: _calculate_men_category_sales_uncached(base_week, num_weeks, Path(data_root)),
+    )
+
+
+def _calculate_men_category_sales_uncached(base_week: str, num_weeks: int, data_root: Path) -> List[Dict[str, Any]]:
     results = []
-    
-    # Load all raw data once from base week directory
-    # data_root is ./data, so we need data_root/raw/{base_week}
     raw_data_path = data_root / "raw" / base_week
     logger.info(f"Loading Qlik columns for men category sales from {raw_data_path}")
     qlik_df = load_category_qlik(raw_data_path)
+    try:
+        return _men_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path, results)
+    finally:
+        del qlik_df
+        gc.collect()
+
+
+def _men_rows_from_frame(
+    qlik_df: pd.DataFrame,
+    base_week: str,
+    num_weeks: int,
+    raw_data_path: Path,
+    results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     
     if qlik_df.empty:
         logger.warning(f"No Qlik data found in {raw_data_path}")

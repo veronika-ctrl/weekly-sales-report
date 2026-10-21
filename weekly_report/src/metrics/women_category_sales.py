@@ -1,4 +1,5 @@
 """Women category sales metrics calculation."""
+import gc
 from typing import Dict, Any, List
 import pandas as pd
 from loguru import logger
@@ -59,16 +60,24 @@ def _calculate_women_category_sales_uncached(base_week: str, num_weeks: int, dat
     raw_data_path = data_root / "raw" / base_week
     logger.info(f"Loading Qlik columns for women category sales from {raw_data_path}")
     qlik_df = load_category_qlik(raw_data_path)
-    
+    try:
+        return _women_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path)
+    finally:
+        del qlik_df
+        gc.collect()
+
+
+def _women_rows_from_frame(qlik_df: pd.DataFrame, base_week: str, num_weeks: int, raw_data_path: Path) -> List[Dict[str, Any]]:
+    results = []
     if qlik_df.empty:
         logger.warning(f"No Qlik data found in {raw_data_path}")
         return []
-    
+
     # Add iso_week column if not present
     if 'iso_week' not in qlik_df.columns and 'Date' in qlik_df.columns:
         iso_cal = pd.to_datetime(qlik_df['Date']).dt.isocalendar()
         qlik_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-    
+
     # Parse base week
     year, week_num = base_week.split('-')
     year = int(year)

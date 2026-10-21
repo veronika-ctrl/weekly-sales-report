@@ -7,6 +7,7 @@ can retry onto the finished result.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from pathlib import Path
@@ -34,11 +35,14 @@ class ResultCache:
         base_week: str,
         num_weeks: int,
         compute: Callable[[], List[Any]],
+        extra: str = "",
     ) -> List[Any]:
         try:
             signature = qlik_source_signature(raw_week_dir)
         except FileNotFoundError:
             return compute()
+        if extra:
+            signature = f"{signature}:{extra}"
 
         mem_key = f"{Path(data_root).resolve()}|{base_week}|{int(num_weeks)}|{signature}"
         with self._lock:
@@ -47,7 +51,7 @@ class ResultCache:
                 logger.info(f"{self.name} memory cache hit {base_week} n={num_weeks}")
                 return cached
 
-            disk = self._read_disk(data_root, base_week, num_weeks, signature)
+            disk = self._read_disk(data_root, base_week, num_weeks, signature, extra)
             if disk is not None:
                 self._remember(mem_key, disk)
                 logger.info(f"{self.name} disk cache hit {base_week} n={num_weeks}")
@@ -55,7 +59,7 @@ class ResultCache:
 
             result = compute()
             self._remember(mem_key, result)
-            self._write_disk(data_root, base_week, num_weeks, signature, result)
+            self._write_disk(data_root, base_week, num_weeks, signature, result, extra)
             return result
 
     def _remember(self, key: str, rows: List[Any]) -> None:
@@ -63,12 +67,15 @@ class ResultCache:
         while len(self._mem) > 8:
             self._mem.pop(next(iter(self._mem)))
 
-    def _path(self, data_root: Path, base_week: str, num_weeks: int) -> Path:
+    def _path(self, data_root: Path, base_week: str, num_weeks: int, extra: str = "") -> Path:
         safe_week = base_week.replace("/", "-")
-        return Path(data_root) / "cache" / self.name / f"{safe_week}__n{int(num_weeks)}.json"
+        suffix = ""
+        if extra:
+            suffix = "__" + hashlib.sha256(extra.encode()).hexdigest()[:10]
+        return Path(data_root) / "cache" / self.name / f"{safe_week}__n{int(num_weeks)}{suffix}.json"
 
-    def _read_disk(self, data_root: Path, base_week: str, num_weeks: int, signature: str) -> List[Any] | None:
-        path = self._path(data_root, base_week, num_weeks)
+    def _read_disk(self, data_root: Path, base_week: str, num_weeks: int, signature: str, extra: str = "") -> List[Any] | None:
+        path = self._path(data_root, base_week, num_weeks, extra)
         if not path.exists():
             return None
         try:
@@ -90,8 +97,9 @@ class ResultCache:
         num_weeks: int,
         signature: str,
         rows: List[Any],
+        extra: str = "",
     ) -> None:
-        path = self._path(data_root, base_week, num_weeks)
+        path = self._path(data_root, base_week, num_weeks, extra)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".json.tmp")
