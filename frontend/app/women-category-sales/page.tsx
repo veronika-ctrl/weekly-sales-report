@@ -30,7 +30,7 @@ export default function WomenCategorySales() {
         empty={categoryData.length === 0}
         onRetry={retry}
         loadingTitle="Loading Women Category Sales"
-        loadingHint="Reading Qlik sales by product category. Large exports can take a few minutes."
+        loadingHint="Reading women category sales from the Qlik export. The first open after a restart can take a moment; a dropped connection retries against the saved result."
         emptyHint="Upload the Qlik export in Settings for this week, then open Women's Category Sales again."
         skeleton={
           <div className="grid grid-cols-3 gap-6">

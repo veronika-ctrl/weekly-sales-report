@@ -1,10 +1,24 @@
 """Top products by gender metrics calculation."""
+import gc
 from typing import Dict, Any, List
 import pandas as pd
 from loguru import logger
 from pathlib import Path
 
-from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.adapters.qlik import load_qlik_columns
+from weekly_report.src.metrics.result_cache import ResultCache
+
+_cache = ResultCache("top-products-gender")
+_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Gender",
+    "Product Category",
+    "Product",
+    "Color",
+    "Gross Revenue",
+    "Sales Qty",
+)
 
 
 def calculate_top_products_by_gender_for_week(qlik_df: pd.DataFrame, week_str: str, gender_filter: str, top_n: int = 30) -> Dict[str, Any]:
@@ -85,15 +99,48 @@ def calculate_top_products_by_gender_for_week(qlik_df: pd.DataFrame, week_str: s
 
 def calculate_top_products_by_gender_for_weeks(base_week: str, num_weeks: int, data_root: Path, gender_filter: str, top_n: int = 30) -> List[Dict[str, Any]]:
     """Calculate top products by gender for multiple weeks."""
-    
-    results = []
-    
-    # Load all raw data once from base week directory
-    # data_root is ./data, so we need data_root/raw/{base_week}
+    raw_data_path = Path(data_root) / "raw" / base_week
+    return _cache.get_or_compute(
+        Path(data_root),
+        raw_data_path,
+        base_week,
+        num_weeks,
+        lambda: _calculate_top_products_by_gender_uncached(
+            base_week, num_weeks, Path(data_root), gender_filter, top_n
+        ),
+        extra=f"{gender_filter}|{int(top_n)}",
+    )
+
+
+def _calculate_top_products_by_gender_uncached(
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+    gender_filter: str,
+    top_n: int,
+) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
     raw_data_path = data_root / "raw" / base_week
-    logger.info(f"Loading raw data from {raw_data_path}")
-    raw_data = load_all_raw_data(raw_data_path)
-    qlik_df = raw_data.get('qlik', pd.DataFrame())
+    logger.info(f"Loading Qlik columns for top products by gender from {raw_data_path}")
+    qlik_df = load_qlik_columns(raw_data_path, _QLIK_COLUMNS)
+    try:
+        return _gender_product_rows(
+            qlik_df, base_week, num_weeks, raw_data_path, gender_filter, top_n, results
+        )
+    finally:
+        del qlik_df
+        gc.collect()
+
+
+def _gender_product_rows(
+    qlik_df: pd.DataFrame,
+    base_week: str,
+    num_weeks: int,
+    raw_data_path: Path,
+    gender_filter: str,
+    top_n: int,
+    results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     
     if qlik_df.empty:
         logger.warning(f"No Qlik data found in {raw_data_path}")

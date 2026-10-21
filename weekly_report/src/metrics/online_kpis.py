@@ -6,9 +6,22 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
+from weekly_report.src.adapters import dema, shopify
+from weekly_report.src.adapters.qlik import load_qlik_columns
 from weekly_report.src.metrics.discounts_sales import _normalize_customer_segment
-from weekly_report.src.metrics.table1 import load_all_raw_data
 from weekly_report.src.periods.calculator import get_week_date_range
+
+_ONLINE_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Gross Revenue",
+    "Net Revenue",
+    "Returns",
+    "New/Returning Customer",
+    "Customer E-mail",
+    "Customer Email",
+    "Order No",
+)
 
 
 def get_iso_week_from_date(date_str: str) -> str:
@@ -213,15 +226,24 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
     
     if latest_data_path.exists():
         try:
-            # Load all raw data using cached loader (loads once, caches in memory)
-            logger.info(f"Loading raw data from {latest_data_path}")
-            all_raw_data = load_all_raw_data(latest_data_path)
-            
-            qlik_df = all_raw_data.get('qlik', pd.DataFrame())
-            dema_df = all_raw_data.get('dema_spend', pd.DataFrame())
-            # Already loaded with the Qlik export. A second Shopify read sits on
-            # top of that frame and is enough to cross Render's memory limit.
-            shopify_df = all_raw_data.get('shopify', pd.DataFrame())
+            # Project Qlik, then read Shopify. load_all_raw_data kept the full
+            # Qlik export, Dema GM2, and Shopify at once and restarted Render.
+            logger.info(f"Loading Online KPI columns from {latest_data_path}")
+            try:
+                qlik_df = load_qlik_columns(latest_data_path, _ONLINE_QLIK_COLUMNS)
+            except FileNotFoundError as exc:
+                logger.warning(f"Qlik data not found for online KPIs: {exc}")
+                qlik_df = pd.DataFrame()
+            try:
+                dema_df = dema.load_data(latest_data_path)
+            except FileNotFoundError as exc:
+                logger.warning(f"Dema spend not found for online KPIs: {exc}")
+                dema_df = pd.DataFrame()
+            try:
+                shopify_df = shopify.load_data(latest_data_path)
+            except FileNotFoundError as exc:
+                logger.warning(f"Shopify data not found for online KPIs: {exc}")
+                shopify_df = pd.DataFrame()
             # Sum session counts per calendar day, then bucket by ISO week (avoids mis-using total columns)
             shopify_df = _rollup_shopify_sessions_by_calendar_day(shopify_df)
             logger.info(f"Loaded Shopify (daily→weekly pipeline): {shopify_df.shape}, columns: {shopify_df.columns.tolist() if not shopify_df.empty else 'empty'}")
@@ -233,9 +255,10 @@ def calculate_online_kpis_for_weeks(base_week: str, num_weeks: int, data_root: P
                 qlik_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
                 logger.info(f"Pre-computed ISO weeks for Qlik data: {qlik_df.shape}")
             
-            if not dema_df.empty and 'Days' in dema_df.columns:
-                dema_df['Days'] = pd.to_datetime(dema_df['Days'], errors='coerce')
-                iso_cal = dema_df['Days'].dt.isocalendar()
+            dema_date = "Days" if "Days" in dema_df.columns else "Day" if "Day" in dema_df.columns else None
+            if not dema_df.empty and dema_date and "iso_week" not in dema_df.columns:
+                dema_df[dema_date] = pd.to_datetime(dema_df[dema_date], errors='coerce')
+                iso_cal = dema_df[dema_date].dt.isocalendar()
                 dema_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
                 logger.info(f"Pre-computed ISO weeks for DEMA data: {dema_df.shape}")
             

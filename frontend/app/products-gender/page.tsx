@@ -1,56 +1,25 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import ProductsGenderTable from '@/components/ProductsGenderTable'
-import { Loader2, Maximize2, X } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Maximize2, X } from 'lucide-react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import Link from 'next/link'
 
 type GenderTab = 'men' | 'women'
 
 export default function ProductsGender() {
-  const { baseWeek, periods, loading, error, loadAllData, isDataReady } = useDataCache()
+  const { baseWeek } = useDataCache()
   const [activeTab, setActiveTab] = useState<GenderTab>('men')
   const [slideView, setSlideView] = useState(false)
-
-  useEffect(() => {
-    if (!baseWeek) return
-    if ((!periods || !isDataReady) && !loading && !error) {
-      loadAllData(baseWeek, false)
-    }
-  }, [periods, isDataReady, loading, baseWeek, loadAllData, error])
-
-  const handleRetry = async () => {
-    if (baseWeek) await loadAllData(baseWeek, true)
-  }
-
-  const noDataForWeek = baseWeek && !loading && !error && (!periods || !isDataReady)
 
   const tableBlock = (gender: GenderTab) =>
     baseWeek ? <ProductsGenderTable baseWeek={baseWeek} genderFilter={gender} compact /> : null
 
   return (
     <div className="space-y-2">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-800 mb-2">{error}</p>
-          <Button onClick={handleRetry} variant="outline" size="sm" className="text-red-800 border-red-300 hover:bg-red-100">
-            Retry
-          </Button>
-        </div>
-      )}
-      {noDataForWeek && (
-        <div className="rounded-lg border bg-muted/40 p-6 text-center">
-          <p className="text-sm text-muted-foreground mb-4">No data for this week yet. Choose another week above or sync data in Settings.</p>
-          <Link href="/settings" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            Go to Settings
-          </Link>
-        </div>
-      )}
-      {periods && isDataReady ? (
+      {baseWeek ? (
         <>
           <Tabs
             value={activeTab}
@@ -121,15 +90,7 @@ export default function ProductsGender() {
             </div>
           )}
         </>
-      ) : !noDataForWeek && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <p className="text-sm text-gray-600">{loading ? 'Loading data…' : 'Initializing…'}</p>
-          </div>
-          <Skeleton className="h-64 w-full" />
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -60,25 +60,14 @@ def _qlik_week_dir(tmp_path: Path) -> Path:
         rows,
         columns=["Date", "Sales Channel", "Gender", "Product Category", "Product", "Color", "Gross Revenue", "Sales Qty"],
     )
-    # table1 load_all_raw_data looks for adapter files; patch by writing a simple qlik csv
-    # and monkeypatching load if needed. Use calculate_* after injecting via load_all_raw_data stub.
     qlik_dir = week / "qlik"
     qlik_dir.mkdir()
     df.to_csv(qlik_dir / "qlik.csv", index=False)
     return tmp_path
 
 
-def test_women_monthly_online_only_with_yoy(tmp_path, monkeypatch):
+def test_women_monthly_online_only_with_yoy(tmp_path):
     data_root = _qlik_week_dir(tmp_path)
-
-    def fake_load(path):
-        qlik = pd.read_csv(Path(path) / "qlik" / "qlik.csv")
-        return {"qlik": qlik, "dema_spend": pd.DataFrame(), "dema_gm2": pd.DataFrame()}
-
-    monkeypatch.setattr(
-        "weekly_report.src.metrics.monthly_women_and_products.load_all_raw_data",
-        fake_load,
-    )
     payload = calculate_women_monthly("2026-42", data_root, months=3, top_n=10)
     assert payload["focus_month"] == "2026-09"
     assert payload["headline"]["gross_revenue"] == 7000.0
@@ -97,17 +86,8 @@ def test_women_monthly_online_only_with_yoy(tmp_path, monkeypatch):
     assert sep["gross_revenue"] == 7000.0
 
 
-def test_top_products_monthly_men_yoy(tmp_path, monkeypatch):
+def test_top_products_monthly_men_yoy(tmp_path):
     data_root = _qlik_week_dir(tmp_path)
-
-    def fake_load(path):
-        qlik = pd.read_csv(Path(path) / "qlik" / "qlik.csv")
-        return {"qlik": qlik, "dema_spend": pd.DataFrame(), "dema_gm2": pd.DataFrame()}
-
-    monkeypatch.setattr(
-        "weekly_report.src.metrics.monthly_women_and_products.load_all_raw_data",
-        fake_load,
-    )
     payload = calculate_top_products_monthly("2026-42", data_root, gender_filter="men", months=3, top_n=10)
     assert payload["focus_month"] == "2026-09"
     classic = payload["products"][0]

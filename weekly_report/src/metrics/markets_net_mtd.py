@@ -18,8 +18,12 @@ from loguru import logger
 from pathlib import Path
 
 from weekly_report.src.compute.budget import _is_row_dimension_budget_label
+import gc
+
+import pandas as pd
+
+from weekly_report.src.adapters.qlik import load_qlik_columns
 from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks
-from weekly_report.src.metrics.table1 import filter_data_for_date_range, filter_data_for_period, load_all_raw_data
 from weekly_report.src.periods.calculator import (
     get_mtd_periods_for_week,
     get_periods_for_week,
@@ -47,6 +51,23 @@ def _online_net_by_country(qlik_df: pd.DataFrame) -> Dict[str, float]:
         return {}
     g = online.groupby(co, dropna=False)[net].sum()
     return {str(k): float(v) for k, v in g.items() if k is not None and str(k).strip() != ""}
+
+
+def _slice_iso_week(qlik_df: pd.DataFrame, week: str) -> pd.DataFrame:
+    """Same ISO-week slice as filter_data_for_period, Qlik only."""
+    if qlik_df is None or qlik_df.empty or "iso_week" not in qlik_df.columns:
+        return pd.DataFrame()
+    return qlik_df.loc[qlik_df["iso_week"].astype(str) == week]
+
+
+def _slice_dates(qlik_df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
+    """Same inclusive date slice as filter_data_for_date_range, Qlik only."""
+    if qlik_df is None or qlik_df.empty or "Date" not in qlik_df.columns:
+        return pd.DataFrame()
+    start_dt = pd.to_datetime(start)
+    end_dt = pd.to_datetime(end)
+    dates = pd.to_datetime(qlik_df["Date"], errors="coerce")
+    return qlik_df.loc[(dates >= start_dt) & (dates <= end_dt)]
 
 
 def _yoy_pct(actual: float, last_year: float) -> Optional[float]:
@@ -582,25 +603,29 @@ def calculate_top_markets_net_revenue_mtd(
             "date_ranges": {},
         }
 
-    all_raw = load_all_raw_data(data_root / "raw" / base_week)
+    qlik_df = load_qlik_columns(
+        data_root / "raw" / base_week,
+        ("Date", "Sales Channel", "Country", "Net Revenue"),
+    )
+    try:
+        net_w = _online_net_by_country(_slice_iso_week(qlik_df, base_week))
+        ly_week = get_periods_for_week(base_week)["last_year"]
+        net_wly = _online_net_by_country(_slice_iso_week(qlik_df, ly_week))
 
-    fw = filter_data_for_period(all_raw, base_week)
-    net_w = _online_net_by_country(fw["qlik"])
-    ly_week = get_periods_for_week(base_week)["last_year"]
-    fwly = filter_data_for_period(all_raw, ly_week)
-    net_wly = _online_net_by_country(fwly["qlik"])
+        mtd_p = get_mtd_periods_for_week(base_week)
+        net_m = _online_net_by_country(_slice_dates(qlik_df, mtd_p["mtd_actual"]["start"], mtd_p["mtd_actual"]["end"]))
+        net_mly = _online_net_by_country(
+            _slice_dates(qlik_df, mtd_p["mtd_last_year"]["start"], mtd_p["mtd_last_year"]["end"])
+        )
 
-    mtd_p = get_mtd_periods_for_week(base_week)
-    m_a = filter_data_for_date_range(all_raw, mtd_p["mtd_actual"]["start"], mtd_p["mtd_actual"]["end"])
-    m_ly = filter_data_for_date_range(all_raw, mtd_p["mtd_last_year"]["start"], mtd_p["mtd_last_year"]["end"])
-    net_m = _online_net_by_country(m_a["qlik"])
-    net_mly = _online_net_by_country(m_ly["qlik"])
-
-    ytd_p = get_ytd_periods_for_week(base_week)
-    y_a = filter_data_for_date_range(all_raw, ytd_p["ytd_actual"]["start"], ytd_p["ytd_actual"]["end"])
-    y_ly = filter_data_for_date_range(all_raw, ytd_p["ytd_last_year"]["start"], ytd_p["ytd_last_year"]["end"])
-    net_y = _online_net_by_country(y_a["qlik"])
-    net_yly = _online_net_by_country(y_ly["qlik"])
+        ytd_p = get_ytd_periods_for_week(base_week)
+        net_y = _online_net_by_country(_slice_dates(qlik_df, ytd_p["ytd_actual"]["start"], ytd_p["ytd_actual"]["end"]))
+        net_yly = _online_net_by_country(
+            _slice_dates(qlik_df, ytd_p["ytd_last_year"]["start"], ytd_p["ytd_last_year"]["end"])
+        )
+    finally:
+        del qlik_df
+        gc.collect()
 
     bw_summary = budget_online_net.get("week")
     bw = bw_summary

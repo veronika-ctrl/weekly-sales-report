@@ -43,6 +43,16 @@ describe('gender sales self-load wiring', () => {
     assert.doesNotMatch(body, /\bawait fetch\(/)
   })
 
+  it('retries a dropped women category sales connection once', () => {
+    const api = readFileSync(join(here, 'api.ts'), 'utf8')
+    const start = api.indexOf('export async function getWomenCategorySales')
+    assert.ok(start >= 0)
+    const body = api.slice(start, start + 900)
+    assert.match(body, /\/api\/women-category-sales/)
+    assert.match(body, /failed to fetch/)
+    assert.match(body, /setTimeout/)
+  })
+
   it('stops the loading spinner for contribution and category pages too', () => {
     for (const [file, fn] of [
       ['../app/contribution/page.tsx', 'getContribution'],
@@ -83,6 +93,20 @@ describe('audience total self-load wiring', () => {
     assert.match(page, /ReportLoadState/)
     assert.doesNotMatch(page, /loadAllData/)
     assert.doesNotMatch(page, /isDataReady/)
+  })
+
+  it('does not open Summary raw data when a sales report has its own loader', () => {
+    for (const file of [
+      '../app/women-category-sales/page.tsx',
+      '../app/products-gender/page.tsx',
+      '../app/products-new/page.tsx',
+      '../app/top-markets/page.tsx',
+    ]) {
+      const src = readFileSync(join(here, file), 'utf8')
+      assert.doesNotMatch(src, /loadAllData/)
+    }
+    const markets = readFileSync(join(here, '../components/TopMarketsTable.tsx'), 'utf8')
+    assert.match(markets, /getTopMarkets/)
   })
 
   it('does not label the week bar empty just because Summary table1 has not run', () => {

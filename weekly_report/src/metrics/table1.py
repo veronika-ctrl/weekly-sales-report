@@ -22,6 +22,19 @@ from weekly_report.src.cache.manager import raw_data_cache
 # browser tab then shows TypeError: Failed to fetch until it restarts.
 _raw_data_load_lock = threading.Lock()
 
+# Columns Table 1 actually sums. The rest of the Qlik export (product text,
+# Shopify, a second cached week) is what pushed the 2GB instance over its limit.
+TABLE1_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Gross Revenue",
+    "Net Revenue",
+    "Returns",
+    "Country",
+    "New/Returning Customer",
+    "Customer E-mail",
+)
+
 
 def _online_segment_net_revenue(qlik_df: pd.DataFrame, cust_seg: pd.Series) -> tuple[float, float]:
     """Online net revenue for new vs returning customers. Returns (new_net, returning_net)."""
@@ -233,6 +246,37 @@ def calculate_table1_metrics(
     logger.debug(f"Sample metrics: {dict(list(metrics.items())[:3])}")
     
     return metrics
+
+
+def _narrow_dema(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep the date and marketing-spend columns and attach iso_week."""
+    if df is None or df.empty:
+        return df
+    renamed = df.copy()
+    renamed.columns = renamed.columns.astype(str).str.strip()
+    keep = [col for col in renamed.columns if col in {"Days", "Day", "Marketing spend"}]
+    slim = renamed.loc[:, keep].copy() if keep else renamed.iloc[0:0].copy()
+    del renamed
+    date_col = _dema_date_column(slim)
+    if date_col:
+        slim[date_col] = pd.to_datetime(slim[date_col], errors="coerce")
+        iso_cal = slim[date_col].dt.isocalendar()
+        slim["iso_week"] = iso_cal["year"].astype(str) + "-" + iso_cal["week"].astype(str).str.zfill(2)
+    return slim
+
+
+def load_summary_frames(data_path: Path) -> Dict[str, pd.DataFrame]:
+    """Qlik columns and Dema files for Summary.
+
+    Shopify is not an input to these metrics, so it is not read. The frames
+    are not put in raw_data_cache; callers drop them after the metric dict exists.
+    """
+    logger.info(f"Loading summary frames from {data_path}")
+    qlik_df = qlik.load_qlik_columns(data_path, TABLE1_QLIK_COLUMNS)
+    dema_spend = _narrow_dema(dema.load_data(data_path))
+    dema_gm2_df = _narrow_dema(dema_gm2.load_data(data_path))
+    gc.collect()
+    return {"qlik": qlik_df, "dema_spend": dema_spend, "dema_gm2": dema_gm2_df}
 
 
 def load_all_raw_data(data_path: Path) -> Dict[str, pd.DataFrame]:
@@ -627,9 +671,9 @@ def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Pa
     latest_data_path = data_root / "raw" / base_week
     
     try:
-        logger.info(f"Loading all raw data sources for week {base_week} from {latest_data_path}...")
-        all_raw_data = load_all_raw_data(latest_data_path)
-        logger.info("Successfully loaded all raw data")
+        logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
+        all_raw_data = load_summary_frames(latest_data_path)
+        logger.info("Successfully loaded summary frames")
     except Exception as e:
         logger.error(f"Failed to load raw data: {e}")
         raise
@@ -683,6 +727,9 @@ def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Pa
         logger.error(f"Failed to calculate YTD periods: {e}")
     
     logger.info(f"Completed metrics calculation for {len(results)} periods")
+    all_raw_data.clear()
+    del all_raw_data
+    gc.collect()
     return results
 
 
@@ -694,7 +741,7 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
     and date_ranges for each (for display).
     """
     try:
-        all_raw_data = load_all_raw_data(data_root / "raw" / base_week)
+        all_raw_data = load_summary_frames(data_root / "raw" / base_week)
     except Exception as e:
         logger.error(f"Failed to load raw data for MTD/YTD: {e}")
         raise
@@ -787,7 +834,11 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
             logger.warning(f"Failed to process {ytd_name}: {e}")
             results[ytd_name] = _get_zero_metrics()
 
-    return {"periods": results, "date_ranges": date_ranges}
+    payload = {"periods": results, "date_ranges": date_ranges}
+    all_raw_data.clear()
+    del all_raw_data
+    gc.collect()
+    return payload
 
 
 def _get_zero_metrics() -> Dict[str, Any]:
@@ -957,9 +1008,9 @@ def calculate_table1_for_periods(
     latest_data_path = data_root / "raw" / base_week
     
     try:
-        logger.info(f"Loading all raw data sources for week {base_week} from {latest_data_path}...")
-        all_raw_data = load_all_raw_data(latest_data_path)
-        logger.info("Successfully loaded all raw data - now filtering for each period")
+        logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
+        all_raw_data = load_summary_frames(latest_data_path)
+        logger.info("Successfully loaded summary frames - now filtering for each period")
     except Exception as e:
         logger.error(f"Failed to load raw data: {e}")
         raise
@@ -988,4 +1039,7 @@ def calculate_table1_for_periods(
             results[period_name] = _get_zero_metrics()
     
     logger.info(f"Completed metrics calculation for {len(results)} periods")
+    all_raw_data.clear()
+    del all_raw_data
+    gc.collect()
     return results

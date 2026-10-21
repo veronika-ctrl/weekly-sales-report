@@ -438,11 +438,19 @@ export async function getMenCategorySales(baseWeek: string, numWeeks: number = 8
 }
 
 export async function getWomenCategorySales(baseWeek: string, numWeeks: number = 8): Promise<WomenCategorySalesResponse> {
-  return fetchJsonWithTimeout(
-    `${API_BASE_URL}/api/women-category-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`,
-    HEAVY_METRICS_TIMEOUT_MS,
-    '/api/women-category-sales',
-  )
+  const url = `${API_BASE_URL}/api/women-category-sales?base_week=${encodeURIComponent(baseWeek)}&num_weeks=${numWeeks}`
+  try {
+    return await fetchJsonWithTimeout(url, HEAVY_METRICS_TIMEOUT_MS, '/api/women-category-sales')
+  } catch (err) {
+    // The first open can still lose the connection if a proxy closes it while
+    // the server finishes and saves the result. One retry then reads that save.
+    const message = err instanceof Error ? err.message : String(err)
+    if (!/failed to fetch|could not reach|networkerror|network request failed|load failed/i.test(message)) {
+      throw err
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    return fetchJsonWithTimeout(url, HEAVY_METRICS_TIMEOUT_MS, '/api/women-category-sales')
+  }
 }
 
 export interface MonthlyTrendPoint {

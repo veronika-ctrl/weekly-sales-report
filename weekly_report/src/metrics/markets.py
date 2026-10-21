@@ -7,10 +7,10 @@ from typing import Dict, List, Any
 from pathlib import Path
 from loguru import logger
 
-from weekly_report.src.adapters import qlik
-from weekly_report.src.cache.manager import raw_data_cache
+from weekly_report.src.adapters.qlik import load_qlik_columns
 from weekly_report.src.periods.calculator import get_week_date_range
-from weekly_report.src.metrics.table1 import load_all_raw_data
+
+_MARKET_COLUMNS = ("Date", "Sales Channel", "Country", "Gross Revenue")
 
 
 def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: Path) -> Dict[str, Any]:
@@ -72,30 +72,16 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     logger.info(f"Analyzing weeks: {weeks_to_analyze}")
     logger.info(f"Last year weeks: {last_year_weeks}")
     
-    # Load raw data: base_week folder has current-year weeks; last-year weeks need their own folders
+    # The base-week Qlik file already holds the current and last-year weeks.
+    # Read only the columns this slide sums. Do not load Dema or Shopify, and
+    # do not keep a second week's raw frame beside this one.
     latest_data_path = data_root / "raw" / base_week
-    
     try:
-        logger.info(f"Loading raw data from {latest_data_path} for requested week {base_week}")
-        all_raw_data = load_all_raw_data(latest_data_path)
+        logger.info(f"Loading Qlik columns from {latest_data_path} for requested week {base_week}")
+        online_df = _online_gross_frame(latest_data_path)
     except Exception as e:
         logger.error(f"Failed to load raw data: {e}")
         raise
-    
-    # Use same pattern as category_sales: filter qlik by iso_week (already added by load_all_raw_data)
-    # so multi-year data in one file works the same way as on Category Sales
-    qlik_df = all_raw_data['qlik']
-    if 'iso_week' not in qlik_df.columns and 'Date' in qlik_df.columns:
-        qlik_df = qlik_df.copy()
-        qlik_df['Date'] = pd.to_datetime(qlik_df['Date'], errors='coerce')
-        iso_cal = qlik_df['Date'].dt.isocalendar()
-        qlik_df['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-    online_df = qlik_df[qlik_df['Sales Channel'] == 'Online'].copy() if 'Sales Channel' in qlik_df.columns else qlik_df.copy()
-    # The online slice is enough for current-year weeks. Drop the full export
-    # before any last-year folder is read so both files are not resident.
-    del all_raw_data, qlik_df
-    raw_data_cache.clear()
-    gc.collect()
     
     country_weeks_data = {}
     
@@ -126,28 +112,24 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     # 3) Last-year weeks: if data/raw/{last_year_week}/ exists, load and add (overwrites zeros)
     #    This is required for Y/Y GROWTH% on 2025-W50/51/52 (baseline 2024-W50/51/52) when base file has no 2024 data
     data_root_resolved = data_root.resolve()
+    base_resolved = latest_data_path.resolve()
+    released_base = False
     for week_str in last_year_weeks:
         week_path = data_root_resolved / "raw" / week_str
-        if week_path.exists():
-            ly_raw = None
-            ly_qlik = None
+        if week_path.exists() and week_path.resolve() != base_resolved:
+            if not released_base:
+                del online_df
+                released_base = True
+                gc.collect()
             ly_online = None
             try:
-                ly_raw = load_all_raw_data(week_path)
-                ly_qlik = ly_raw['qlik']
-                if 'iso_week' not in ly_qlik.columns and 'Date' in ly_qlik.columns:
-                    ly_qlik = ly_qlik.copy()
-                    ly_qlik['Date'] = pd.to_datetime(ly_qlik['Date'], errors='coerce')
-                    iso_cal = ly_qlik['Date'].dt.isocalendar()
-                    ly_qlik['iso_week'] = iso_cal['year'].astype(str) + '-' + iso_cal['week'].astype(str).str.zfill(2)
-                ly_online = ly_qlik[ly_qlik['Sales Channel'] == 'Online'].copy() if 'Sales Channel' in ly_qlik.columns else ly_qlik.copy()
+                ly_online = _online_gross_frame(week_path)
                 _add_week_revenue_from_df(week_str, ly_online)
                 logger.info(f"Loaded last-year data for Y/Y from {week_path}")
             except Exception as e:
                 logger.warning(f"Could not load last-year data for {week_str}: {e}")
             finally:
-                del ly_raw, ly_qlik, ly_online
-                raw_data_cache.clear()
+                del ly_online
                 gc.collect()
         else:
             # No folder for this last-year week; Y/Y will show "-" for that week if base file had no data
@@ -240,6 +222,20 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     
     logger.info(f"Calculated top markets: {len(top_13)} entries")
     return result
+
+
+def _online_gross_frame(raw_data_path: Path) -> pd.DataFrame:
+    """Online gross by country and ISO week. The wide Qlik frame is not kept."""
+    qlik_df = load_qlik_columns(raw_data_path, _MARKET_COLUMNS)
+    if qlik_df.empty or "Sales Channel" not in qlik_df.columns:
+        online = qlik_df
+    else:
+        online = qlik_df.loc[qlik_df["Sales Channel"] == "Online"]
+    keep = [col for col in ("iso_week", "Country", "Gross Revenue") if col in online.columns]
+    slim = online.loc[:, keep].copy() if keep else online.iloc[0:0].copy()
+    del qlik_df, online
+    gc.collect()
+    return slim
 
 
 def _has_53_weeks(year: int) -> bool:
