@@ -3257,11 +3257,15 @@ async def get_men_category_sales(
 
 
 @app.get("/api/women-category-sales", response_model=WomenCategorySalesResponse)
-async def get_women_category_sales(
+def get_women_category_sales(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
-    """Get Women Category Sales metrics for the last N weeks."""
+    """Get Women Category Sales metrics for the last N weeks.
+
+    Sync handler so the Qlik read runs in a worker thread and does not block
+    health checks. A blocked event loop is what dropped the browser connection.
+    """
     
     try:
         if not validate_iso_week(base_week):

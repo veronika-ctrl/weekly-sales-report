@@ -4,7 +4,7 @@ import pandas as pd
 from loguru import logger
 from pathlib import Path
 
-from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.adapters.qlik import load_category_qlik
 
 
 def calculate_gender_sales_for_week(qlik_df: pd.DataFrame, week_str: str) -> Dict[str, Any]:
@@ -38,9 +38,8 @@ def calculate_gender_sales_for_weeks(base_week: str, num_weeks: int, data_root: 
     # Load all raw data once from base week directory
     # data_root is ./data, so we need data_root/raw/{base_week}
     raw_data_path = data_root / "raw" / base_week
-    logger.info(f"Loading raw data from {raw_data_path}")
-    raw_data = load_all_raw_data(raw_data_path)
-    qlik_df = raw_data.get('qlik', pd.DataFrame())
+    logger.info(f"Loading Qlik columns for gender sales from {raw_data_path}")
+    qlik_df = load_category_qlik(raw_data_path)
     
     if qlik_df.empty:
         logger.warning(f"No Qlik data found in {raw_data_path}")

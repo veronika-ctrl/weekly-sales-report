@@ -4,7 +4,10 @@ import pandas as pd
 from loguru import logger
 from pathlib import Path
 
-from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.adapters.qlik import load_category_qlik
+from weekly_report.src.metrics.result_cache import ResultCache
+
+_cache = ResultCache("women-category-sales")
 
 
 def calculate_women_category_sales_for_week(qlik_df: pd.DataFrame, week_str: str) -> Dict[str, Any]:
@@ -34,16 +37,28 @@ def calculate_women_category_sales_for_week(qlik_df: pd.DataFrame, week_str: str
 
 
 def calculate_women_category_sales_for_weeks(base_week: str, num_weeks: int, data_root: Path) -> List[Dict[str, Any]]:
-    """Calculate women category sales for multiple weeks."""
-    
+    """Calculate women category sales for multiple weeks.
+
+    Uses a Qlik-only read plus a saved result. The previous path loaded every
+    raw export (and cleared the in-memory cache) before it could respond, and
+    the browser dropped that connection.
+    """
+    raw_data_path = Path(data_root) / "raw" / base_week
+    return _cache.get_or_compute(
+        Path(data_root),
+        raw_data_path,
+        base_week,
+        num_weeks,
+        lambda: _calculate_women_category_sales_uncached(base_week, num_weeks, Path(data_root)),
+    )
+
+
+def _calculate_women_category_sales_uncached(base_week: str, num_weeks: int, data_root: Path) -> List[Dict[str, Any]]:
     results = []
-    
-    # Load all raw data once from base week directory
-    # data_root is ./data, so we need data_root/raw/{base_week}
+
     raw_data_path = data_root / "raw" / base_week
-    logger.info(f"Loading raw data from {raw_data_path}")
-    raw_data = load_all_raw_data(raw_data_path)
-    qlik_df = raw_data.get('qlik', pd.DataFrame())
+    logger.info(f"Loading Qlik columns for women category sales from {raw_data_path}")
+    qlik_df = load_category_qlik(raw_data_path)
     
     if qlik_df.empty:
         logger.warning(f"No Qlik data found in {raw_data_path}")

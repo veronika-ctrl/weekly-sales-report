@@ -43,6 +43,16 @@ describe('gender sales self-load wiring', () => {
     assert.doesNotMatch(body, /\bawait fetch\(/)
   })
 
+  it('retries a dropped women category sales connection once', () => {
+    const api = readFileSync(join(here, 'api.ts'), 'utf8')
+    const start = api.indexOf('export async function getWomenCategorySales')
+    assert.ok(start >= 0)
+    const body = api.slice(start, start + 900)
+    assert.match(body, /\/api\/women-category-sales/)
+    assert.match(body, /failed to fetch/)
+    assert.match(body, /setTimeout/)
+  })
+
   it('stops the loading spinner for contribution and category pages too', () => {
     for (const [file, fn] of [
       ['../app/contribution/page.tsx', 'getContribution'],
