@@ -21,23 +21,32 @@ def _disable_fx(monkeypatch):
     monkeypatch.setenv("DISABLE_FX_CONVERSION", "1")
 
 
-def test_uploaded_discount_file_past_the_snapshot_is_read(tmp_path: Path):
-    """A Settings upload that extends past 18 Oct must win even if the bundled file is newer."""
-    name = "discount_groups_daily_2024-10-01_to_2026-10-25.csv"
-    slot = tmp_path / "raw" / "2026-44" / "discount_types"
+def test_weekly_upload_keeps_history_and_replaces_that_day_only(tmp_path: Path):
+    """A week file is added. Days it contains replace the history. Other days stay."""
+    name = "discount_groups_daily_2026-10-19_to_2026-10-25.csv"
+    slot = tmp_path / "discount_types"
     slot.mkdir(parents=True)
     path = slot / name
     path.write_text(
         "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
-        "2026-10-20,1 Klaviyo,Welcome code,WELCOME,1,10,4\n"
+        "2026-10-18,1 Klaviyo,Welcome code,NEW,1,10,99\n"
+        "2026-10-20,1 Klaviyo,Welcome code,W43,1,10,4\n"
         "2026-10-20,2 Customer care,Named / care codes,CARE,1,8,2\n",
         encoding="utf-8",
     )
     old = path.stat().st_mtime - 10_000_000
     os.utime(path, (old, old))
     tables = load_discount_type_tables(tmp_path)
-    assert tables["files_used"][0] == name
-    assert str(tables["daily"]["date"].iloc[0]).startswith("2026-10-20")
+    assert name in tables["files_used"]
+    assert any(item.startswith("discount_groups_daily_2024-10-01_to_2026-10-18") for item in tables["files_used"])
+    daily = tables["daily"].copy()
+    daily["_day"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    assert (daily["_day"] == "2024-10-01").any()
+    day18 = daily.loc[daily["_day"] == "2026-10-18"]
+    assert set(day18["code_or_title"].astype(str)) == {"NEW"}
+    assert float(day18["discount_amount_usd"].iloc[0]) == pytest.approx(99.0)
+    day20 = daily.loc[daily["_day"] == "2026-10-20"]
+    assert set(day20["code_or_title"].astype(str)) == {"W43", "CARE"}
 
 
 def test_mapping_wins_over_daily_group():
@@ -62,7 +71,11 @@ def test_mapping_wins_over_daily_group():
     assert out.loc[out["code_or_title"] == "WELCOME-X", "group"].iloc[0] == "7 Other / unknown"
 
 
-def test_fixture_share_and_free_shipping(tmp_path: Path):
+def test_fixture_share_and_free_shipping(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
     folder = tmp_path / "discount_types"
     folder.mkdir()
     (folder / "discount_groups_daily_fix.csv").write_text(
@@ -169,7 +182,11 @@ INVESTOR_SUBGROUP_LABELS = [
 ]
 
 
-def test_new_groups_emit_indented_subgroups(tmp_path: Path):
+def test_new_groups_emit_indented_subgroups(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
     folder = tmp_path / "discount_types"
     folder.mkdir()
     (folder / "discount_groups_daily_fix.csv").write_text(

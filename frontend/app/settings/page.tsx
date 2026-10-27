@@ -399,7 +399,7 @@ export default function Settings() {
       formats: '.csv',
       accumulate: true,
       skipCountry: true,
-      hint: 'Upload discount_groups_daily_….csv (and, if you have it, shopify_daily_totals_….csv). A file that runs past the built-in export is the one the full price share uses. This is separate from the Full Price vs Sale file above.',
+      hint: 'Upload one week at a time, for example discount_groups_daily_2026-10-19_to_2026-10-25.csv. It is added onto the history through 18 Oct 2026. A day that is already there is replaced; every other day stays. Uploading the same filename replaces that file only. This is separate from the Full Price vs Sale file above.',
     },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
