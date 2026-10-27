@@ -174,43 +174,58 @@ def discount_types_dirs(data_root: Path) -> List[Path]:
     return seen
 
 
-def _latest_matching(folders: Sequence[Path], prefix: str) -> Optional[Path]:
-    """Pick the discount-type CSV that should actually be read.
+def _matching_paths(folders: Sequence[Path], prefix: str) -> List[Path]:
+    """Every CSV for this prefix, lowest priority first.
 
-    An uploaded file whose name extends past the bundled snapshot wins even
-    when a deploy has made the bundled file look newer. An undated upload
-    that is newer than the snapshot also wins, so a file dropped in Settings
-    is not ignored. With no upload, the bundled snapshot is used.
+    The bundled history stays. An uploaded week file wins on the days it
+    contains, even when a deploy has made the bundled file look newer.
+    A later end date beats an earlier one, then a newer upload.
     """
     bundled = _bundled_dir()
-    found: List[Path] = []
+    found: Dict[str, Path] = {}
     for folder in folders:
         if not folder.is_dir():
             continue
-        found.extend(sorted(folder.glob(f"{prefix}*.csv")))
-    if not found:
-        return None
-    uploads = [path for path in found if not _is_under(path, bundled)]
-    bundled_files = [path for path in found if _is_under(path, bundled)]
-    best_upload = max(uploads, key=lambda path: (_coverage_end(path), _mtime(path), path.name)) if uploads else None
-    best_bundle = (
-        max(bundled_files, key=lambda path: (_coverage_end(path), _mtime(path), path.name))
-        if bundled_files
-        else None
+        for path in folder.glob(f"{prefix}*.csv"):
+            try:
+                key = str(path.resolve())
+            except OSError:
+                key = str(path)
+            found[key] = path
+    paths = list(found.values())
+    paths.sort(
+        key=lambda path: (
+            not _is_under(path, bundled),
+            _coverage_end(path),
+            _mtime(path),
+            path.name,
+        )
     )
-    if best_upload is None:
-        return best_bundle
-    if best_bundle is None:
-        return best_upload
-    upload_end = _coverage_end(best_upload)
-    bundle_end = _coverage_end(best_bundle)
-    if upload_end and upload_end > bundle_end:
-        return best_upload
-    if _mtime(best_upload) >= _mtime(best_bundle):
-        return best_upload
-    if upload_end and not bundle_end:
-        return best_upload
-    return best_bundle
+    return paths
+
+
+def _merge_by_day(paths: Sequence[Path], date_col: str) -> Tuple[pd.DataFrame, List[str]]:
+    """Stack every file. A day that appears again is taken from the later file only."""
+    frames: List[pd.DataFrame] = []
+    used: List[str] = []
+    for rank, path in enumerate(paths):
+        frame = _read_csv(path)
+        if frame.empty or date_col not in frame.columns:
+            continue
+        frame = frame.copy()
+        frame["_day"] = pd.to_datetime(frame[date_col], errors="coerce").dt.normalize()
+        frame = frame.dropna(subset=["_day"])
+        if frame.empty:
+            continue
+        frame["_rank"] = rank
+        frames.append(frame)
+        used.append(path.name)
+    if not frames:
+        return pd.DataFrame(), []
+    combined = pd.concat(frames, ignore_index=True)
+    winning_rank = combined.groupby("_day")["_rank"].transform("max")
+    kept = combined.loc[combined["_rank"].eq(winning_rank)].drop(columns=["_day", "_rank"])
+    return kept.reset_index(drop=True), used
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
@@ -365,8 +380,8 @@ def _group_subgroups(
 
 def load_discount_type_tables(data_root: Path) -> Dict[str, Any]:
     folders = discount_types_dirs(data_root)
-    groups_path = _latest_matching(folders, "discount_groups_daily_")
-    totals_path = _latest_matching(folders, "shopify_daily_totals_")
+    daily, group_files = _merge_by_day(_matching_paths(folders, "discount_groups_daily_"), "date")
+    totals, total_files = _merge_by_day(_matching_paths(folders, "shopify_daily_totals_"), "date")
     mapping_path = None
     for folder in folders:
         candidate = folder / "discount_code_mapping.csv"
@@ -374,16 +389,8 @@ def load_discount_type_tables(data_root: Path) -> Dict[str, Any]:
             mapping_path = candidate
             break
 
-    files_used: List[str] = []
-    daily = pd.DataFrame()
-    totals = pd.DataFrame()
+    files_used: List[str] = [*group_files, *total_files]
     mapping = pd.DataFrame()
-    if groups_path is not None:
-        daily = _read_csv(groups_path)
-        files_used.append(groups_path.name)
-    if totals_path is not None:
-        totals = _read_csv(totals_path)
-        files_used.append(totals_path.name)
     if mapping_path is not None:
         mapping = _read_csv(mapping_path)
         files_used.append(mapping_path.name)
