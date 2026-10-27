@@ -4327,7 +4327,7 @@ async def upload_file(
         
         # Validate file_type
         allowed_types = [
-            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts",
+            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types",
             FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget",
             *AMER_ALL_FILE_TYPES,
             RETENTION_CUSTOMERS_TYPE,
@@ -4341,7 +4341,7 @@ async def upload_file(
         file_extension = Path(file.filename).suffix.lower()
         if file_type == "qlik" and file_extension not in ['.xlsx', '.csv']:
             raise HTTPException(status_code=400, detail="Qlik file must be .xlsx or .csv")
-        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
+        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
 
@@ -4357,7 +4357,12 @@ async def upload_file(
         # aMER Dema + Shopify customers + discounts + CAC payback keep other files
         # in the slot (successive CSVs coexist). Same sanitized filename overwrites that file only.
         config = load_config(week=week)
-        target_dir = config.raw_data_path / file_type
+        # Discount-code history is one running export, not a week file. Keep it
+        # beside the other discount-type CSVs so it is preferred over the bundled snapshot.
+        if file_type == "discount_types":
+            target_dir = Path(config.data_root) / "discount_types"
+        else:
+            target_dir = config.raw_data_path / file_type
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
         bytes_written = await persist_upload_file(file, target_path)
         
@@ -4686,8 +4691,8 @@ async def get_file_metadata(week: str = Query(...)):
         
         metadata = {}
         file_hashes = []
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
-            type_path = raw_path / file_type
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
+            type_path = Path(config.data_root) / "discount_types" if file_type == "discount_types" else raw_path / file_type
             files = list_slot_files(type_path)
             if files:
                 latest_file = files[-1]
@@ -4917,7 +4922,7 @@ async def get_commercial_full_price(
     num_weeks: int = Query(8),
     months: int = Query(13),
 ):
-    """Full price share with exchanges removed, team/investor counted as full price, and Klaviyo plus Customer Care discount amounts broken out."""
+    """Full price share with exchanges removed. Discount codes, including internal, stay discounted."""
     try:
         if not validate_iso_week(base_week):
             raise HTTPException(status_code=400, detail="Invalid ISO week format")

@@ -1613,10 +1613,9 @@ export interface CommercialFullPriceBucket {
   full_price_pct: number | null
   discount_amount: number | null
   weighted_discount_pct: number | null
-  investor_net_moved: number
-  investor_discount_removed: number
   klaviyo_discount?: number
   customer_care_discount?: number
+  internal_discount?: number
 }
 
 export interface CommercialFullPricePeriod extends CommercialFullPriceBucket {
@@ -1640,8 +1639,8 @@ export interface CommercialFullPriceResponse {
   has_discount: boolean
   files_used: string[]
   history_range?: { start: string; end: string } | null
-  investor_net_moved: number
-  investor_discount_removed: number
+  discount_range?: { start: string; end: string } | null
+  discount_files?: string[]
   periods: CommercialFullPricePeriod[]
 }
 

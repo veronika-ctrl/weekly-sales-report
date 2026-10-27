@@ -32,7 +32,12 @@ const triggerConfig = {
   klaviyoLy: { label: 'LY Klaviyo', color: '#5EEAD4' },
   customerCare: { label: 'Customer care (CC)', color: '#7C3AED' },
   customerCareLy: { label: 'LY Customer care (CC)', color: '#C4B5FD' },
+  internal: { label: 'Internal (team, investor, PR & friends)', color: '#1D4ED8' },
+  internalLy: { label: 'LY Internal (team, investor, PR & friends)', color: '#BFDBFE' },
 } satisfies ChartConfig
+
+const PAGE_NOTE =
+  'Exchanges are excluded. All discount codes, including internal team, investor, PR & friends discounts, are counted as discounted.'
 
 const thousands = (value: number | null | undefined) =>
   Math.round((value || 0) / 1000).toLocaleString('sv-SE')
@@ -132,6 +137,8 @@ export default function CommercialFullPriceSlide({
         klaviyoLy: row.last_year?.klaviyo_discount || 0,
         customerCare: row.customer_care_discount || 0,
         customerCareLy: row.last_year?.customer_care_discount || 0,
+        internal: row.internal_discount || 0,
+        internalLy: row.last_year?.internal_discount || 0,
       })),
     [rows, granularity],
   )
@@ -141,21 +148,22 @@ export default function CommercialFullPriceSlide({
     slide === 'charts'
       ? `Full price share vs discount · ${periodWord}`
       : `Full price table · ${periodWord}`
-  const moved = data?.investor_net_moved || 0
   const empty = !loading && !error && rows.length === 0
+  const discountFile = (data?.discount_files || []).find((name) => name.startsWith('discount_groups_daily'))
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {data?.note ||
-            'Exchanges are excluded. Investors, team, PR & friends discounts are counted as full price. Klaviyo and Customer Care (CC) discount amounts are shown separately and still sit inside the commercial discount. The existing Full Price vs Sale slides are unchanged.'}
+          {data?.note || PAGE_NOTE}
         </p>
         {data?.history_range && (
           <p className="text-xs text-muted-foreground mt-1">
             History: {data.history_range.start} → {data.history_range.end}
-            {moved > 0 ? ` · team/investor net counted as full price in this window: ${thousands(moved)} SEK ’000` : ''}
+            {data.discount_range
+              ? ` · Discount codes: ${data.discount_range.start} → ${data.discount_range.end}${discountFile ? ` (${discountFile})` : ''}`
+              : ''}
           </p>
         )}
       </div>
@@ -180,8 +188,8 @@ export default function CommercialFullPriceSlide({
             <CardHeader>
               <CardTitle className="text-sm font-medium">Full price share % — by {periodWord}</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Full price ÷ total after exchanges are removed and team/investor discounts are counted as full price.
-                Dashed line is the same {periodWord} last year.
+                Full price ÷ total after exchanges are removed. Discount codes, including internal team, investor, PR
+                & friends, stay in discounted. Dashed line is the same {periodWord} last year.
               </p>
             </CardHeader>
             <CardContent className="overflow-visible">
@@ -229,8 +237,8 @@ export default function CommercialFullPriceSlide({
             <CardHeader>
               <CardTitle className="text-sm font-medium">Net sales split (SEK ’000) — by {periodWord}</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Full price (dark) plus the commercial discount that remains (orange). Team and investor sales sit in full
-                price. Klaviyo and Customer Care amounts are in the chart below, not split out of these bars.
+                Full price (dark) and discounted (orange). Klaviyo, Customer Care, and internal discounts stay inside
+                the orange bar and are shown on their own below.
               </p>
             </CardHeader>
             <CardContent className="overflow-visible">
@@ -255,11 +263,11 @@ export default function CommercialFullPriceSlide({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium">
-              Klaviyo and Customer Care discounts (SEK ’000) — by {periodWord}
+              Klaviyo, Customer Care and Internal discounts (SEK ’000) — by {periodWord}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Discount amount from the discount-type export, not net sales. Customer care is CC. Lighter bars are the
-              same {periodWord} last year. These amounts stay inside the orange Discounted bar above.
+              Discount amount from the discount-type export. Customer care is CC. Internal is team, investor, PR &
+              friends. Lighter bars are the same {periodWord} last year. These amounts stay inside Discounted.
             </p>
           </CardHeader>
           <CardContent className="overflow-visible">
@@ -277,6 +285,18 @@ export default function CommercialFullPriceSlide({
                   dataKey="customerCareLy"
                   fill="#C4B5FD"
                   name="LY Customer care (CC)"
+                  isAnimationActive={isAnimationActive}
+                />
+                <Bar
+                  dataKey="internal"
+                  fill="#1D4ED8"
+                  name="Internal (team, investor, PR & friends)"
+                  isAnimationActive={isAnimationActive}
+                />
+                <Bar
+                  dataKey="internalLy"
+                  fill="#BFDBFE"
+                  name="LY Internal (team, investor, PR & friends)"
                   isAnimationActive={isAnimationActive}
                 />
               </BarChart>
@@ -309,6 +329,8 @@ export default function CommercialFullPriceSlide({
                   <th className="py-2 px-4 font-medium text-right">LY Klaviyo</th>
                   <th className="py-2 px-4 font-medium text-right">Customer care (CC)</th>
                   <th className="py-2 px-4 font-medium text-right">LY Customer care (CC)</th>
+                  <th className="py-2 px-4 font-medium text-right">Internal (team, investor, PR & friends)</th>
+                  <th className="py-2 px-4 font-medium text-right">LY Internal (team, investor, PR & friends)</th>
                   <th className="py-2 px-4 font-medium text-right">Total</th>
                   <th className="py-2 px-4 font-medium text-right">Full price %</th>
                   <th className="py-2 px-4 font-medium text-right">LY full price %</th>
@@ -335,6 +357,10 @@ export default function CommercialFullPriceSlide({
                       <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
                         {thousandsOrDash(lyOrNull(row.last_year, row.last_year?.customer_care_discount))}
                       </td>
+                      <td className="py-2 px-4 text-right tabular-nums">{thousands(row.internal_discount)}</td>
+                      <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
+                        {thousandsOrDash(lyOrNull(row.last_year, row.last_year?.internal_discount))}
+                      </td>
                       <td className="py-2 px-4 text-right tabular-nums">{thousands(row.total)}</td>
                       <td className="py-2 px-4 text-right tabular-nums">{pct(row.full_price_pct)}</td>
                       <td className="py-2 px-4 text-right tabular-nums text-muted-foreground">
@@ -353,8 +379,8 @@ export default function CommercialFullPriceSlide({
               </tbody>
             </table>
             <p className="text-[11px] text-muted-foreground mt-3">
-              Klaviyo and Customer care (CC) are discount amounts in SEK ’000, not net sales. They remain inside
-              Discounted. {AMOUNTS_INCL_VAT_NOTE}
+              Klaviyo, Customer care (CC), and Internal (team, investor, PR & friends) are discount amounts in SEK
+              ’000. They remain inside Discounted. {AMOUNTS_INCL_VAT_NOTE}
             </p>
           </CardContent>
         </Card>

@@ -121,13 +121,50 @@ def _bundled_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "data" / "discount_types"
 
 
+_COVERAGE_END_RE = re.compile(r"(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})")
+
+
+def _coverage_end(path: Path) -> str:
+    match = _COVERAGE_END_RE.search(path.name)
+    return match.group(2) if match else ""
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def discount_types_dirs(data_root: Path) -> List[Path]:
-    seen: List[Path] = []
-    for d in (
+    """Bundled snapshot, plus any uploaded history under the data root.
+
+    Uploads land in ``data/discount_types`` or a week slot
+    (``raw/{week}/discount_types`` or ``raw/{week}/discounts``).
+    """
+    root = Path(data_root)
+    candidates = [
         _bundled_dir(),
-        Path(data_root) / "discount_types",
-        Path(data_root) / "weekly_report" / "data" / "discount_types",
-    ):
+        root / "discount_types",
+        root / "weekly_report" / "data" / "discount_types",
+    ]
+    raw = root / "raw"
+    if raw.is_dir():
+        for week_dir in raw.iterdir():
+            if not week_dir.is_dir():
+                continue
+            candidates.append(week_dir / "discount_types")
+            candidates.append(week_dir / "discounts")
+    seen: List[Path] = []
+    for d in candidates:
         try:
             resolved = d.resolve()
         except OSError:
@@ -138,12 +175,42 @@ def discount_types_dirs(data_root: Path) -> List[Path]:
 
 
 def _latest_matching(folders: Sequence[Path], prefix: str) -> Optional[Path]:
+    """Pick the discount-type CSV that should actually be read.
+
+    An uploaded file whose name extends past the bundled snapshot wins even
+    when a deploy has made the bundled file look newer. An undated upload
+    that is newer than the snapshot also wins, so a file dropped in Settings
+    is not ignored. With no upload, the bundled snapshot is used.
+    """
+    bundled = _bundled_dir()
     found: List[Path] = []
     for folder in folders:
+        if not folder.is_dir():
+            continue
         found.extend(sorted(folder.glob(f"{prefix}*.csv")))
     if not found:
         return None
-    return max(found, key=lambda p: (p.stat().st_mtime, p.name))
+    uploads = [path for path in found if not _is_under(path, bundled)]
+    bundled_files = [path for path in found if _is_under(path, bundled)]
+    best_upload = max(uploads, key=lambda path: (_coverage_end(path), _mtime(path), path.name)) if uploads else None
+    best_bundle = (
+        max(bundled_files, key=lambda path: (_coverage_end(path), _mtime(path), path.name))
+        if bundled_files
+        else None
+    )
+    if best_upload is None:
+        return best_bundle
+    if best_bundle is None:
+        return best_upload
+    upload_end = _coverage_end(best_upload)
+    bundle_end = _coverage_end(best_bundle)
+    if upload_end and upload_end > bundle_end:
+        return best_upload
+    if _mtime(best_upload) >= _mtime(best_bundle):
+        return best_upload
+    if upload_end and not bundle_end:
+        return best_upload
+    return best_bundle
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
