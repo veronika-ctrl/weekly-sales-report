@@ -393,6 +393,14 @@ export default function Settings() {
       extraFields: [],
       hint: 'Shopify “Sales by Pricing Type Adv” daily export (exchange-aware). Date is the primary key — overlapping dates are replaced, new dates are appended. Not mixed with the all-orders slot above.',
     },
+    {
+      type: 'discount_types',
+      label: 'Discount types — Klaviyo, Customer Care, internal',
+      formats: '.csv',
+      accumulate: true,
+      skipCountry: true,
+      hint: 'Upload discount_groups_daily_….csv (and, if you have it, shopify_daily_totals_….csv). A file that runs past the built-in export is the one the full price share uses. This is separate from the Full Price vs Sale file above.',
+    },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +19,25 @@ from weekly_report.src.metrics.discount_types import (
 @pytest.fixture(autouse=True)
 def _disable_fx(monkeypatch):
     monkeypatch.setenv("DISABLE_FX_CONVERSION", "1")
+
+
+def test_uploaded_discount_file_past_the_snapshot_is_read(tmp_path: Path):
+    """A Settings upload that extends past 18 Oct must win even if the bundled file is newer."""
+    name = "discount_groups_daily_2024-10-01_to_2026-10-25.csv"
+    slot = tmp_path / "raw" / "2026-44" / "discount_types"
+    slot.mkdir(parents=True)
+    path = slot / name
+    path.write_text(
+        "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
+        "2026-10-20,1 Klaviyo,Welcome code,WELCOME,1,10,4\n"
+        "2026-10-20,2 Customer care,Named / care codes,CARE,1,8,2\n",
+        encoding="utf-8",
+    )
+    old = path.stat().st_mtime - 10_000_000
+    os.utime(path, (old, old))
+    tables = load_discount_type_tables(tmp_path)
+    assert tables["files_used"][0] == name
+    assert str(tables["daily"]["date"].iloc[0]).startswith("2026-10-20")
 
 
 def test_mapping_wins_over_daily_group():

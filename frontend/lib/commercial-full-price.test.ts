@@ -36,10 +36,16 @@ describe('commercial full price slides', () => {
     assert.match(api.slice(start, start + 700), /\/api\/discounts\/commercial-full-price/)
     assert.match(oldPage, /getFullPriceVsSale/)
     assert.doesNotMatch(oldPage, /getCommercialFullPrice/)
-    assert.match(slide, /Klaviyo and Customer Care discounts/)
+    assert.match(slide, /Klaviyo, Customer Care and Internal discounts/)
     assert.match(slide, /Customer care \(CC\)/)
-    assert.match(slide, /klaviyo_discount/)
-    assert.match(slide, /customer_care_discount/)
+    assert.match(slide, /Internal \(team, investor, PR & friends\)/)
+    assert.match(slide, /internal_discount/)
+    assert.match(
+      slide,
+      /Exchanges are excluded\. All discount codes, including internal team, investor, PR & friends discounts, are counted as discounted\./,
+    )
+    assert.doesNotMatch(slide, /counted as full price/)
+    assert.doesNotMatch(slide, /team\/investor net counted as full price/)
     assert.doesNotMatch(oldPage, /customer_care_discount/)
   })
 })

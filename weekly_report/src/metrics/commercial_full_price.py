@@ -1,9 +1,9 @@
-"""Commercial full price share: exchanges out, team/investor discounts treated as full price.
+"""Full price share vs discount: exchanges out, every discount code stays discounted.
 
-The existing Full Price vs Sale slides stay as the financial view. This series
-is the presentation view: start from the exchange-excluded daily export, then
-move Investors, team, PR & friends net sales out of discounted and into full
-price. Klaviyo, Customer Care, and other customer codes stay in the discount.
+AfterShip exchanges are already absent from the exchange-excluded daily export.
+Team, investor, PR & friends orders stay in discounted, and their discount
+amount stays in the weighted discount. Klaviyo, Customer Care, and that internal
+group are also listed on their own.
 """
 
 from __future__ import annotations
@@ -23,45 +23,19 @@ from weekly_report.src.metrics.pricing_history import load_pricing_type_daily_hi
 from weekly_report.src.periods.calculator import get_week_date_range
 
 NOTE = (
-    "Exchanges are excluded. Investors, team, PR & friends discounts are counted as full price, "
-    "so the remaining discount is commercial. Klaviyo and Customer Care (CC) discount amounts are shown "
-    "on their own and still sit inside that commercial discount, together with other customer codes. "
-    "The existing Full Price vs Sale slides are unchanged."
+    "Exchanges are excluded. All discount codes, including internal team, investor, PR & friends "
+    "discounts, are counted as discounted."
 )
 
 INVESTOR_GROUP_ID = "investors"
 KLAVIYO_GROUP_ID = "klaviyo"
 CUSTOMER_CARE_GROUP_ID = "customer_care"
-TRIGGER_DISCOUNT_COLUMNS = ("klaviyo_discount", "customer_care_discount")
-
-
-def investor_adjustments_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
-    """Sum investor/team net and discount amount by day.
-
-    ``daily`` is the prepared discount-types frame (``_date``, ``group``,
-    ``_gross_sales_usd``, ``_discount_amount_usd``). Net = gross − discount,
-    floored at 0. Other groups are ignored.
-    """
-    empty = pd.DataFrame(columns=["_date", "investor_net", "investor_discount"])
-    if daily is None or daily.empty or "_date" not in daily.columns or "group" not in daily.columns:
-        return empty
-    work = daily.copy()
-    work["_gid"] = work["group"].map(_canonical_group_id)
-    inv = work.loc[work["_gid"].eq(INVESTOR_GROUP_ID)]
-    if inv.empty:
-        return empty
-    gross_col = "_gross_sales_usd" if "_gross_sales_usd" in inv.columns else None
-    disc_col = "_discount_amount_usd" if "_discount_amount_usd" in inv.columns else None
-    if gross_col is None or disc_col is None:
-        return empty
-    grouped = (
-        inv.groupby("_date", as_index=False)[[gross_col, disc_col]]
-        .sum()
-        .rename(columns={gross_col: "gross", disc_col: "investor_discount"})
-    )
-    grouped["investor_net"] = (grouped["gross"] - grouped["investor_discount"]).clip(lower=0.0)
-    grouped["investor_discount"] = grouped["investor_discount"].clip(lower=0.0)
-    return grouped[["_date", "investor_net", "investor_discount"]]
+TRIGGER_GROUP_COLUMNS = (
+    (KLAVIYO_GROUP_ID, "klaviyo_discount"),
+    (CUSTOMER_CARE_GROUP_ID, "customer_care_discount"),
+    (INVESTOR_GROUP_ID, "internal_discount"),
+)
+TRIGGER_DISCOUNT_COLUMNS = tuple(column for _gid, column in TRIGGER_GROUP_COLUMNS)
 
 
 def _prepared_discount_daily(data_root: Path) -> Dict[str, Any]:
@@ -81,10 +55,10 @@ def _prepared_discount_daily(data_root: Path) -> Dict[str, Any]:
 
 
 def trigger_discounts_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
-    """Sum Klaviyo and Customer Care discount amounts by day.
+    """Sum Klaviyo, Customer Care, and internal discount amounts by day.
 
-    Investor, campaign, and other groups are ignored. Amounts are the
-    discount-type export's discount, not net sales.
+    Amounts are the discount-type export's discount, not net sales. They are
+    not removed from discounted sales.
     """
     empty = pd.DataFrame(columns=["_date", *TRIGGER_DISCOUNT_COLUMNS])
     if daily is None or daily.empty or "_date" not in daily.columns or "group" not in daily.columns:
@@ -93,13 +67,12 @@ def trigger_discounts_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
         return empty
     work = daily.copy()
     work["_gid"] = work["group"].map(_canonical_group_id)
-    work = work.loc[work["_gid"].isin([KLAVIYO_GROUP_ID, CUSTOMER_CARE_GROUP_ID])]
+    wanted = {gid for gid, _column in TRIGGER_GROUP_COLUMNS}
+    work = work.loc[work["_gid"].isin(wanted)]
     if work.empty:
         return empty
-    work["klaviyo_discount"] = work["_discount_amount_usd"].where(work["_gid"].eq(KLAVIYO_GROUP_ID), 0.0)
-    work["customer_care_discount"] = work["_discount_amount_usd"].where(
-        work["_gid"].eq(CUSTOMER_CARE_GROUP_ID), 0.0
-    )
+    for gid, column in TRIGGER_GROUP_COLUMNS:
+        work[column] = work["_discount_amount_usd"].where(work["_gid"].eq(gid), 0.0)
     grouped = work.groupby("_date", as_index=False)[list(TRIGGER_DISCOUNT_COLUMNS)].sum()
     for col in TRIGGER_DISCOUNT_COLUMNS:
         grouped[col] = pd.to_numeric(grouped[col], errors="coerce").fillna(0.0).clip(lower=0.0)
@@ -107,17 +80,8 @@ def trigger_discounts_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
     return grouped.dropna(subset=["_date"])[["_date", *TRIGGER_DISCOUNT_COLUMNS]]
 
 
-def load_investor_daily_adjustments(data_root: Path) -> Dict[str, Any]:
-    prepared = _prepared_discount_daily(data_root)
-    return {
-        "df": investor_adjustments_from_daily(prepared["daily"]),
-        "files_used": prepared["files_used"],
-        "fx": prepared["fx"],
-    }
-
-
 def attach_trigger_discounts(adjusted: pd.DataFrame, triggers: pd.DataFrame) -> pd.DataFrame:
-    """Left-join Klaviyo and Customer Care discount amounts onto pricing days.
+    """Left-join Klaviyo, Customer Care, and internal discount amounts onto pricing days.
 
     Both sides are collapsed to one row per date first, so a day that appears
     twice cannot double-count the discount.
@@ -155,44 +119,6 @@ def attach_trigger_discounts(adjusted: pd.DataFrame, triggers: pd.DataFrame) -> 
     return out
 
 
-def apply_investor_adjustment(pricing: pd.DataFrame, investor: pd.DataFrame) -> pd.DataFrame:
-    """Move investor net from discounted into full price. Total is unchanged.
-
-    The move is capped at that day's discounted net, and the discount amount
-    removed is capped at that day's discount amount, so neither goes negative.
-    """
-    if pricing is None or pricing.empty:
-        return pd.DataFrame()
-    out = pricing.copy()
-    out["_date"] = pd.to_datetime(out["_date"], errors="coerce").dt.normalize()
-    out = out.dropna(subset=["_date"])
-    for col in ("_full", "_discounted", "_total", "_discount"):
-        if col not in out.columns:
-            out[col] = 0.0
-        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0)
-
-    if investor is None or investor.empty:
-        out["investor_net"] = 0.0
-        out["investor_discount"] = 0.0
-    else:
-        adj = investor.copy()
-        adj["_date"] = pd.to_datetime(adj["_date"], errors="coerce").dt.normalize()
-        adj = adj.dropna(subset=["_date"])
-        adj = adj.groupby("_date", as_index=False)[["investor_net", "investor_discount"]].sum()
-        out = out.merge(adj, on="_date", how="left")
-        out["investor_net"] = pd.to_numeric(out["investor_net"], errors="coerce").fillna(0.0)
-        out["investor_discount"] = pd.to_numeric(out["investor_discount"], errors="coerce").fillna(0.0)
-
-    move = out[["investor_net", "_discounted"]].min(axis=1).clip(lower=0.0)
-    removed = out[["investor_discount", "_discount"]].min(axis=1).clip(lower=0.0)
-    out["_full"] = out["_full"] + move
-    out["_discounted"] = out["_discounted"] - move
-    out["_discount"] = out["_discount"] - removed
-    out["_investor_net_moved"] = move
-    out["_investor_discount_removed"] = removed
-    return out
-
-
 def _sum_optional(sub: pd.DataFrame, column: str) -> float:
     if sub is None or sub.empty or column not in sub.columns:
         return 0.0
@@ -201,7 +127,7 @@ def _sum_optional(sub: pd.DataFrame, column: str) -> float:
 
 def _metrics(sub: pd.DataFrame) -> Dict[str, Any]:
     if sub is None or sub.empty:
-        full = disc = total = moved = removed = 0.0
+        full = disc = total = 0.0
         damt: Optional[float] = None
     else:
         full = float(sub["_full"].sum() or 0.0)
@@ -209,10 +135,9 @@ def _metrics(sub: pd.DataFrame) -> Dict[str, Any]:
         total = float(sub["_total"].sum() or 0.0)
         damt_series = pd.to_numeric(sub["_discount"], errors="coerce")
         damt = float(damt_series.sum()) if damt_series.notna().any() else None
-        moved = _sum_optional(sub, "_investor_net_moved")
-        removed = _sum_optional(sub, "_investor_discount_removed")
     klaviyo = _sum_optional(sub, "klaviyo_discount")
     customer_care = _sum_optional(sub, "customer_care_discount")
+    internal = _sum_optional(sub, "internal_discount")
     pct = (full / total * 100.0) if total > 0 else None
     weighted = None
     if damt is not None and (disc + damt) > 0:
@@ -224,10 +149,9 @@ def _metrics(sub: pd.DataFrame) -> Dict[str, Any]:
         "full_price_pct": pct,
         "discount_amount": damt,
         "weighted_discount_pct": weighted,
-        "investor_net_moved": moved,
-        "investor_discount_removed": removed,
         "klaviyo_discount": klaviyo,
         "customer_care_discount": customer_care,
+        "internal_discount": internal,
     }
 
 
@@ -341,13 +265,11 @@ def calculate_commercial_full_price(
         raise ValueError("granularity must be 'week' or 'month'")
     history = load_pricing_type_daily_history(Path(data_root))
     prepared = _prepared_discount_daily(Path(data_root))
-    investor_df = investor_adjustments_from_daily(prepared["daily"])
     triggers = trigger_discounts_from_daily(prepared["daily"])
     pricing = history.get("df")
     if pricing is None:
         pricing = pd.DataFrame()
-    adjusted = apply_investor_adjustment(pricing, investor_df)
-    adjusted = attach_trigger_discounts(adjusted, triggers)
+    adjusted = attach_trigger_discounts(pricing, triggers)
     periods = build_commercial_periods(
         adjusted,
         base_week,
@@ -356,8 +278,6 @@ def calculate_commercial_full_price(
         months=months,
     )
     has_last_year = any((p.get("last_year") or {}).get("total", 0) > 0 for p in periods)
-    moved = float(sum(p.get("investor_net_moved") or 0.0 for p in periods))
-    removed = float(sum(p.get("investor_discount_removed") or 0.0 for p in periods))
     files = list(history.get("files_used") or []) + list(prepared.get("files_used") or [])
     hist = None
     if not adjusted.empty:
@@ -365,6 +285,12 @@ def calculate_commercial_full_price(
             "start": str(adjusted["_date"].min().date()),
             "end": str(adjusted["_date"].max().date()),
         }
+    discount_range = None
+    daily = prepared.get("daily")
+    if daily is not None and not daily.empty and "_date" in daily.columns:
+        dates = pd.to_datetime(daily["_date"], errors="coerce").dropna()
+        if not dates.empty:
+            discount_range = {"start": str(dates.min().date()), "end": str(dates.max().date())}
     fx = history.get("fx") or prepared.get("fx") or {"applied": False}
     currency = history.get("currency") or ("SEK" if fx.get("applied") else "USD")
     return {
@@ -380,7 +306,7 @@ def calculate_commercial_full_price(
         "has_discount": bool(history.get("has_discount")),
         "files_used": files,
         "history_range": hist,
-        "investor_net_moved": moved,
-        "investor_discount_removed": removed,
+        "discount_range": discount_range,
+        "discount_files": list(prepared.get("files_used") or []),
         "periods": periods,
     }
