@@ -173,6 +173,31 @@ def upload_env(tmp_path: Path, monkeypatch):
     return routes, tmp_path
 
 
+DISCOUNT_WEEK = (
+    "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
+    "2026-10-19,1 Klaviyo,Welcome code,W43,1,100,1200\n"
+)
+
+
+def test_upload_endpoint_stores_discount_csv_even_from_the_pricing_slot(upload_env):
+    import asyncio
+
+    routes, data_root = upload_env
+    name = "discount_groups_daily_2026-10-19_to_2026-10-25.csv"
+
+    async def _run():
+        result = await _upload(routes, name, "full_price_vs_sale_excl_exchanges", DISCOUNT_WEEK)
+        assert result["success"] is True
+        response = await routes.get_file_metadata(week=WEEK)
+        return json.loads(response.body)
+
+    payload = asyncio.run(_run())
+    stored = data_root / "discount_types" / name
+    assert stored.is_file()
+    assert list_slot_files(data_root / "raw" / WEEK / "full_price_vs_sale_excl_exchanges") == []
+    assert payload["discount_types"]["filename"] == name
+
+
 def test_upload_endpoint_amer_accumulates_w36_and_august(upload_env):
     import asyncio
 

@@ -4365,6 +4365,22 @@ async def upload_file(
             target_dir = config.raw_data_path / file_type
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
         bytes_written = await persist_upload_file(file, target_path)
+
+        # A weekly discount-code export dropped on another slot is still the
+        # discount-types file. Do this before the Full Price inspector deletes
+        # a CSV whose headers are not the pricing export.
+        if file_type != "discount_types" and target_path.suffix.lower() == ".csv":
+            from weekly_report.src.metrics.discount_types import is_discount_groups_csv
+
+            if is_discount_groups_csv(target_path):
+                dest_dir = Path(config.data_root) / "discount_types"
+                dest = prepare_slot_for_upload(dest_dir, "discount_types", target_path.name)
+                if dest.resolve() != target_path.resolve():
+                    dest.write_bytes(target_path.read_bytes())
+                    target_path.unlink(missing_ok=True)
+                    target_path = dest
+                file_type = "discount_types"
+                logger.info(f"Stored discount-code CSV in {target_path}")
         
         logger.info(f"File uploaded: {target_path} ({bytes_written} bytes)")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")

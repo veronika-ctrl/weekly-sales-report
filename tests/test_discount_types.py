@@ -49,6 +49,32 @@ def test_weekly_upload_keeps_history_and_replaces_that_day_only(tmp_path: Path):
     assert set(day20["code_or_title"].astype(str)) == {"W43", "CARE"}
 
 
+def test_week_file_is_read_whatever_the_name(tmp_path: Path):
+    """A weekly export in the slot or in the order-lines folder is appended by day."""
+    slot = tmp_path / "raw" / "2026-43" / "discounts"
+    slot.mkdir(parents=True)
+    (slot / "W43 export.csv").write_text(
+        "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
+        "2026-10-19,1 Klaviyo,Welcome code,W43K,2,100,1200\n"
+        '2026-10-19,"5 Investors, team, PR & friends",Team,TEAM,1,80,1300\n'
+        "2026-10-21,2 Customer care,Named / care codes,CARE,1,8,0\n",
+        encoding="utf-8",
+    )
+    (slot / "order_lines.csv").write_text(
+        "order_id,day,net_sales\n1,2026-10-19,10\n",
+        encoding="utf-8",
+    )
+    tables = load_discount_type_tables(tmp_path)
+    assert "W43 export.csv" in tables["files_used"]
+    assert "order_lines.csv" not in tables["files_used"]
+    daily = tables["daily"].copy()
+    daily["_day"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    assert (daily["_day"] == "2024-10-01").any()
+    day = daily.loc[daily["_day"] == "2026-10-19"]
+    assert set(day["code_or_title"].astype(str)) == {"W43K", "TEAM"}
+    assert float(day.loc[day["code_or_title"] == "W43K", "discount_amount_usd"].iloc[0]) == pytest.approx(1200)
+
+
 def test_mapping_wins_over_daily_group():
     daily = pd.DataFrame(
         {

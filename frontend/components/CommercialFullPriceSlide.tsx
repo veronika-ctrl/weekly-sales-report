@@ -149,7 +149,9 @@ export default function CommercialFullPriceSlide({
       ? `Full price share vs discount · ${periodWord}`
       : `Full price table · ${periodWord}`
   const empty = !loading && !error && rows.length === 0
-  const discountFile = (data?.discount_files || []).find((name) => name.startsWith('discount_groups_daily'))
+  const discountFiles = (data?.discount_files || []).filter(
+    (name) => name !== 'discount_code_mapping.csv' && !name.startsWith('shopify_daily_totals'),
+  )
 
   return (
     <div className="space-y-6">
@@ -162,7 +164,7 @@ export default function CommercialFullPriceSlide({
           <p className="text-xs text-muted-foreground mt-1">
             History: {data.history_range.start} → {data.history_range.end}
             {data.discount_range
-              ? ` · Discount codes: ${data.discount_range.start} → ${data.discount_range.end}${discountFile ? ` (${discountFile})` : ''}`
+              ? ` · Discount codes: ${data.discount_range.start} → ${data.discount_range.end}${discountFiles.length ? ` (${discountFiles.join(', ')})` : ''}`
               : ''}
           </p>
         )}
