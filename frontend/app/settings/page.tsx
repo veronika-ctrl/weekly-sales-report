@@ -399,7 +399,7 @@ export default function Settings() {
       formats: '.csv',
       accumulate: true,
       skipCountry: true,
-      hint: 'Upload one week at a time, for example discount_groups_daily_2026-10-19_to_2026-10-25.csv. It is added onto the history through 18 Oct 2026. A day that is already there is replaced; every other day stays. Uploading the same filename replaces that file only. This is separate from the Full Price vs Sale file above.',
+      hint: 'Upload the week file here, for example discount_groups_daily_2026-10-19_to_2026-10-25.csv. Any file name works if the columns are date, group and discount_amount_usd. It is added onto the history through 18 Oct 2026. A day that is already there is replaced; every other day stays. A file dropped on Full Price vs Sale by mistake is stored in this slot.',
     },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
@@ -859,6 +859,17 @@ export default function Settings() {
             <BatchFileUpload
               fileTypes={fileTypes}
               currentWeek={selectedWeek}
+              inferFileType={(filename) => {
+                const lower = filename.toLowerCase()
+                if (
+                  lower.includes('discount_groups') ||
+                  lower.includes('shopify_daily_totals') ||
+                  lower.includes('discount_code_mapping')
+                ) {
+                  return 'discount_types'
+                }
+                return null
+              }}
               onUploadComplete={async () => {
                 await loadMetadata(true)
                 await loadDiscountsHistory()

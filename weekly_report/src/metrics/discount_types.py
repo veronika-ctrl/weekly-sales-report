@@ -174,6 +174,63 @@ def discount_types_dirs(data_root: Path) -> List[Path]:
     return seen
 
 
+def csv_headers(path: Path) -> set[str]:
+    """Column names from the first line. Only the start of the file is read."""
+    try:
+        raw = path.read_bytes()[:8192]
+    except OSError:
+        return set()
+    text = raw.decode("utf-8-sig", errors="replace")
+    first = text.splitlines()[0] if text.strip() else ""
+    delim = ";" if first.count(";") > first.count(",") else ","
+    return {part.strip().strip('"').lower() for part in first.split(delim) if part.strip()}
+
+
+def is_discount_groups_csv(path: Path) -> bool:
+    """A daily discount-code export, whatever the file is called."""
+    if path.suffix.lower() != ".csv":
+        return False
+    name = path.name.lower()
+    if name.startswith("discount_code_mapping") or name.startswith("shopify_daily_totals"):
+        return False
+    if name.startswith("discount_groups_daily_"):
+        return True
+    headers = csv_headers(path)
+    has_amount = "discount_amount_usd" in headers or "discount_amount" in headers
+    return "date" in headers and "group" in headers and has_amount
+
+
+def _sort_discount_files(paths: Sequence[Path]) -> List[Path]:
+    bundled = _bundled_dir()
+    ordered = list(paths)
+    ordered.sort(
+        key=lambda path: (
+            not _is_under(path, bundled),
+            _coverage_end(path),
+            _mtime(path),
+            path.name,
+        )
+    )
+    return ordered
+
+
+def _group_files(folders: Sequence[Path]) -> List[Path]:
+    """Every discount-code CSV, lowest priority first. The name does not matter."""
+    found: Dict[str, Path] = {}
+    for folder in folders:
+        if not folder.is_dir():
+            continue
+        for path in folder.glob("*.csv"):
+            if not is_discount_groups_csv(path):
+                continue
+            try:
+                key = str(path.resolve())
+            except OSError:
+                key = str(path)
+            found[key] = path
+    return _sort_discount_files(list(found.values()))
+
+
 def _matching_paths(folders: Sequence[Path], prefix: str) -> List[Path]:
     """Every CSV for this prefix, lowest priority first.
 
@@ -380,7 +437,7 @@ def _group_subgroups(
 
 def load_discount_type_tables(data_root: Path) -> Dict[str, Any]:
     folders = discount_types_dirs(data_root)
-    daily, group_files = _merge_by_day(_matching_paths(folders, "discount_groups_daily_"), "date")
+    daily, group_files = _merge_by_day(_group_files(folders), "date")
     totals, total_files = _merge_by_day(_matching_paths(folders, "shopify_daily_totals_"), "date")
     mapping_path = None
     for folder in folders:
