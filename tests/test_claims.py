@@ -20,33 +20,40 @@ def test_product_category_splits_swim_from_underwear():
 def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     payload = calculate_claims(Path("/tmp/does-not-exist-claims"))
     assert payload["available"] is True
-    assert payload["files_used"] == ["cin7_claims_orders_2026-09_to_2026-10.csv"]
+    assert set(payload["files_used"]) == {
+        "cin7_claims_orders_2026-09_to_2026-10.csv",
+        "cin7_claims_orders_2026-10.csv",
+    }
     totals = payload["totals"]
-    assert totals["orders"] == 37
-    assert totals["units"] == 67
-    assert totals["freight_sek"] == pytest.approx(5420.24, abs=0.05)
+    assert totals["orders"] == 65
+    assert totals["units"] == 227
+    assert totals["freight_sek"] == pytest.approx(9423.22, abs=0.05)
     assert totals["discount_sek"] == 0
     wholesale_sek = 66116.59
     assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
-    assert totals["product_cost_sek"] == pytest.approx(8566.85, abs=0.02)
+    assert totals["product_cost_sek"] == pytest.approx(15422.09, abs=0.02)
     assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
     assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
-    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(8566.86, abs=0.05)
+    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(15422.11, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
-    assert months["2026-10"]["orders"] == 2
+    assert months["2026-09"]["units"] == 65
+    assert months["2026-10"]["orders"] == 30
+    assert months["2026-10"]["units"] == 162
     assert payload["reasons"][0]["label"] == "Not specified in the Cin7 export"
-    assert payload["reasons"][0]["orders"] == 37
+    assert payload["reasons"][0]["orders"] == 65
     assert any("not Shopify" in note for note in payload["notes"])
     assert any("landed cost in SEK" in note for note in payload["notes"])
     assert any("2026 carrier price" in note for note in payload["notes"])
     assert any("SwissPost" in note for note in payload["notes"])
+    assert any("Fedex International Priority" in note for note in payload["notes"])
     landed_note = next(note for note in payload["notes"] if note.startswith("Landed cost matched"))
-    assert "49 of 53" in landed_note
+    assert "88 of 96" in landed_note
     assert "MTO016031801-9000-L" in landed_note
     assert "MTO016031801-9000-XXL" in landed_note
     assert "MUW002031601-9000-M" in landed_note
-    assert "5 units" in landed_note
+    assert "Shopping bag M" in landed_note
+    assert "112 units" in landed_note
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
     swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
     assert swisspost["freight_sek"] == 0
@@ -56,11 +63,12 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     )
     assert carrier_price_eur("Sweden", sweden["freight_method"])[0] == pytest.approx(10.068)
     assert sweden["freight_sek"] == pytest.approx(10.068 * 11.274, abs=0.01)
-    uk = next(row for row in payload["orders"] if row["country"] == "United Kingdom" and row["created"].startswith("2026-10"))
+    uk = by_ref["CCLA78-431"]
+    assert uk["created"].startswith("2026-10")
     assert uk["freight_sek"] == pytest.approx(9.9225 * 11.1765, abs=0.01)
-    assert by_ref[uk["order_ref"]]["freight_rate"].startswith("UK")
-    assert by_ref["CCLA78-431"]["product_cost_sek"] == pytest.approx(167.05, abs=0.01)
-    assert by_ref["CCLA78-431"]["product_cost_sek"] != pytest.approx(1458.17, abs=0.1)
+    assert uk["freight_rate"].startswith("UK")
+    assert uk["product_cost_sek"] == pytest.approx(167.05, abs=0.01)
+    assert uk["product_cost_sek"] != pytest.approx(1458.17, abs=0.1)
     blob = str(payload).lower()
     assert "gmail" not in blob
     assert "@" not in blob
@@ -91,10 +99,10 @@ def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
     assert "NOT-IN-FILE" in joined
     assert "ALSO-MISSING" in joined
     assert "CCLA78-500" in refs
-    assert payload["totals"]["orders"] == 38
+    assert payload["totals"]["orders"] == 66
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
-    assert months["2026-10"]["orders"] == 2
+    assert months["2026-10"]["orders"] == 30
     assert months["2026-11"]["orders"] == 1
 
 
