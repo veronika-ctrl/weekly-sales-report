@@ -339,16 +339,11 @@ def test_excel_qlik_reads_requested_columns_with_calamine(tmp_path: Path, monkey
         }
     ).to_excel(qlik_dir / "Qlik_W42.xlsx", index=False)
 
-    engines = []
-    real = pd.read_excel
+    def refuse_full_sheet(*_args, **_kwargs):
+        raise AssertionError("full-sheet pandas.read_excel is disabled")
 
-    def spy(*args, **kwargs):
-        engines.append(kwargs.get("engine"))
-        assert kwargs.get("usecols") is not None
-        return real(*args, **kwargs)
-
-    monkeypatch.setattr("weekly_report.src.adapters.qlik.pd.read_excel", spy)
+    monkeypatch.setattr("weekly_report.src.adapters.qlik.pd.read_excel", refuse_full_sheet)
     rows = calculate_women_category_sales_for_weeks("2026-42", 1, tmp_path)
-    assert engines[0] == "calamine"
     assert rows[0]["week"] == "2026-42"
     assert rows[0]["categories"] == {"TOPS": 80.0}
+    assert list((tmp_path / "cache" / "qlik-columns").glob("*.pkl"))

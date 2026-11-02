@@ -327,6 +327,98 @@ def test_api_startup_does_not_read_the_qlik_workbook():
     assert "read_excel" not in window
 
 
+def _category_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2026-10-19"]),
+            "iso_week": ["2026-43"],
+            "Sales Channel": ["Online"],
+            "Gender": ["WOMEN"],
+            "Product Category": ["TOPS"],
+            "Gross Revenue": [10.0],
+        }
+    )
+
+
+def _probe_blocked_during(load) -> None:
+    saw: list[bool] = []
+
+    def wrapped(path: Path):
+        def other() -> None:
+            acquired = qlik.qlik_resident_section().acquire(timeout=0.05)
+            saw.append(acquired)
+            if acquired:
+                qlik.qlik_resident_section().release()
+
+        probe = threading.Thread(target=other)
+        probe.start()
+        probe.join(timeout=1)
+        return load(path)
+
+    return wrapped, saw
+
+
+def test_gender_men_and_mtd_share_the_resident_lock(monkeypatch):
+    """A second report page must wait while the first Qlik frame is still alive."""
+    from weekly_report.src.metrics import gender_sales, men_category_sales
+
+    assert (
+        gender_sales.qlik_resident_section()
+        is men_category_sales.qlik_resident_section()
+        is table1.qlik.qlik_resident_section()
+    )
+    gender_sales._cache.clear_memory()
+    men_category_sales._cache.clear_memory()
+
+    gender_wrap, gender_saw = _probe_blocked_during(lambda _path: _category_frame())
+    men_wrap, men_saw = _probe_blocked_during(lambda _path: _category_frame())
+    monkeypatch.setattr(gender_sales, "load_category_qlik", gender_wrap)
+    monkeypatch.setattr(men_category_sales, "load_category_qlik", men_wrap)
+    gender_sales.calculate_gender_sales_for_weeks("2026-43", 1, Path("/tmp/no-gender-lock-3fcc"))
+    men_category_sales.calculate_men_category_sales_for_weeks("2026-43", 1, Path("/tmp/no-men-lock-3fcc"))
+    assert gender_saw == [False]
+    assert men_saw == [False]
+
+    started = threading.Event()
+    release = threading.Event()
+    men_entered = threading.Event()
+
+    def hold_gender(_path: Path) -> pd.DataFrame:
+        started.set()
+        assert release.wait(timeout=2)
+        return _category_frame()
+
+    def note_men(_path: Path) -> pd.DataFrame:
+        men_entered.set()
+        return _category_frame()
+
+    monkeypatch.setattr(gender_sales, "load_category_qlik", hold_gender)
+    monkeypatch.setattr(men_category_sales, "load_category_qlik", note_men)
+    gender_sales._cache.clear_memory()
+    men_category_sales._cache.clear_memory()
+    holder = threading.Thread(
+        target=lambda: gender_sales.calculate_gender_sales_for_weeks(
+            "2026-43", 1, Path("/tmp/no-gender-hold-3fcc")
+        )
+    )
+    holder.start()
+    assert started.wait(timeout=2)
+    waiter = threading.Thread(
+        target=lambda: men_category_sales.calculate_men_category_sales_for_weeks(
+            "2026-43", 1, Path("/tmp/no-men-wait-3fcc")
+        )
+    )
+    waiter.start()
+    assert men_entered.wait(timeout=0.5) is False
+    release.set()
+    holder.join(timeout=2)
+    waiter.join(timeout=2)
+    assert men_entered.is_set()
+    acquired = qlik.qlik_resident_section().acquire(timeout=0.05)
+    assert acquired is True
+    qlik.qlik_resident_section().release()
+
+
 def test_summary_recalculates_markets_only_on_refresh():
     page = Path(__file__).resolve().parents[1] / "frontend" / "contexts" / "DataCacheContext.tsx"
     text = page.read_text()
