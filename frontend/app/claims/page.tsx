@@ -5,6 +5,11 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import ReportLoadState from '@/components/ReportLoadState'
 import { getClaims, hasBackend, type ClaimsBucket, type ClaimsResponse } from '@/lib/api'
+import {
+  hasNonZeroAmount,
+  visibleClaimsTableColumns,
+  type ClaimsTableColumn,
+} from '@/lib/claims-columns'
 
 function sek(value: number | null | undefined): string {
   if (value == null || Number.isNaN(Number(value))) return '—'
@@ -30,6 +35,14 @@ function Kpi({ title, value, hint }: { title: string; value: string; hint?: stri
   )
 }
 
+function moneyCell(column: ClaimsTableColumn, row: ClaimsBucket): string {
+  if (column.id === 'orders') return count(row.orders)
+  if (column.id === 'units') return count(row.units)
+  if (column.id === 'product_cost_sek') return sek(row.product_cost_sek)
+  if (column.id === 'freight_sek') return sek(row.freight_sek)
+  return sek(row.discount_sek)
+}
+
 function MoneyTable({
   title,
   description,
@@ -41,6 +54,7 @@ function MoneyTable({
   rows: ClaimsBucket[]
   firstColumn: string
 }) {
+  const columns = visibleClaimsTableColumns(rows)
   return (
     <Card>
       <CardHeader>
@@ -52,22 +66,28 @@ function MoneyTable({
           <thead>
             <tr className="text-left text-muted-foreground border-b">
               <th className="py-2 pr-3">{firstColumn}</th>
-              <th className="py-2 pr-3 text-right">Claims</th>
-              <th className="py-2 pr-3 text-right">Units</th>
-              <th className="py-2 pr-3 text-right">Landed cost</th>
-              <th className="py-2 pr-3 text-right">Shipping</th>
-              <th className="py-2 text-right">Extra discount</th>
+              {columns.map((column, index) => (
+                <th
+                  key={column.id}
+                  className={`py-2 text-right${index < columns.length - 1 ? ' pr-3' : ''}`}
+                >
+                  {column.header}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key || row.label} className="border-b last:border-0">
                 <td className="py-2 pr-3">{row.label}</td>
-                <td className="py-2 pr-3 text-right">{count(row.orders)}</td>
-                <td className="py-2 pr-3 text-right">{count(row.units)}</td>
-                <td className="py-2 pr-3 text-right">{sek(row.product_cost_sek)}</td>
-                <td className="py-2 pr-3 text-right">{sek(row.freight_sek)}</td>
-                <td className="py-2 text-right">{sek(row.discount_sek)}</td>
+                {columns.map((column, index) => (
+                  <td
+                    key={column.id}
+                    className={`py-2 text-right${index < columns.length - 1 ? ' pr-3' : ''}`}
+                  >
+                    {moneyCell(column, row)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -135,6 +155,10 @@ export default function ClaimsPage() {
   }
 
   const totals = data?.totals
+  const showShippingKpi = hasNonZeroAmount([totals], 'freight_sek')
+  const showDiscountKpi = hasNonZeroAmount([totals], 'discount_sek')
+  const showOrderShipping = hasNonZeroAmount(data?.orders ?? [], 'freight_sek')
+  const showOrderDiscount = hasNonZeroAmount(data?.orders ?? [], 'discount_sek')
 
   return (
     <div className="space-y-8">
@@ -170,11 +194,19 @@ export default function ClaimsPage() {
       ) : null}
 
       {totals && data?.available ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
+            showDiscountKpi && showShippingKpi ? 'xl:grid-cols-4' : 'xl:grid-cols-3'
+          }`}
+        >
           <Kpi title="Claim orders" value={count(totals.orders)} hint={`${count(totals.units)} replacement units`} />
           <Kpi title="Landed cost" value={sek(totals.product_cost_sek)} hint="Replacement cost in SEK" />
-          <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
-          <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
+          {showShippingKpi ? (
+            <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
+          ) : null}
+          {showDiscountKpi ? (
+            <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
+          ) : null}
         </div>
       ) : null}
 
@@ -223,9 +255,17 @@ export default function ClaimsPage() {
                   <th className="py-2 pr-3">Type</th>
                   <th className="py-2 pr-3">Shipping</th>
                   <th className="py-2 pr-3 text-right">Units</th>
-                  <th className="py-2 pr-3 text-right">Landed cost</th>
-                  <th className="py-2 pr-3 text-right">Shipping cost</th>
-                  <th className="py-2 text-right">Discount</th>
+                  <th
+                    className={`py-2 text-right${showOrderShipping || showOrderDiscount ? ' pr-3' : ''}`}
+                  >
+                    Landed cost
+                  </th>
+                  {showOrderShipping ? (
+                    <th className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>
+                      Shipping cost
+                    </th>
+                  ) : null}
+                  {showOrderDiscount ? <th className="py-2 text-right">Discount</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -240,9 +280,19 @@ export default function ClaimsPage() {
                     <td className="py-2 pr-3">{row.reason}</td>
                     <td className="py-2 pr-3">{row.freight_method}</td>
                     <td className="py-2 pr-3 text-right">{count(row.units)}</td>
-                    <td className="py-2 pr-3 text-right">{sek(row.product_cost_sek)}</td>
-                    <td className="py-2 pr-3 text-right">{sek(row.freight_sek)}</td>
-                    <td className="py-2 text-right">{sek(row.discount_sek)}</td>
+                    <td
+                      className={`py-2 text-right${showOrderShipping || showOrderDiscount ? ' pr-3' : ''}`}
+                    >
+                      {sek(row.product_cost_sek)}
+                    </td>
+                    {showOrderShipping ? (
+                      <td className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>
+                        {sek(row.freight_sek)}
+                      </td>
+                    ) : null}
+                    {showOrderDiscount ? (
+                      <td className="py-2 text-right">{sek(row.discount_sek)}</td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
