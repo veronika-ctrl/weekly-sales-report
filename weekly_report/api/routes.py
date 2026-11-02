@@ -104,9 +104,12 @@ from weekly_report.src.storage.uploads import (
 from weekly_report.src.storage.disk import (
     DISK_FULL_DETAIL,
     delete_ignored_pricing_uploads,
+    delete_old_weekly_bulk,
     delete_stale_weeks_36_to_40,
     disk_usage_payload,
+    ensure_upload_space,
     is_disk_full_error,
+    list_qlik_weeks,
 )
 
 
@@ -2653,11 +2656,13 @@ async def get_weeks_with_uploads():
         from weekly_report.src.storage.uploads import list_weeks_with_uploads
 
         config = load_config()
-        weeks = list_weeks_with_uploads(Path(config.data_root))
-        return {"weeks": weeks}
+        root = Path(config.data_root)
+        weeks = list_weeks_with_uploads(root)
+        qlik_weeks = list_qlik_weeks(root)
+        return {"weeks": weeks, "qlik_weeks": qlik_weeks, "latest_qlik_week": qlik_weeks[0] if qlik_weeks else None}
     except Exception as e:
         logger.warning(f"weeks-with-uploads failed: {e}")
-        return {"weeks": []}
+        return {"weeks": [], "qlik_weeks": [], "latest_qlik_week": None}
 
 
 @app.get("/api/disk-usage")
@@ -2702,6 +2707,23 @@ async def post_delete_weeks_36_to_40():
     except Exception as e:
         logger.error(f"delete-weeks-36-to-40 failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete weeks 2026-36 to 2026-40")
+
+
+@app.post("/api/disk/delete-old-weekly-files")
+async def post_delete_old_weekly_files():
+    """Keep the last 2 ISO weeks of Qlik/DEMA/Shopify. History files stay in their folders."""
+    try:
+        config = load_config()
+        result = delete_old_weekly_bulk(Path(config.data_root))
+        result["disk"] = disk_usage_payload(Path(config.data_root))
+        logger.info(
+            f"Deleted {result['count']} old weekly files, freed {result['bytes_freed']} bytes, "
+            f"kept {result.get('kept_weeks')}"
+        )
+        return result
+    except Exception as e:
+        logger.error(f"delete-old-weekly-files failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete old weekly files")
 
 
 @app.get("/api/debug/markets")
@@ -3234,6 +3256,15 @@ def get_gender_sales(
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        logger.warning(f"No Qlik file for gender-sales {base_week}: {e}")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No Qlik file for week {base_week}. In Settings, choose a week marked ✓ "
+                "(the last complete week with files) or upload Qlik for this week, then open reports."
+            ),
+        )
     except Exception as e:
         import traceback
         logger.error(f"Error getting Gender Sales metrics for {base_week}: {e}")
@@ -4363,6 +4394,13 @@ async def upload_file(
             target_dir = Path(config.data_root) / "claims"
         else:
             target_dir = config.raw_data_path / file_type
+        if file_type in {"qlik", "dema_spend", "dema_gm2", "shopify"}:
+            space = ensure_upload_space(Path(config.data_root), extra_keep=(week,))
+            if space.get("pruned"):
+                logger.info(
+                    f"Freed disk before {file_type} upload for {week}: "
+                    f"{space.get('bytes_freed')} bytes, kept {space.get('kept_weeks')}"
+                )
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
         bytes_written = await persist_upload_file(file, target_path)
 

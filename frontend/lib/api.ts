@@ -1009,16 +1009,40 @@ export interface BatchMetricsResponse {
 /** Same order of magnitude as Table 1: batch recomputes all metrics from raw files. */
 const BATCH_METRICS_TIMEOUT_MS = 600_000
 
-export async function getWeeksWithUploads(): Promise<string[]> {
-  if (!hasBackend) return []
+export type UploadWeeksInfo = {
+  weeks: string[]
+  qlikWeeks: string[]
+  latestQlikWeek: string | null
+}
+
+export async function getUploadWeeksInfo(): Promise<UploadWeeksInfo> {
+  const empty: UploadWeeksInfo = { weeks: [], qlikWeeks: [], latestQlikWeek: null }
+  if (!hasBackend) return empty
   try {
     const response = await fetchWithTimeout(`${API_BASE_URL}/api/weeks-with-uploads`)
-    if (!response.ok) return []
-    const body = (await response.json()) as { weeks?: string[] }
-    return Array.isArray(body.weeks) ? body.weeks.filter((w) => typeof w === 'string') : []
+    if (!response.ok) return empty
+    const body = (await response.json()) as {
+      weeks?: string[]
+      qlik_weeks?: string[]
+      latest_qlik_week?: string | null
+    }
+    const weeks = Array.isArray(body.weeks) ? body.weeks.filter((w) => typeof w === 'string') : []
+    const qlikWeeks = Array.isArray(body.qlik_weeks)
+      ? body.qlik_weeks.filter((w) => typeof w === 'string')
+      : weeks
+    return {
+      weeks,
+      qlikWeeks,
+      latestQlikWeek: body.latest_qlik_week || qlikWeeks[0] || weeks[0] || null,
+    }
   } catch {
-    return []
+    return empty
   }
+}
+
+export async function getWeeksWithUploads(): Promise<string[]> {
+  const info = await getUploadWeeksInfo()
+  return info.weeks
 }
 
 export type DiskUsageFile = {
@@ -1039,6 +1063,13 @@ export interface DiskUsageResponse {
   stale_weeks?: string[]
   stale_week_bytes?: number
   stale_week_count?: number
+  old_weeks?: string[]
+  old_week_bytes?: number
+  old_week_count?: number
+  kept_weeks?: string[]
+  qlik_weeks?: string[]
+  latest_qlik_week?: string | null
+  cache_bytes?: number
   near_full: boolean
   largest: DiskUsageFile[]
   ignored_files: DiskUsageFile[]
@@ -1076,6 +1107,28 @@ export async function deleteWeeks36To40(): Promise<{
 }> {
   const response = await fetchWithTimeout(
     `${API_BASE_URL}/api/disk/delete-weeks-36-to-40`,
+    { method: 'POST' },
+    180_000,
+  )
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(describeHttpError(response.status, t))
+  }
+  return response.json()
+}
+
+export async function deleteOldWeeklyFiles(): Promise<{
+  deleted: string[]
+  moved: string[]
+  count: number
+  bytes_freed: number
+  kept_weeks: string[]
+  shelter_week: string
+  errors: string[]
+  disk: DiskUsageResponse
+}> {
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/disk/delete-old-weekly-files`,
     { method: 'POST' },
     180_000,
   )
