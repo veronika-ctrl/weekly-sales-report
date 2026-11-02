@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from weekly_report.src.metrics.claims import calculate_claims, product_category
+from weekly_report.src.metrics.claims import calculate_claims, carrier_price_eur, product_category
 
 
 def test_product_category_splits_swim_from_underwear():
@@ -24,17 +24,30 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     totals = payload["totals"]
     assert totals["orders"] == 37
     assert totals["units"] == 67
-    assert totals["freight_sek"] == 0
+    assert totals["freight_sek"] == pytest.approx(5420.24, abs=0.05)
     assert totals["discount_sek"] == 0
     assert totals["product_cost_sek"] == pytest.approx(66116.57, abs=0.05)
-    assert totals["recorded_cost_sek"] == totals["product_cost_sek"]
+    assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-10"]["orders"] == 2
     assert payload["reasons"][0]["label"] == "Not specified in the Cin7 export"
     assert payload["reasons"][0]["orders"] == 37
     assert any("not Shopify" in note for note in payload["notes"])
-    assert any("Freight cost is 0" in note for note in payload["notes"])
+    assert any("2026 carrier price" in note for note in payload["notes"])
+    assert any("SwissPost" in note for note in payload["notes"])
+    by_ref = {row["order_ref"]: row for row in payload["orders"]}
+    swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
+    assert swisspost["freight_sek"] == 0
+    sweden = next(
+        row for row in payload["orders"]
+        if row["country"] == "Sweden" and "Service Point" in row["freight_method"] and row["created"].startswith("2026-09")
+    )
+    assert carrier_price_eur("Sweden", sweden["freight_method"])[0] == pytest.approx(10.068)
+    assert sweden["freight_sek"] == pytest.approx(10.068 * 11.274, abs=0.01)
+    uk = next(row for row in payload["orders"] if row["country"] == "United Kingdom" and row["created"].startswith("2026-10"))
+    assert uk["freight_sek"] == pytest.approx(9.9225 * 11.1765, abs=0.01)
+    assert by_ref[uk["order_ref"]]["freight_rate"].startswith("UK")
     assert "gmail" not in str(payload["orders"])
 
 

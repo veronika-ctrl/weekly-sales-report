@@ -164,7 +164,7 @@ export default function ClaimsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <Kpi title="Claim orders" value={count(totals.orders)} hint={`${count(totals.units)} replacement units`} />
           <Kpi title="Replacement product cost" value={sek(totals.product_cost_sek)} hint="Wholesale value, SEK" />
-          <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="Freight on the Cin7 order" />
+          <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
           <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
         </div>
       ) : null}

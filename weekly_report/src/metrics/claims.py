@@ -20,6 +20,16 @@ NOTE_COST = (
     "Replacement cost is the wholesale price on the order, in Cin7 local currency (SEK)."
 )
 
+# Carrier price we pay, from Shipping costs 2026, sheet "Delivery charges_pricing",
+# column "Pricelist 2026 inkl DMT EURO". Amounts are EUR before SEK conversion.
+# ECB EUR→SEK on the 15th of the claim month (Frankfurter). Other months use October.
+_EUR_SEK_BY_MONTH = {
+    "2026-09": 11.274,
+    "2026-10": 11.1765,
+}
+_EUR_SEK_DEFAULT = 11.1765
+_MAILBOX_EUR = 3.15  # DHL sheet: small packet up to 1 kg. Not on the country price list.
+
 _REASON_HEADERS = (
     "claim type",
     "claim reason",
@@ -142,6 +152,86 @@ def _parse_created(value: Any) -> Optional[datetime]:
     return parsed.to_pydatetime()
 
 
+def _eur_to_sek(month: str) -> float:
+    return _EUR_SEK_BY_MONTH.get(month, _EUR_SEK_DEFAULT)
+
+
+def _norm_shipping(value: str) -> str:
+    text = value.lower().replace("&", " and ")
+    for char in "-/(),":
+        text = text.replace(char, " ")
+    return " ".join(text.split())
+
+
+def carrier_price_eur(country: str, freight_name: str) -> Optional[tuple[float, str]]:
+    """2026 price we pay for this shipping name and destination, in EUR.
+
+    Returns None when the price list has no row for that service.
+    """
+    place = _norm_shipping(country)
+    name = _norm_shipping(freight_name)
+    if not name:
+        return None
+
+    def is_uk() -> bool:
+        return place in {"united kingdom", "uk", "great britain"}
+
+    def is_us() -> bool:
+        return place in {"united states", "usa", "united states of america"}
+
+    def is_sweden() -> bool:
+        return place == "sweden"
+
+    def is_germany() -> bool:
+        return place == "germany"
+
+    def is_nl_fr() -> bool:
+        return place in {"netherlands", "france", "the netherlands"}
+
+    def is_switzerland() -> bool:
+        return place == "switzerland"
+
+    if "fedex" in name and "connect plus" in name:
+        if is_uk():
+            return 9.9225, "UK · FedEx International Connect Plus DDP"
+        if is_us():
+            return 24.251, "US · FedEx International Connect Plus DDP"
+        if place == "canada":
+            return 26.433, "Canada · FedEx International Connect Plus DDP"
+        return None
+    if "mailbox" in name:
+        return _MAILBOX_EUR, "Germany · DHL small packet up to 1 kg"
+    if "postnord" in name and "service" in name and is_sweden():
+        return 10.068, "Sweden · DHL Paket / PostNord service point"
+    if "postnord" in name and "home" in name and is_sweden():
+        return 10.068, "Sweden · DHL Paket / PostNord home delivery"
+    if ("poste italiane" in name or "local carrier" in name or "ecommerce" in name) and "home" in name:
+        if is_nl_fr():
+            return 9.756, "France / Netherlands · DHL Paket home delivery"
+        return 16.92, "Other EU · DHL Paket home delivery"
+    if "ecommerce" in name and "service" in name:
+        if is_nl_fr():
+            return 9.756, "France / Netherlands · DHL Paket home delivery"
+        return None
+    if "postnord" in name and "home" in name:
+        return 16.92, "Other EU · DHL Paket home delivery"
+    if name.startswith("dhl paket") and "home" in name and "international" not in name and is_germany():
+        return 6.36, "Germany · DHL Paket home delivery"
+    if "express" in name and "home" in name:
+        if is_sweden():
+            return 20.4605, "Sweden · DHL Express home delivery"
+        if is_germany():
+            return 15.16245, "Germany · DHL Express home delivery"
+        if is_nl_fr():
+            return 17.0459, "France / Netherlands · DHL Express home delivery"
+        if is_switzerland():
+            return 24.39, "Switzerland · DHL Express DAP home delivery"
+        return 20.596, "Other EU · DHL Express home delivery"
+    if "swisspost" in name or "swiss post" in name:
+        return None
+    return None
+
+
 def product_category(name: str) -> str:
     text = name.lower()
     if "sock" in text:
@@ -261,6 +351,15 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             _num(row.get("Item Price (Local Currency)")) * _num(row.get("Item Qty")) for _, row in group.iterrows()
         )
         freight = _num(first.get("Freight Cost (Local Currency)"))
+        freight_name = _text(first.get("Freight Description")) or _text(first.get("Carrier"))
+        country = _text(first.get("Delivery Country")) or "Unknown country"
+        priced = None
+        if freight <= 0:
+            created_for_rate = _parse_created(first.get("Created Date"))
+            month_for_rate = created_for_rate.strftime("%Y-%m") if created_for_rate else ""
+            priced = carrier_price_eur(country, freight_name)
+            if priced is not None:
+                freight = priced[0] * _eur_to_sek(month_for_rate)
         discount = _num(first.get("Discount Total (Local Currency)")) + sum(
             _num(row.get("Item Total Discount (Local Currency)")) for _, row in group.iterrows()
         )
@@ -272,8 +371,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             reason_specified = True
         else:
             reason = _UNSPECIFIED
-        country = _text(first.get("Delivery Country")) or "Unknown country"
-        carrier = _text(first.get("Freight Description")) or _text(first.get("Carrier")) or "Unknown carrier"
+        carrier = freight_name or "Unknown carrier"
         item_names = []
         cats = set()
         for _, row in group.iterrows():
@@ -302,6 +400,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             "units": int(round(units)),
             "product_cost_sek": round(product, 2),
             "freight_sek": round(freight, 2),
+            "freight_rate": priced[1] if priced is not None else "",
             "discount_sek": round(discount, 2),
             "surcharge_sek": round(surcharge, 2),
             "items": "; ".join(item_names),
@@ -354,10 +453,25 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             "This export has no claim reason. Product type, country and shipping method are shown instead. "
             "Add a Claim Type column, or fill Order Tags, to split the claims by reason."
         )
-    if freight_cost == 0:
+    priced_orders = sum(1 for row in orders if row.get("freight_rate"))
+    missing_shipping = [
+        f"{row['order_ref']} ({row['country']}, {row['freight_method']})"
+        for row in orders
+        if row["freight_sek"] == 0
+    ]
+    if priced_orders:
         notes.append(
-            "Freight cost is 0 on every order, so the shipping loss is not in this file. "
-            "The carrier is listed, but Cin7 has no amount for it."
+            "Shipping is the 2026 carrier price we pay (pricelist including DMT), matched on the shipping name and destination. "
+            "Cin7 has no freight amount. Euro prices are converted at the ECB rate for the 15th of the claim month: "
+            "11.274 SEK per EUR in September 2026 and 11.1765 in October 2026."
+        )
+    if missing_shipping:
+        notes.append(
+            "No 2026 price for: " + "; ".join(missing_shipping) + "."
+        )
+    elif freight_cost == 0:
+        notes.append(
+            "Freight cost is 0 on every order, so the shipping loss is not in this file."
         )
     if discount_cost == 0:
         notes.append("No extra discount is attached to these orders in this file.")
