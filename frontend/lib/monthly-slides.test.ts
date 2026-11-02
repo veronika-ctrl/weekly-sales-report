@@ -22,10 +22,14 @@ describe('monthly women and top-product slides', () => {
     const api = readFileSync(join(here, 'api.ts'), 'utf8')
     assert.match(page, /getWomenMonthly/)
     assert.match(page, /Women’s monthly/)
+    assert.match(page, /onRetry/)
+    assert.match(page, /do not need to re-upload/)
     assert.doesNotMatch(page, /loadAllData/)
     const start = api.indexOf('export async function getWomenMonthly')
     assert.ok(start >= 0)
-    assert.match(api.slice(start, start + 500), /\/api\/women-monthly/)
+    const body = api.slice(start, start + 500)
+    assert.match(body, /\/api\/women-monthly/)
+    assert.match(body, /fetchJsonWithHealthRetry/)
   })
 
   it('top products monthly page fetches /api/top-products-monthly itself', () => {
@@ -33,10 +37,25 @@ describe('monthly women and top-product slides', () => {
     const api = readFileSync(join(here, 'api.ts'), 'utf8')
     assert.match(page, /getTopProductsMonthly/)
     assert.match(page, /Top selling products monthly/)
+    assert.match(page, /onRetry/)
+    assert.match(page, /do not need to re-upload/)
     assert.doesNotMatch(page, /loadAllData/)
     const start = api.indexOf('export async function getTopProductsMonthly')
     assert.ok(start >= 0)
-    assert.match(api.slice(start, start + 700), /\/api\/top-products-monthly/)
+    const body = api.slice(start, start + 700)
+    assert.match(body, /\/api\/top-products-monthly/)
+    assert.match(body, /fetchJsonWithHealthRetry/)
+  })
+
+  it('health-retry helper pings /api/health for 90s on Failed to fetch / 502', () => {
+    const api = readFileSync(join(here, 'api.ts'), 'utf8')
+    assert.match(api, /TRANSIENT_RETRY_WINDOW_MS = 90_000/)
+    const start = api.indexOf('async function fetchJsonWithHealthRetry')
+    assert.ok(start >= 0)
+    const body = api.slice(start, start + 1200)
+    assert.match(body, /isTransientApiError/)
+    assert.match(body, /\/api\/health/)
+    assert.match(body, /TRANSIENT_RETRY_WINDOW_MS/)
   })
 
   it('adds both slides to the weekly sales sidebar', () => {

@@ -5,7 +5,7 @@ import hashlib
 import struct
 import threading
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -355,18 +355,28 @@ def _selected_columns(header: Iterable[object], columns: Sequence[str]) -> List[
     return chosen
 
 
-def _frame_from_selected_rows(header: Iterable[object], rows: Iterable[object], columns: Sequence[str]) -> pd.DataFrame:
+def _frame_from_selected_rows(
+    header: Iterable[object],
+    rows: Iterable[object],
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
     """Keep only the requested cells. The rest of each row is discarded immediately."""
     chosen = _selected_columns(header, columns)
     if not chosen:
         return pd.DataFrame()
     buckets: Dict[str, List[object]] = {name: [] for name, _index in chosen}
     for row in rows:
+        values: Dict[str, object] = {}
         for name, index in chosen:
             if row is None or index >= len(row):
-                buckets[name].append(None)
+                values[name] = None
             else:
-                buckets[name].append(row[index])
+                values[name] = row[index]
+        if keep_row is not None and not keep_row(values):
+            continue
+        for name, value in values.items():
+            buckets[name].append(value)
     frame = pd.DataFrame(buckets, columns=[name for name, _index in chosen])
     del buckets
     objects = [col for col in frame.columns if frame[col].dtype == object]
@@ -375,7 +385,11 @@ def _frame_from_selected_rows(header: Iterable[object], rows: Iterable[object], 
     return frame
 
 
-def _stream_calamine_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+def _stream_calamine_columns(
+    path: Path,
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
     """Stream a sheet through calamine and retain only the requested columns.
 
     pandas' calamine engine calls ``to_python()`` on the whole sheet before
@@ -390,14 +404,18 @@ def _stream_calamine_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame
         header = next(row_iter, None)
         if header is None:
             return pd.DataFrame()
-        return _frame_from_selected_rows(header, row_iter, columns)
+        return _frame_from_selected_rows(header, row_iter, columns, keep_row=keep_row)
     finally:
         close = getattr(workbook, "close", None)
         if close is not None:
             close()
 
 
-def _stream_openpyxl_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+def _stream_openpyxl_columns(
+    path: Path,
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
     """Stream with openpyxl's read-only mode when calamine is unavailable."""
     from openpyxl import load_workbook
 
@@ -408,12 +426,16 @@ def _stream_openpyxl_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame
         header = next(row_iter, None)
         if header is None:
             return pd.DataFrame()
-        return _frame_from_selected_rows(header, row_iter, columns)
+        return _frame_from_selected_rows(header, row_iter, columns, keep_row=keep_row)
     finally:
         workbook.close()
 
 
-def _read_excel_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+def _read_excel_columns(
+    path: Path,
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
     """Read an Excel export by column.
 
     The live week file is a ~100MB xlsx. Building the full sheet in Python
@@ -426,7 +448,7 @@ def _read_excel_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
         ("openpyxl", _stream_openpyxl_columns),
     ):
         try:
-            frame = reader(path, columns)
+            frame = reader(path, columns, keep_row=keep_row)
         except Exception as exc:
             last_error = exc
             logger.warning(f"Column Excel read via {engine} failed for {path.name}: {exc}")
@@ -479,16 +501,37 @@ def _write_projected_cache(path: Path, frame: pd.DataFrame) -> None:
         logger.warning(f"Qlik column cache not written ({exc})")
 
 
-def _load_excel_projected(raw_data_path: Path, path: Path, columns: Sequence[str]) -> pd.DataFrame:
-    """Return the slim frame, from disk when this projection was already saved."""
-    cache_path = _projected_cache_file(raw_data_path, path, columns)
-    cached = _read_projected_cache(cache_path)
-    if cached is not None:
-        logger.info(f"Qlik column cache hit {path.name}: {cached.shape}")
-        return cached
-    frame = _read_excel_columns(path, columns)
-    _write_projected_cache(cache_path, frame)
-    return frame
+def _filter_frame_rows(
+    frame: pd.DataFrame,
+    keep_row: Optional[Callable[[Dict[str, object]], bool]],
+) -> pd.DataFrame:
+    if keep_row is None or frame is None or frame.empty:
+        return frame
+    mask = [bool(keep_row(row)) for row in frame.to_dict(orient="records")]
+    return frame.loc[mask].copy()
+
+
+def _load_excel_projected(
+    raw_data_path: Path,
+    path: Path,
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
+    """Return the slim frame, from disk when this projection was already saved.
+
+    Row filters skip the unfiltered pickle — a 9-column all-history cache is
+    what restarts the 2GB instance on Women’s monthly.
+    """
+    if keep_row is None:
+        cache_path = _projected_cache_file(raw_data_path, path, columns)
+        cached = _read_projected_cache(cache_path)
+        if cached is not None:
+            logger.info(f"Qlik column cache hit {path.name}: {cached.shape}")
+            return cached
+        frame = _read_excel_columns(path, columns)
+        _write_projected_cache(cache_path, frame)
+        return frame
+    return _read_excel_columns(path, columns, keep_row=keep_row)
 
 
 def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
@@ -550,7 +593,11 @@ def _attach_iso_week(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFrame:
+def load_qlik_columns(
+    raw_data_path: Path,
+    columns: Sequence[str],
+    keep_row: Optional[Callable[[Dict[str, object]], bool]] = None,
+) -> pd.DataFrame:
     """Load selected Qlik columns for one week folder.
 
     Parquet and CSV read only those columns. Excel is streamed to those columns
@@ -559,6 +606,9 @@ def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFra
     load Dema or Shopify. Drops any cached full raw week first so this read
     does not sit beside it. Callers that keep the frame must already hold
     ``qlik_resident_section`` so a second page waits.
+
+    ``keep_row`` drops rows while streaming Excel so Women’s monthly does not
+    materialize Product/Color for retail and out-of-window dates.
     """
     with _qlik_read_lock:
         raw_data_cache.clear()
@@ -568,7 +618,7 @@ def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFra
         if parquet_files:
             path = parquet_files[0]
             logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(columns)}")
-            frame = _read_parquet_columns(path, columns)
+            frame = _filter_frame_rows(_read_parquet_columns(path, columns), keep_row)
         else:
             files = list(source.glob("*.csv")) + list(source.glob("*.xlsx"))
             if not files:
@@ -577,9 +627,9 @@ def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFra
                     f"Expected CSV/Excel files in: {source}/*.csv or {source}/*.xlsx"
                 )
             frames = [
-                _load_excel_projected(raw_data_path, path, columns)
+                _load_excel_projected(raw_data_path, path, columns, keep_row=keep_row)
                 if path.suffix.lower() == ".xlsx"
-                else _read_csv_columns(path, columns)
+                else _filter_frame_rows(_read_csv_columns(path, columns), keep_row)
                 for path in files
             ]
             frame = frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)

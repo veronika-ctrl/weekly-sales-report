@@ -67,8 +67,8 @@ export default function ProductsGenderMonthlyPage() {
               empty={empty}
               onRetry={() => setReloadToken((n) => n + 1)}
               loadingTitle="Loading monthly top selling products"
-              loadingHint="Reading Qlik for the last completed month vs last year."
-              emptyHint="Upload the Qlik export in Settings for this week, then open Top selling products monthly again."
+              loadingHint="Reading Qlik for the last completed month vs last year. If the API is restarting, this page retries automatically. Uploaded files stay on the server — you do not need to re-upload."
+              emptyHint="No Qlik rows for the last completed month on the latest uploaded week. Files already on the server stay there."
             />
           ) : (
             <div className="space-y-6">

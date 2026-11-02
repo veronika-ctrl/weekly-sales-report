@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
+from weekly_report.src.adapters import qlik
+from weekly_report.src.metrics import monthly_women_and_products as monthly_mod
 from weekly_report.src.metrics.monthly_women_and_products import (
     calculate_top_products_monthly,
     calculate_women_monthly,
     last_completed_calendar_month,
     month_range_for_week,
     prior_months,
+    resolve_qlik_week_for_monthly,
 )
 from weekly_report.src.periods.calculator import get_week_date_range
 
@@ -96,3 +100,70 @@ def test_top_products_monthly_men_yoy(tmp_path):
     assert classic["last_year_gross_revenue"] == 5000.0
     assert classic["yoy_pct"] == 60.0
     assert payload["grand_total"]["yoy_pct"] == 60.0
+
+
+def test_missing_iso_week_uses_latest_qlik_same_completed_month(tmp_path):
+    data_root = _qlik_week_dir(tmp_path)
+    assert resolve_qlik_week_for_monthly("2026-43", data_root) == "2026-42"
+    payload = calculate_women_monthly("2026-43", data_root, months=3, top_n=10)
+    assert payload["focus_month"] == "2026-09"
+    assert payload["headline"]["gross_revenue"] == 7000.0
+    men = calculate_top_products_monthly("2026-43", data_root, gender_filter="men", months=3, top_n=10)
+    assert men["products"][0]["product"] == "Classic Trouser"
+
+
+def test_current_iso_week_without_qlik_does_not_raise(tmp_path):
+    data_root = _qlik_week_dir(tmp_path)
+    payload = calculate_women_monthly("2026-45", data_root, months=3, top_n=10)
+    assert payload["focus_month"] == "2026-10"
+    assert payload["base_week"] == "2026-45"
+    assert "headline" in payload
+
+
+def test_monthly_excel_never_loads_the_full_sheet(tmp_path, monkeypatch):
+    week = tmp_path / "raw" / "2026-42"
+    qlik_dir = week / "qlik"
+    qlik_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "Date": ["2026-09-02", "2026-09-02"],
+            "Sales Channel": ["Online", "Retail"],
+            "Gender": ["WOMEN", "WOMEN"],
+            "Product Category": ["Trousers", "Tops"],
+            "Product": ["Karate Trousers", "Store Only"],
+            "Color": ["Black", "Red"],
+            "Gross Revenue": [4000.0, 9000.0],
+            "Sales Qty": [4, 9],
+            "Notes": ["x" * 400, "y" * 400],
+        }
+    ).to_excel(qlik_dir / "Qlik_W42.xlsx", index=False)
+
+    def refuse_full_sheet(*_args, **_kwargs):
+        raise AssertionError("full-sheet pandas.read_excel is disabled")
+
+    monkeypatch.setattr(qlik.pd, "read_excel", refuse_full_sheet)
+    payload = calculate_women_monthly("2026-42", tmp_path, months=3, top_n=10)
+    assert payload["headline"]["gross_revenue"] == 4000.0
+    assert payload["categories"][0]["category"] == "Trousers"
+
+
+def test_monthly_path_uses_column_stream_and_resident_lock():
+    source = inspect.getsource(monthly_mod)
+    assert "load_qlik_columns" in source
+    assert "qlik_resident_section" in source
+    assert "pd.read_excel" not in source
+    assert "load_all_raw_data" not in source
+
+
+def test_women_monthly_endpoint_missing_week_is_not_500(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    _qlik_week_dir(tmp_path)
+    from weekly_report.api import routes
+
+    body = routes.get_women_monthly("2026-45", months=3, top_n=10)
+    assert body["focus_month"] == "2026-10"
+    assert body["headline"]["gross_revenue"] >= 0
+    products = routes.get_top_products_monthly("2026-45", gender_filter="men", months=3, top_n=10)
+    assert products["focus_month"] == "2026-10"
+    assert "products" in products

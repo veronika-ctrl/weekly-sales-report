@@ -7,6 +7,7 @@ week of the next month reviews the month that just closed.
 from __future__ import annotations
 
 import calendar
+import gc
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,8 +15,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from loguru import logger
 
-from weekly_report.src.adapters.qlik import load_qlik_columns
+from weekly_report.src.adapters.qlik import (
+    load_qlik_columns,
+    qlik_resident_section,
+    qlik_source_files,
+)
+from weekly_report.src.metrics.result_cache import ResultCache
 from weekly_report.src.periods.calculator import get_week_date_range
+from weekly_report.src.storage.disk import list_qlik_weeks
 
 _MONTHLY_QLIK_COLUMNS = (
     "Date",
@@ -32,6 +39,31 @@ NOTE = (
     "Last completed calendar month vs the same month last year. "
     "Open this in the first week of the next month to review the month that just closed."
 )
+
+_women_cache = ResultCache("women-monthly")
+_products_cache = ResultCache("top-products-monthly")
+
+
+def resolve_qlik_week_for_monthly(base_week: str, data_root: Path) -> str:
+    """Prefer the selected ISO week; if it has no Qlik, use the newest week that does.
+
+    Monday of a new ISO week (2026-45) must not 500. The last completed month is
+    still on the previous week's Qlik file.
+    """
+    try:
+        qlik_source_files(Path(data_root) / "raw" / base_week)
+        return base_week
+    except FileNotFoundError:
+        pass
+    weeks = list_qlik_weeks(data_root)
+    if weeks:
+        logger.info(
+            "monthly women/products: no Qlik in %s, using latest week %s",
+            base_week,
+            weeks[0],
+        )
+        return weeks[0]
+    return base_week
 
 
 def last_completed_calendar_month(week_end: date) -> Tuple[date, date]:
@@ -268,17 +300,70 @@ def _trend_points(
     return points
 
 
-def _load_qlik(base_week: str, data_root: Path) -> pd.DataFrame:
-    raw_path = Path(data_root) / "raw" / base_week
+def _cell_date(raw: object) -> Optional[date]:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()
+    if not text or text.lower() in {"nan", "nat", "none", "natype"}:
+        return None
     try:
-        frame = load_qlik_columns(raw_path, _MONTHLY_QLIK_COLUMNS)
-    except Exception as exc:
-        logger.warning("monthly women/products: could not load Qlik for %s: %s", base_week, exc)
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    parsed = pd.to_datetime(raw, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def _keep_online_between(start: date, end: date):
+    """Drop retail and out-of-window rows while the Excel sheet is still streaming."""
+
+    def keep(values: Dict[str, object]) -> bool:
+        channel = str(values.get("Sales Channel") or "").strip().lower()
+        if channel != "online":
+            return False
+        parsed = _cell_date(values.get("Date"))
+        if parsed is None:
+            return False
+        return start <= parsed <= end
+
+    return keep
+
+
+def _load_qlik(qlik_week: str, data_root: Path, months: List[Tuple[date, date]]) -> pd.DataFrame:
+    """Column-stream the weekly Qlik file. FileNotFound → empty; other errors propagate."""
+    raw_path = Path(data_root) / "raw" / qlik_week
+    keep_row = None
+    if months:
+        oldest = months[0][0]
+        newest = months[-1][1]
+        ly_oldest = date(oldest.year - 1, oldest.month, 1)
+        keep_row = _keep_online_between(ly_oldest, newest)
+    try:
+        frame = load_qlik_columns(raw_path, _MONTHLY_QLIK_COLUMNS, keep_row=keep_row)
+    except FileNotFoundError as exc:
+        logger.warning("monthly women/products: no Qlik for %s: %s", qlik_week, exc)
         return pd.DataFrame()
     if frame is None or frame.empty:
         return pd.DataFrame()
     frame.columns = frame.columns.astype(str).str.strip()
     return frame
+
+
+def _trim_online_window(qlik: pd.DataFrame, months: List[Tuple[date, date]]) -> pd.DataFrame:
+    """Keep Online rows in the 13-month window plus last year. Drop the rest before copies."""
+    online = _online(qlik)
+    if online.empty or not months:
+        return online
+    oldest = months[0][0]
+    newest = months[-1][1]
+    ly_oldest = date(oldest.year - 1, oldest.month, 1)
+    return _slice_dates(online, ly_oldest, newest)
 
 
 def _window_meta(base_week: str, months: int) -> Dict[str, Any]:
@@ -295,30 +380,40 @@ def _window_meta(base_week: str, months: int) -> Dict[str, Any]:
     }
 
 
-def calculate_women_monthly(base_week: str, data_root: Path, months: int = 13, top_n: int = 15) -> Dict[str, Any]:
+def _payload_from_online(
+    online: pd.DataFrame,
+    base_week: str,
+    months: int,
+    top_n: int,
+    gender_filter: Optional[str],
+    kind: str,
+) -> Dict[str, Any]:
     meta = _window_meta(base_week, months)
     start = date.fromisoformat(meta["focus_start"])
     end = date.fromisoformat(meta["focus_end"])
     ly_start, ly_end = date(start.year - 1, start.month, 1), date(
         start.year - 1, start.month, calendar.monthrange(start.year - 1, start.month)[1]
     )
-    qlik = _load_qlik(base_week, data_root)
-    online = _online(qlik)
-    women = _apply_gender(_slice_dates(online, start, end), "women")
-    women_ly = _apply_gender(_slice_dates(online, ly_start, ly_end), "women")
+    cur = _apply_gender(_slice_dates(online, start, end), gender_filter)
+    ly = _apply_gender(_slice_dates(online, ly_start, ly_end), gender_filter)
     all_cur = _slice_dates(online, start, end)
-    gross, qty = _gross_qty(women)
-    ly_gross, ly_qty = _gross_qty(women_ly)
+    gross, qty = _gross_qty(cur)
+    ly_gross, ly_qty = _gross_qty(ly)
     online_gross, _ = _gross_qty(all_cur)
-    products, top_total, grand_total = _top_products(women, women_ly, top_n)
-    return {
+    products, top_total, grand_total = _top_products(cur, ly, top_n)
+    payload: Dict[str, Any] = {
         "base_week": base_week,
         "focus_month": meta["focus_month"],
         "focus_label": meta["focus_label"],
         "focus_start": meta["focus_start"],
         "focus_end": meta["focus_end"],
         "note": meta["note"],
-        "headline": {
+        "trend": _trend_points(online, meta["months"], gender_filter),
+        "top_total": top_total,
+        "grand_total": grand_total,
+    }
+    if kind == "women_overview":
+        payload["headline"] = {
             "gross_revenue": gross,
             "sales_qty": qty,
             "last_year_gross_revenue": ly_gross,
@@ -326,13 +421,48 @@ def calculate_women_monthly(base_week: str, data_root: Path, months: int = 13, t
             "yoy_pct": _yoy_pct(gross, ly_gross),
             "online_share_pct": (gross / online_gross * 100.0) if online_gross > 0 else 0.0,
             "online_gross_revenue": online_gross,
-        },
-        "trend": _trend_points(qlik, meta["months"], "women"),
-        "categories": _category_rows(women, women_ly),
-        "top_products": products,
-        "top_total": top_total,
-        "grand_total": grand_total,
-    }
+        }
+        payload["categories"] = _category_rows(cur, ly)
+        payload["top_products"] = products
+    else:
+        payload["gender_filter"] = gender_filter
+        payload["products"] = products
+    return payload
+
+
+def _compute_monthly(
+    base_week: str,
+    data_root: Path,
+    months: int,
+    top_n: int,
+    gender_filter: Optional[str],
+    kind: str,
+) -> Dict[str, Any]:
+    qlik_week = resolve_qlik_week_for_monthly(base_week, data_root)
+    meta = _window_meta(base_week, months)
+    with qlik_resident_section():
+        qlik = _load_qlik(qlik_week, data_root, meta["months"])
+        try:
+            online = _trim_online_window(qlik, meta["months"])
+            del qlik
+            gc.collect()
+            return _payload_from_online(online, base_week, months, top_n, gender_filter, kind)
+        finally:
+            gc.collect()
+
+
+def calculate_women_monthly(base_week: str, data_root: Path, months: int = 13, top_n: int = 15) -> Dict[str, Any]:
+    qlik_week = resolve_qlik_week_for_monthly(base_week, data_root)
+    raw = Path(data_root) / "raw" / qlik_week
+    rows = _women_cache.get_or_compute(
+        Path(data_root),
+        raw,
+        qlik_week,
+        months,
+        lambda: [_compute_monthly(base_week, Path(data_root), months, top_n, "women", "women_overview")],
+        extra=f"top{top_n}|sel{base_week}",
+    )
+    return rows[0]
 
 
 def calculate_top_products_monthly(
@@ -344,27 +474,14 @@ def calculate_top_products_monthly(
 ) -> Dict[str, Any]:
     if gender_filter not in ("men", "women"):
         raise ValueError("gender_filter must be 'men' or 'women'")
-    meta = _window_meta(base_week, months)
-    start = date.fromisoformat(meta["focus_start"])
-    end = date.fromisoformat(meta["focus_end"])
-    ly_start, ly_end = date(start.year - 1, start.month, 1), date(
-        start.year - 1, start.month, calendar.monthrange(start.year - 1, start.month)[1]
+    qlik_week = resolve_qlik_week_for_monthly(base_week, data_root)
+    raw = Path(data_root) / "raw" / qlik_week
+    rows = _products_cache.get_or_compute(
+        Path(data_root),
+        raw,
+        qlik_week,
+        months,
+        lambda: [_compute_monthly(base_week, Path(data_root), months, top_n, gender_filter, "top_products")],
+        extra=f"{gender_filter}|top{top_n}|sel{base_week}",
     )
-    qlik = _load_qlik(base_week, data_root)
-    online = _online(qlik)
-    cur = _apply_gender(_slice_dates(online, start, end), gender_filter)
-    ly = _apply_gender(_slice_dates(online, ly_start, ly_end), gender_filter)
-    products, top_total, grand_total = _top_products(cur, ly, top_n)
-    return {
-        "base_week": base_week,
-        "gender_filter": gender_filter,
-        "focus_month": meta["focus_month"],
-        "focus_label": meta["focus_label"],
-        "focus_start": meta["focus_start"],
-        "focus_end": meta["focus_end"],
-        "note": meta["note"],
-        "trend": _trend_points(qlik, meta["months"], gender_filter),
-        "products": products,
-        "top_total": top_total,
-        "grand_total": grand_total,
-    }
+    return rows[0]
