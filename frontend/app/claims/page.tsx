@@ -54,7 +54,7 @@ function MoneyTable({
               <th className="py-2 pr-3">{firstColumn}</th>
               <th className="py-2 pr-3 text-right">Claims</th>
               <th className="py-2 pr-3 text-right">Units</th>
-              <th className="py-2 pr-3 text-right">Replacement cost</th>
+              <th className="py-2 pr-3 text-right">Landed cost</th>
               <th className="py-2 pr-3 text-right">Shipping</th>
               <th className="py-2 text-right">Extra discount</th>
             </tr>
@@ -163,7 +163,7 @@ export default function ClaimsPage() {
       {totals && data?.available ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <Kpi title="Claim orders" value={count(totals.orders)} hint={`${count(totals.units)} replacement units`} />
-          <Kpi title="Replacement product cost" value={sek(totals.product_cost_sek)} hint="Wholesale value, SEK" />
+          <Kpi title="Landed cost" value={sek(totals.product_cost_sek)} hint="Replacement cost in SEK" />
           <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
           <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
         </div>
@@ -214,7 +214,7 @@ export default function ClaimsPage() {
                   <th className="py-2 pr-3">Type</th>
                   <th className="py-2 pr-3">Shipping</th>
                   <th className="py-2 pr-3 text-right">Units</th>
-                  <th className="py-2 pr-3 text-right">Products</th>
+                  <th className="py-2 pr-3 text-right">Landed cost</th>
                   <th className="py-2 pr-3 text-right">Shipping cost</th>
                   <th className="py-2 text-right">Discount</th>
                 </tr>
