@@ -13,9 +13,22 @@ from loguru import logger
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
 from weekly_report.src.cache.manager import raw_data_cache
 
-# One projected read at a time. A second full export beside a cached week
-# is what restarted the 2GB Render instance.
-_qlik_read_lock = threading.Lock()
+# One Qlik workbook in memory at a time. Render is 2GB. A second read while
+# the first frame is still alive restarts the instance, and the browser then
+# stays on Failed to fetch. RLock so a caller can hold the lock for the whole
+# time it keeps the frame, including the nested read below.
+_qlik_read_lock = threading.RLock()
+
+
+def qlik_resident_section() -> threading.RLock:
+    """Hold this while a Qlik frame is still referenced.
+
+    load_qlik_columns releases the lock when the read returns. Summary retries
+    and the startup warm were opening the same workbook again before that
+    frame was freed.
+    """
+    return _qlik_read_lock
+
 
 # Columns the category and gender slides aggregate. Reading just these avoids
 # loading Dema, Shopify, and the rest of the Qlik export into memory.
@@ -103,7 +116,8 @@ def _resolve_qlik_dir(raw_data_path: Path) -> Path:
 
 def load_data(raw_data_path: Path) -> pd.DataFrame:
     """Load Qlik data from CSV/Excel files."""
-    return load_csv_files(_resolve_qlik_dir(raw_data_path), "qlik")
+    with _qlik_read_lock:
+        return load_csv_files(_resolve_qlik_dir(raw_data_path), "qlik")
 
 
 def _read_varint(buf: bytes, index: int) -> Tuple[int, int]:

@@ -6,7 +6,7 @@ from loguru import logger
 from pathlib import Path
 from datetime import datetime
 
-from weekly_report.src.adapters.qlik import load_category_qlik
+from weekly_report.src.adapters.qlik import load_category_qlik, qlik_resident_section
 from weekly_report.src.metrics.result_cache import ResultCache
 
 _cache = ResultCache("category-sales")
@@ -34,12 +34,13 @@ def _calculate_category_sales_uncached(base_week: str, num_weeks: int, data_root
     results: List[Dict[str, Any]] = []
     raw_data_path = data_root / "raw" / base_week
     logger.info(f"Loading Qlik columns for category sales from {raw_data_path}")
-    qlik_df = load_category_qlik(raw_data_path)
-    try:
-        return _category_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path, results)
-    finally:
-        del qlik_df
-        gc.collect()
+    with qlik_resident_section():
+        qlik_df = load_category_qlik(raw_data_path)
+        try:
+            return _category_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path, results)
+        finally:
+            del qlik_df
+            gc.collect()
 
 
 def _category_rows_from_frame(
