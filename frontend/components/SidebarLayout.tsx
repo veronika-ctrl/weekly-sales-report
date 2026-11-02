@@ -37,7 +37,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       '/full-price-commercial/week-table': { title: 'Full price table · week', subtitle: 'Weekly full price vs discount, exchanges excluded' },
       '/full-price-commercial/month-charts': { title: 'Full price share · month', subtitle: 'Exchanges excluded. Discount codes stay in discounted' },
       '/full-price-commercial/month-table': { title: 'Full price table · month', subtitle: 'Monthly commercial full price vs discount' },
-      '/claims': { title: 'Claims · Cin7', subtitle: 'Replacement cost, shipping and discounts on claim orders' },
+      '/claims': { title: 'Claims · Cin7', subtitle: 'Replacement cost and shipping on claim orders' },
       '/sessions-per-country': { title: 'Sessions per Country', subtitle: '(‘000)' },
       '/conversion-per-country': { title: 'Conversion per Country', subtitle: 'Conversion rates by country' },
       '/new-customers-per-country': { title: 'New Customers per Country', subtitle: 'New customer acquisition by country' },
