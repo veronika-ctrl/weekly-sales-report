@@ -205,6 +205,26 @@ def test_ensure_upload_space_skips_when_free(tmp_path: Path):
     assert (tmp_path / "raw" / "2026-44" / "qlik" / "Qlik_W44.csv").exists()
 
 
+def test_ensure_upload_space_prunes_when_free_is_low(tmp_path: Path, monkeypatch):
+    from weekly_report.src.storage import disk as disk_mod
+
+    frees = [50 * 1024 * 1024]
+
+    def fake_free(_root):
+        value = frees[0]
+        frees[0] = 500 * 1024 * 1024
+        return value
+
+    monkeypatch.setattr(disk_mod, "_disk_free_bytes", fake_free)
+    for week, size in (("2026-41", 200), ("2026-43", 80), ("2026-44", 70)):
+        _touch(tmp_path / "raw" / week / "qlik" / f"Qlik_{week}.csv", size)
+    result = ensure_upload_space(tmp_path, extra_keep=("2026-45",))
+    assert result["pruned"] is True
+    assert not (tmp_path / "raw" / "2026-41" / "qlik" / "Qlik_2026-41.csv").exists()
+    assert (tmp_path / "raw" / "2026-43" / "qlik" / "Qlik_2026-43.csv").exists()
+    assert (tmp_path / "raw" / "2026-44" / "qlik" / "Qlik_2026-44.csv").exists()
+
+
 def test_gender_sales_missing_qlik_is_404_not_500(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     monkeypatch.setenv("DISABLE_SUPABASE", "true")

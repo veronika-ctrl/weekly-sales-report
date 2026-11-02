@@ -29,7 +29,7 @@ STALE_WEEKS = tuple(f"2026-{week:02d}" for week in range(36, 41))
 WEEKLY_BULK_SLOTS = frozenset({"qlik", "dema_spend", "dema_gm2", "shopify"})
 # Latest Qlik exports already contain prior ISO weeks, so 2 week folders are enough.
 KEEP_RECENT_WEEKLY = 2
-MIN_FREE_FOR_UPLOAD_BYTES = 220 * 1024 * 1024
+MIN_FREE_FOR_UPLOAD_BYTES = 400 * 1024 * 1024
 KEEP_HISTORY_SLOTS = frozenset(
     {
         "shopify_customers",
