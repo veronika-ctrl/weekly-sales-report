@@ -38,10 +38,10 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert totals["discount_sek"] == 0
     wholesale_sek = 66116.59
     assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
-    assert totals["product_cost_sek"] == pytest.approx(20591.35, abs=0.02)
+    assert totals["product_cost_sek"] == pytest.approx(22035.26, abs=0.02)
     assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
     assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
-    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(20591.37, abs=0.05)
+    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(22035.28, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-09"]["units"] == 65
@@ -55,16 +55,18 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert any("SwissPost" in note for note in payload["notes"])
     assert any("Fedex International Priority" in note for note in payload["notes"])
     landed_note = next(note for note in payload["notes"] if note.startswith("Landed cost matched"))
-    assert "92 of 96" in landed_note
+    assert "95 of 96" in landed_note
     assert "cin7_landed_cost_fw26.csv" in landed_note
+    assert "cin7_landed_cost_overlay.csv" in landed_note
     assert "MTO016031801-9000-L" not in landed_note
     assert "MTO016031801-9000-XXL" not in landed_note
-    assert "MUW002031601-9000-M" in landed_note
-    assert "MUW002031601-9000-L" in landed_note
+    assert "MUW002031601-9000-M" not in landed_note
+    assert "MUW002031601-9000-L" not in landed_note
+    assert "MTO023030301-0246-M" not in landed_note
+    assert "MTO024031301-0224-XL" not in landed_note
     assert "Shopping bag M" in landed_note
-    assert "105 units" in landed_note
-    assert "MTO023030301-0246-M" in landed_note
-    assert "MTO024031301-0224-XL" in landed_note
+    assert "100 units" in landed_note
+    assert "landed cost of 0 SEK" not in landed_note
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
     swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
     assert swisspost["freight_sek"] == 0
@@ -122,16 +124,22 @@ def test_fw26_fills_unmatched_skus_and_catalog_zeros():
     costs, used = _landed_costs(Path("/tmp/does-not-exist-claims"))
     assert "cin7_landed_cost_sek.csv" in used
     assert "cin7_landed_cost_fw26.csv" in used
+    assert "cin7_landed_cost_overlay.csv" in used
     assert costs["MTO016031501-9999-M"] == pytest.approx(370.9)
     assert costs["MTO016031801-9000-L"] == pytest.approx(225.6923)
     assert costs["MTO016031801-9000-XXL"] == pytest.approx(225.6923)
     assert costs["MUW002031603-9000-L"] == pytest.approx(210.59)
+    assert costs["MUW002031603-9000-L"] != pytest.approx(75.61)
+    assert costs["MUW002031601-9000-L"] == pytest.approx(75.61)
+    assert costs["MUW002031601-9000-M"] == pytest.approx(75.61)
+    assert costs["MTO023030301-0246-M"] == pytest.approx(477.20)
+    assert costs["MTO024031301-0224-XL"] == pytest.approx(295.30)
+    assert costs["MUW004014221-0230-XXL"] == pytest.approx(59.74)
+    assert costs["MUW002004823-0224-L"] == pytest.approx(170.39)
+    assert costs["MUW002004821-0230-M"] == pytest.approx(63.23)
     assert costs["MBO000030401-0224-L"] == pytest.approx(370.2)
     assert costs["MUW002004801-0224-L"] == pytest.approx(69.6)
-    assert "MUW002031601-9000-M" not in costs
-    assert "MUW002031601-9000-L" not in costs
     assert "Shopping bag M" not in costs
-    assert costs["MTO023030301-0246-M"] == 0
     assert costs["MUW001072103-9999-L"] == pytest.approx(167.05)
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
     assert by_ref["CCLA78-458"]["product_cost_sek"] == pytest.approx(2253.69, abs=0.02)
