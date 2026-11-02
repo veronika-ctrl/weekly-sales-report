@@ -1,12 +1,15 @@
 """Cin7 claim orders. These are not Shopify orders.
 
-The export is one row per replacement line. Money on the order (freight,
-discount, product total) is repeated on every line, so each order is counted
-once. Replacement cost is the wholesale value in Cin7 local currency (SEK).
+The export is one row per replacement line. Money on the order (freight and
+discount) is repeated on every line, so each order is counted once.
+Replacement cost is the landed cost in SEK from the product file, times
+quantity. A line whose item code is not in that file stays at 0. The wholesale
+item price is not used.
 """
 
 from __future__ import annotations
 
+import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -17,7 +20,7 @@ NOTE_SOURCE = (
     "These orders are created in Cin7 for claims. They are not Shopify orders."
 )
 NOTE_COST = (
-    "Replacement cost is the wholesale price on the order, in Cin7 local currency (SEK)."
+    "Replacement cost is the landed cost in SEK, times quantity. It is not the wholesale item price."
 )
 
 # Carrier price we pay, from Shipping costs 2026, sheet "Delivery charges_pricing",
@@ -78,6 +81,99 @@ def is_claims_csv(path: Path) -> bool:
         return False
     headers = csv_headers(path)
     return "order id" in headers and "created date" in headers and "item name" in headers
+
+
+def is_landed_cost_csv(path: Path) -> bool:
+    """A product export with a product code and a landed cost in SEK."""
+    if path.suffix.lower() != ".csv":
+        return False
+    headers = csv_headers(path)
+    if "order id" in headers:
+        return False
+    has_code = "code" in headers or "product code" in headers or "item code" in headers
+    return has_code and _header_landed_cost_sek(headers)
+
+
+def _header_landed_cost_sek(headers: set[str]) -> bool:
+    return any("landed" in header and "sek" in header and "rrp" not in header for header in headers)
+
+
+def _product_code_column(columns: Sequence[str]) -> Optional[str]:
+    normalized = {str(column).strip().lower(): column for column in columns}
+    for name in ("code", "product code", "item code"):
+        if name in normalized:
+            return normalized[name]
+    return None
+
+
+def _landed_cost_column(columns: Sequence[str]) -> Optional[str]:
+    best: Optional[str] = None
+    best_score = -1
+    for column in columns:
+        low = str(column).strip().lower()
+        if "landed" not in low or "sek" not in low or "rrp" in low or "wholesale" in low:
+            continue
+        score = 1
+        if "excl" in low:
+            score += 1
+        if any(fx in low for fx in ("eur", "usd", "gbp", "dkk", "nok")):
+            score -= 5
+        if score > best_score:
+            best_score = score
+            best = column
+    return best
+
+
+def _landed_cost_files(data_root: Path) -> List[Path]:
+    bundled = _bundled_dir()
+    found: Dict[str, Path] = {}
+    for folder in _claim_folders(data_root):
+        for path in folder.glob("*.csv"):
+            if not is_landed_cost_csv(path):
+                continue
+            try:
+                key = str(path.resolve())
+            except OSError:
+                key = str(path)
+            found[key] = path
+    paths = list(found.values())
+    paths.sort(key=lambda path: (not _is_under(path, bundled), _mtime(path), path.name))
+    return paths
+
+
+def _landed_costs(data_root: Path) -> tuple[Dict[str, float], List[str]]:
+    """Map product code to landed cost SEK. A later file overrides the same code."""
+    costs: Dict[str, float] = {}
+    used: List[str] = []
+    for path in _landed_cost_files(data_root):
+        try:
+            handle = path.open(newline="", encoding="utf-8-sig")
+        except OSError:
+            continue
+        with handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames:
+                continue
+            code_col = _product_code_column(list(reader.fieldnames))
+            cost_col = _landed_cost_column(list(reader.fieldnames))
+            if not code_col or not cost_col:
+                continue
+            added = False
+            for row in reader:
+                code = _text(row.get(code_col))
+                if not code:
+                    continue
+                costs[code] = _num(row.get(cost_col))
+                added = True
+        if added:
+            used.append(path.name)
+    return costs, used
+
+
+def _count_text(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+    return f"{value:.2f}"
 
 
 def _claim_folders(data_root: Path) -> List[Path]:
@@ -306,9 +402,37 @@ def _finish(bucket: Dict[str, Any]) -> Dict[str, Any]:
     return bucket
 
 
+def _landed_cost_note(
+    matched_lines: int,
+    replacement_lines: int,
+    landed_files: Sequence[str],
+    unmatched_codes: set[str],
+    unmatched_units: float,
+    blank_lines: int,
+    zero_landed_lines: int,
+    zero_codes: set[str],
+) -> str:
+    files = f" ({', '.join(landed_files)})" if landed_files else ""
+    text = f"Landed cost matched {matched_lines} of {replacement_lines} replacement lines{files}."
+    if unmatched_codes:
+        listed = ", ".join(sorted(unmatched_codes))
+        text += (
+            f" No landed cost for {_count_text(unmatched_units)} units: {listed}. Those units are 0 SEK."
+        )
+    if blank_lines:
+        text += f" {blank_lines} lines have no item code and are 0 SEK."
+    if zero_landed_lines:
+        listed = ", ".join(sorted(zero_codes))
+        text += (
+            f" {zero_landed_lines} matched lines have a landed cost of 0 SEK in the product file: {listed}."
+        )
+    return text
+
+
 def calculate_claims(data_root: Path) -> Dict[str, Any]:
     paths = _claim_files(data_root)
     lines, files_used = _lines_from_files(paths)
+    landed, landed_files = _landed_costs(data_root)
     empty_totals = {
         "orders": 0,
         "units": 0,
@@ -340,6 +464,13 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
     countries: Dict[str, Dict[str, Any]] = {}
     carriers: Dict[str, Dict[str, Any]] = {}
     reason_specified = False
+    matched_lines = 0
+    replacement_lines = 0
+    unmatched_codes: set[str] = set()
+    unmatched_units = 0.0
+    blank_lines = 0
+    zero_landed_lines = 0
+    zero_codes: set[str] = set()
 
     for order_id, group in lines.groupby("_order_id", sort=False):
         first = group.iloc[0]
@@ -347,9 +478,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         month_key = created.strftime("%Y-%m") if created else "unknown"
         month_label = created.strftime("%b %Y") if created else "Unknown date"
         units = sum(_num(row.get("Item Qty")) for _, row in group.iterrows())
-        product = sum(
-            _num(row.get("Item Price (Local Currency)")) * _num(row.get("Item Qty")) for _, row in group.iterrows()
-        )
+        product = 0.0
         freight = _num(first.get("Freight Cost (Local Currency)"))
         freight_name = _text(first.get("Freight Description")) or _text(first.get("Carrier"))
         country = _text(first.get("Delivery Country")) or "Unknown country"
@@ -377,10 +506,26 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         for _, row in group.iterrows():
             name = _text(row.get("Item Name")) or _text(row.get("Item Code")) or "Unknown product"
             qty = _num(row.get("Item Qty"))
+            code = _text(row.get("Item Code"))
+            replacement_lines += 1
+            if code in landed:
+                matched_lines += 1
+                unit_cost = landed[code]
+                if unit_cost == 0:
+                    zero_landed_lines += 1
+                    zero_codes.add(code)
+            else:
+                unit_cost = 0.0
+                if code:
+                    unmatched_codes.add(code)
+                    unmatched_units += qty
+                else:
+                    blank_lines += 1
+            line_cost = unit_cost * qty
+            product += line_cost
             item_names.append(f"{name} × {int(qty) if qty == int(qty) else qty}")
             category = product_category(name)
             cats.add(category)
-            line_cost = _num(row.get("Item Price (Local Currency)")) * qty
             cat = categories.setdefault(category, _bucket(category))
             cat["units"] += qty
             cat["product_cost_sek"] += line_cost
@@ -447,7 +592,16 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         "surcharge_sek": surcharge_cost,
         "recorded_cost_sek": round(product_cost + freight_cost + discount_cost + surcharge_cost, 2),
     }
-    notes = [NOTE_SOURCE, NOTE_COST]
+    notes = [NOTE_SOURCE, NOTE_COST, _landed_cost_note(
+        matched_lines,
+        replacement_lines,
+        landed_files,
+        unmatched_codes,
+        unmatched_units,
+        blank_lines,
+        zero_landed_lines,
+        zero_codes,
+    )]
     if not reason_specified:
         notes.append(
             "This export has no claim reason. Product type, country and shipping method are shown instead. "

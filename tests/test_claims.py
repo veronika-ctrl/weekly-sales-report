@@ -26,16 +26,27 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert totals["units"] == 67
     assert totals["freight_sek"] == pytest.approx(5420.24, abs=0.05)
     assert totals["discount_sek"] == 0
-    assert totals["product_cost_sek"] == pytest.approx(66116.57, abs=0.05)
+    wholesale_sek = 66116.59
+    assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
+    assert totals["product_cost_sek"] == pytest.approx(8566.85, abs=0.02)
     assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
+    assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
+    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(8566.86, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-10"]["orders"] == 2
     assert payload["reasons"][0]["label"] == "Not specified in the Cin7 export"
     assert payload["reasons"][0]["orders"] == 37
     assert any("not Shopify" in note for note in payload["notes"])
+    assert any("landed cost in SEK" in note for note in payload["notes"])
     assert any("2026 carrier price" in note for note in payload["notes"])
     assert any("SwissPost" in note for note in payload["notes"])
+    landed_note = next(note for note in payload["notes"] if note.startswith("Landed cost matched"))
+    assert "49 of 53" in landed_note
+    assert "MTO016031801-9000-L" in landed_note
+    assert "MTO016031801-9000-XXL" in landed_note
+    assert "MUW002031601-9000-M" in landed_note
+    assert "5 units" in landed_note
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
     swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
     assert swisspost["freight_sek"] == 0
@@ -48,7 +59,11 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     uk = next(row for row in payload["orders"] if row["country"] == "United Kingdom" and row["created"].startswith("2026-10"))
     assert uk["freight_sek"] == pytest.approx(9.9225 * 11.1765, abs=0.01)
     assert by_ref[uk["order_ref"]]["freight_rate"].startswith("UK")
-    assert "gmail" not in str(payload["orders"])
+    assert by_ref["CCLA78-431"]["product_cost_sek"] == pytest.approx(167.05, abs=0.01)
+    assert by_ref["CCLA78-431"]["product_cost_sek"] != pytest.approx(1458.17, abs=0.1)
+    blob = str(payload).lower()
+    assert "gmail" not in blob
+    assert "@" not in blob
 
 
 def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
@@ -57,11 +72,11 @@ def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
     (folder / "week.csv").write_text(
         "Order Id,Order Ref,Created Date,Delivery Country,Currency Name,Carrier,Freight Description,"
         "Freight Cost (Local Currency),Discount Total (Local Currency),Item Total Discount (Local Currency),"
-        "Item Name,Item Qty,Item Price (Local Currency),Claim Type\n"
+        "Item Name,Item Code,Item Qty,Item Price (Local Currency),Claim Type\n"
         "129037,CCLA78-432,4 Oct 2026 8:40 pm,United States,USD,FedEx,Fedex,250,0,40,"
-        "LYOCELL BOXER BRIEF - BLACK,1,1000,Damaged\n"
+        "LYOCELL BOXER BRIEF - BLACK,NOT-IN-FILE,1,1000,Damaged\n"
         "999001,CCLA78-500,2 Nov 2026 9:00 am,Sweden,SEK,DHL Paket,DHL home,80,15,0,"
-        "COTTON SOCKS - WHITE,2,100,Lost in transit\n",
+        "COTTON SOCKS - WHITE,ALSO-MISSING,2,100,Lost in transit\n",
         encoding="utf-8",
     )
     payload = calculate_claims(tmp_path)
@@ -69,10 +84,34 @@ def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
     assert refs["CCLA78-432"]["reason"] == "Damaged"
     assert refs["CCLA78-432"]["freight_sek"] == pytest.approx(250)
     assert refs["CCLA78-432"]["discount_sek"] == pytest.approx(40)
-    assert refs["CCLA78-432"]["product_cost_sek"] == pytest.approx(1000)
+    assert refs["CCLA78-432"]["product_cost_sek"] == pytest.approx(0)
+    assert refs["CCLA78-432"]["product_cost_sek"] != pytest.approx(1000)
+    assert refs["CCLA78-500"]["product_cost_sek"] == pytest.approx(0)
+    joined = " ".join(payload["notes"])
+    assert "NOT-IN-FILE" in joined
+    assert "ALSO-MISSING" in joined
     assert "CCLA78-500" in refs
     assert payload["totals"]["orders"] == 38
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-10"]["orders"] == 2
     assert months["2026-11"]["orders"] == 1
+
+
+def test_later_landed_cost_file_overrides_the_bundle(tmp_path: Path):
+    folder = tmp_path / "claims"
+    folder.mkdir()
+    (folder / "landed.csv").write_text(
+        "Description,Style Code,Code,RRP,LandedCOST SEK Excl\n"
+        "Boxer,MUW003072103-9999,MUW003072103-9999-XL,999,42.5\n",
+        encoding="utf-8",
+    )
+    payload = calculate_claims(tmp_path)
+    by_ref = {row["order_ref"]: row for row in payload["orders"]}
+    assert by_ref["CCLA78-432"]["product_cost_sek"] == pytest.approx(42.5)
+    assert by_ref["CCLA78-432"]["product_cost_sek"] != pytest.approx(1756.73, abs=0.1)
+    assert by_ref["CCLA78-431"]["product_cost_sek"] == pytest.approx(167.05, abs=0.01)
+    note = next(line for line in payload["notes"] if line.startswith("Landed cost matched"))
+    assert "cin7_landed_cost_sek.csv" in note
+    assert "landed.csv" in note
+    assert "gmail" not in str(payload).lower()
