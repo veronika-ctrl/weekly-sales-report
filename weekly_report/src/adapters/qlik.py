@@ -5,7 +5,7 @@ import hashlib
 import struct
 import threading
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 from loguru import logger
@@ -337,34 +337,158 @@ def _read_csv_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
     return _take_columns(wide, columns)
 
 
+def _header_cells(header: Iterable[object]) -> List[str]:
+    return ["" if cell is None else str(cell).strip() for cell in header]
+
+
+def _selected_columns(header: Iterable[object], columns: Sequence[str]) -> List[Tuple[str, int]]:
+    """First matching header index for each requested column. Skips names that are absent."""
+    positions: Dict[str, int] = {}
+    for index, name in enumerate(_header_cells(header)):
+        if name and name not in positions:
+            positions[name] = index
+    chosen: List[Tuple[str, int]] = []
+    for column in columns:
+        key = str(column).strip()
+        if key in positions:
+            chosen.append((key, positions[key]))
+    return chosen
+
+
+def _frame_from_selected_rows(header: Iterable[object], rows: Iterable[object], columns: Sequence[str]) -> pd.DataFrame:
+    """Keep only the requested cells. The rest of each row is discarded immediately."""
+    chosen = _selected_columns(header, columns)
+    if not chosen:
+        return pd.DataFrame()
+    buckets: Dict[str, List[object]] = {name: [] for name, _index in chosen}
+    for row in rows:
+        for name, index in chosen:
+            if row is None or index >= len(row):
+                buckets[name].append(None)
+            else:
+                buckets[name].append(row[index])
+    frame = pd.DataFrame(buckets, columns=[name for name, _index in chosen])
+    del buckets
+    objects = [col for col in frame.columns if frame[col].dtype == object]
+    if objects:
+        frame[objects] = frame[objects].replace(NA_VALUES, float("nan"))
+    return frame
+
+
+def _stream_calamine_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+    """Stream a sheet through calamine and retain only the requested columns.
+
+    pandas' calamine engine calls ``to_python()`` on the whole sheet before
+    ``usecols`` runs. That second copy of every cell is what exceeds 2GB.
+    """
+    from python_calamine import CalamineWorkbook
+
+    workbook = CalamineWorkbook.from_path(str(path))
+    try:
+        sheet = workbook.get_sheet_by_index(0)
+        row_iter = sheet.iter_rows()
+        header = next(row_iter, None)
+        if header is None:
+            return pd.DataFrame()
+        return _frame_from_selected_rows(header, row_iter, columns)
+    finally:
+        close = getattr(workbook, "close", None)
+        if close is not None:
+            close()
+
+
+def _stream_openpyxl_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
+    """Stream with openpyxl's read-only mode when calamine is unavailable."""
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(filename=path, read_only=True, data_only=True, keep_links=False)
+    try:
+        worksheet = workbook.worksheets[0]
+        row_iter = worksheet.iter_rows(values_only=True)
+        header = next(row_iter, None)
+        if header is None:
+            return pd.DataFrame()
+        return _frame_from_selected_rows(header, row_iter, columns)
+    finally:
+        workbook.close()
+
+
 def _read_excel_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
     """Read an Excel export by column.
 
-    The live week file is a ~100MB xlsx. openpyxl on the whole workbook takes
-    long enough that Cloudflare drops the browser connection. calamine reads
-    the same sheet in seconds; openpyxl remains the fallback.
+    The live week file is a ~100MB xlsx. Building the full sheet in Python
+    (calamine ``to_python`` or ``pandas.read_excel`` without a column projection)
+    restarts the 2GB Render instance. This refuses that fallback.
     """
-    keep = _header_keep(columns)
     last_error: Optional[BaseException] = None
-    for engine in ("calamine", "openpyxl"):
+    for engine, reader in (
+        ("calamine", _stream_calamine_columns),
+        ("openpyxl", _stream_openpyxl_columns),
+    ):
         try:
-            frame = pd.read_excel(path, engine=engine, usecols=keep, na_values=NA_VALUES)
+            frame = reader(path, columns)
         except Exception as exc:
             last_error = exc
+            logger.warning(f"Column Excel read via {engine} failed for {path.name}: {exc}")
             continue
-        frame.columns = [str(col).strip() for col in frame.columns]
         if frame.shape[1] == 0:
+            last_error = ValueError(f"{engine} found none of the requested columns in {path.name}")
             continue
         logger.info(f"Loaded Excel columns from {path.name} via {engine}: {frame.shape}")
         return frame
-    logger.warning(
-        f"Column Excel read failed for {path.name} ({last_error}); reading full sheet and dropping unused columns"
+    raise RuntimeError(
+        f"Could not read {path.name} by column without loading the full sheet ({last_error}). "
+        "The full-sheet fallback is disabled because it exceeds the 2GB instance."
     )
-    wide = pd.read_excel(path, na_values=NA_VALUES)
-    slim = _take_columns(wide, columns)
-    del wide
-    gc.collect()
-    return slim
+
+
+def _projected_cache_file(raw_data_path: Path, source: Path, columns: Sequence[str]) -> Path:
+    """Disk cache of one slim column projection. Not an uploaded week file."""
+    stat = source.stat()
+    mtime = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))
+    key = hashlib.sha256(
+        f"{source.resolve()}:{stat.st_size}:{mtime}|{'|'.join(str(col) for col in columns)}".encode()
+    ).hexdigest()[:24]
+    if raw_data_path.parent.name == "raw":
+        root = raw_data_path.parent.parent
+    else:
+        root = raw_data_path
+    return root / "cache" / "qlik-columns" / f"{key}.pkl"
+
+
+def _read_projected_cache(path: Path) -> Optional[pd.DataFrame]:
+    if not path.is_file():
+        return None
+    try:
+        frame = pd.read_pickle(path)
+    except Exception as exc:
+        logger.warning(f"Qlik column cache unreadable ({exc})")
+        return None
+    if not isinstance(frame, pd.DataFrame) or frame.shape[1] == 0:
+        return None
+    return frame
+
+
+def _write_projected_cache(path: Path, frame: pd.DataFrame) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".pkl.tmp")
+        frame.to_pickle(temporary)
+        temporary.replace(path)
+    except Exception as exc:
+        logger.warning(f"Qlik column cache not written ({exc})")
+
+
+def _load_excel_projected(raw_data_path: Path, path: Path, columns: Sequence[str]) -> pd.DataFrame:
+    """Return the slim frame, from disk when this projection was already saved."""
+    cache_path = _projected_cache_file(raw_data_path, path, columns)
+    cached = _read_projected_cache(cache_path)
+    if cached is not None:
+        logger.info(f"Qlik column cache hit {path.name}: {cached.shape}")
+        return cached
+    frame = _read_excel_columns(path, columns)
+    _write_projected_cache(cache_path, frame)
+    return frame
 
 
 def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
@@ -429,9 +553,12 @@ def _attach_iso_week(frame: pd.DataFrame) -> pd.DataFrame:
 def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFrame:
     """Load selected Qlik columns for one week folder.
 
-    Parquet reads only those columns. CSV and Excel fall back to a full read,
-    then immediately drop the rest. Does not load Dema or Shopify. Drops any
-    cached full raw week first so this read does not sit beside it.
+    Parquet and CSV read only those columns. Excel is streamed to those columns
+    and then reused from ``data/cache/qlik-columns`` so the next page does not
+    open the workbook again. There is no full-sheet Excel fallback. Does not
+    load Dema or Shopify. Drops any cached full raw week first so this read
+    does not sit beside it. Callers that keep the frame must already hold
+    ``qlik_resident_section`` so a second page waits.
     """
     with _qlik_read_lock:
         raw_data_cache.clear()
@@ -450,7 +577,7 @@ def load_qlik_columns(raw_data_path: Path, columns: Sequence[str]) -> pd.DataFra
                     f"Expected CSV/Excel files in: {source}/*.csv or {source}/*.xlsx"
                 )
             frames = [
-                _read_excel_columns(path, columns)
+                _load_excel_projected(raw_data_path, path, columns)
                 if path.suffix.lower() == ".xlsx"
                 else _read_csv_columns(path, columns)
                 for path in files

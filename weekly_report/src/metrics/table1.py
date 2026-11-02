@@ -1,6 +1,8 @@
 """Table 1 metrics calculation module."""
 
 import gc
+import hashlib
+import json
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -641,6 +643,68 @@ def calculate_table1_metrics_for_date_range(
     return metrics
 
 
+def _summary_input_signature(raw_week: Path) -> str:
+    """Changes when the Qlik workbook or the Dema files for this week change."""
+    parts = [qlik.qlik_source_signature(raw_week)]
+    for slot in ("dema_spend", "dema_gm2"):
+        folder = raw_week / slot
+        if not folder.is_dir():
+            parts.append(f"{slot}:missing")
+            continue
+        files = sorted(path for path in folder.iterdir() if path.is_file() and not path.name.startswith("."))
+        if not files:
+            parts.append(f"{slot}:empty")
+            continue
+        for path in files:
+            stat = path.stat()
+            mtime = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))
+            parts.append(f"{slot}/{path.name}:{stat.st_size}:{mtime}")
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:20]
+
+
+def _summary_cache_path(data_root: Path, kind: str, base_week: str, signature: str, extra: str = "") -> Path:
+    suffix = ""
+    if extra:
+        suffix = "__" + hashlib.sha256(extra.encode()).hexdigest()[:10]
+    safe_week = base_week.replace("/", "-")
+    return Path(data_root) / "cache" / kind / f"{safe_week}__{signature}{suffix}.json"
+
+
+def _summary_cache_file(data_root: Path, kind: str, base_week: str, extra: str = "") -> Optional[Path]:
+    raw_week = Path(data_root) / "raw" / base_week
+    try:
+        signature = _summary_input_signature(raw_week)
+    except FileNotFoundError:
+        return None
+    return _summary_cache_path(Path(data_root), kind, base_week, signature, extra)
+
+
+def _read_summary_cache(path: Optional[Path], kind: str, base_week: str) -> Optional[Dict[str, Any]]:
+    if path is None or not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(f"{kind} disk cache unreadable ({exc})")
+        return None
+    if not isinstance(payload, dict):
+        return None
+    logger.info(f"{kind} disk cache hit {base_week}")
+    return payload
+
+
+def _write_summary_cache(path: Optional[Path], kind: str, payload: Dict[str, Any]) -> None:
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(payload), encoding="utf-8")
+        temporary.replace(path)
+    except (OSError, TypeError, ValueError) as exc:
+        logger.warning(f"{kind} disk cache not written ({exc})")
+
+
 def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Path) -> Dict[str, Dict[str, Any]]:
     """
     Calculate Table 1 metrics for multiple periods INCLUDING YTD columns.
@@ -669,11 +733,20 @@ def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Pa
     
     # Load all raw data for the base week
     latest_data_path = data_root / "raw" / base_week
+    cache_path = _summary_cache_file(
+        data_root, "table1-ytd", base_week, json.dumps(periods, sort_keys=True)
+    )
+    cached = _read_summary_cache(cache_path, "table1-ytd", base_week)
+    if cached is not None:
+        return cached
 
     # Hold the Qlik lock until every frame from this call is dropped.
     # The context exit runs after the finally block, so a Summary retry
     # cannot open the workbook beside the last YTD slice.
     with qlik.qlik_resident_section():
+        cached = _read_summary_cache(cache_path, "table1-ytd", base_week)
+        if cached is not None:
+            return cached
         all_raw_data = None
         filtered_data = None
         try:
@@ -734,6 +807,7 @@ def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Pa
                 logger.error(f"Failed to calculate YTD periods: {e}")
 
             logger.info(f"Completed metrics calculation for {len(results)} periods")
+            _write_summary_cache(cache_path, "table1-ytd", results)
             return results
         finally:
             filtered_data = None
@@ -749,7 +823,14 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
     Returns dict with keys: periods (actual, mtd_actual, mtd_last_year, mtd_last_month, ytd_actual, ytd_last_year),
     and date_ranges for each (for display).
     """
+    cache_path = _summary_cache_file(data_root, "table1-mtd", base_week)
+    cached = _read_summary_cache(cache_path, "table1-mtd", base_week)
+    if cached is not None:
+        return cached
     with qlik.qlik_resident_section():
+        cached = _read_summary_cache(cache_path, "table1-mtd", base_week)
+        if cached is not None:
+            return cached
         all_raw_data = None
         try:
             try:
@@ -758,7 +839,9 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
                 logger.error(f"Failed to load raw data for MTD/YTD: {e}")
                 raise
 
-            return _table1_mtd_and_ytd_from_frames(base_week, all_raw_data)
+            payload = _table1_mtd_and_ytd_from_frames(base_week, all_raw_data)
+            _write_summary_cache(cache_path, "table1-mtd", payload)
+            return payload
         finally:
             if all_raw_data is not None:
                 all_raw_data.clear()
@@ -1026,8 +1109,17 @@ def calculate_table1_for_periods(
     
     # Load all raw data for the base week
     latest_data_path = data_root / "raw" / base_week
+    cache_path = _summary_cache_file(
+        data_root, "table1", base_week, json.dumps(periods, sort_keys=True)
+    )
+    cached = _read_summary_cache(cache_path, "table1", base_week)
+    if cached is not None:
+        return cached
 
     with qlik.qlik_resident_section():
+        cached = _read_summary_cache(cache_path, "table1", base_week)
+        if cached is not None:
+            return cached
         all_raw_data = None
         filtered_data = None
         try:
@@ -1063,6 +1155,7 @@ def calculate_table1_for_periods(
                     results[period_name] = _get_zero_metrics()
 
             logger.info(f"Completed metrics calculation for {len(results)} periods")
+            _write_summary_cache(cache_path, "table1", results)
             return results
         finally:
             filtered_data = None
