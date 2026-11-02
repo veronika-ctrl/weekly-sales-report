@@ -5,6 +5,7 @@ import {
   describeApiFetchFailure,
   describeHttpError,
   isNetworkFetchErrorMessage,
+  isTransientApiError,
   withApiCredentials,
 } from './api-fetch'
 
@@ -34,12 +35,24 @@ describe('describeHttpError', () => {
     const msg = describeHttpError(502, 'Bad Gateway')
     assert.match(msg, /502/)
     assert.match(msg, /timeout|unavailable/i)
+    assert.match(msg, /do not need to re-upload/i)
+    assert.doesNotMatch(msg, /Adjusted aMER/)
   })
 
   it('strips HTML from 500 bodies', () => {
     const msg = describeHttpError(500, '<html><body>Internal Server Error</body></html>')
     assert.match(msg, /Internal Server Error/)
     assert.doesNotMatch(msg, /<html>/)
+  })
+})
+
+describe('isTransientApiError', () => {
+  it('retries Failed to fetch, 502, and timeouts — not a 404 body', () => {
+    assert.equal(isTransientApiError('Failed to fetch'), true)
+    assert.equal(isTransientApiError('Could not reach /api/claims (Failed to fetch).'), true)
+    assert.equal(isTransientApiError('The API returned 502 (gateway timeout or unavailable).'), true)
+    assert.equal(isTransientApiError('Request timed out after 20s'), true)
+    assert.equal(isTransientApiError('No claim orders loaded'), false)
   })
 })
 

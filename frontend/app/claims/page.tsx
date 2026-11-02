@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import ReportLoadState from '@/components/ReportLoadState'
 import { getClaims, hasBackend, type ClaimsBucket, type ClaimsResponse } from '@/lib/api'
 
 function sek(value: number | null | undefined): string {
@@ -81,6 +81,7 @@ export default function ClaimsPage() {
   const [data, setData] = useState<ClaimsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     if (!hasBackend) {
@@ -88,9 +89,14 @@ export default function ClaimsPage() {
       return
     }
     let cancelled = false
+    setLoading(true)
+    setError(null)
     getClaims()
       .then((payload) => {
-        if (!cancelled) setData(payload)
+        if (!cancelled) {
+          setData(payload)
+          setError(null)
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load claims')
@@ -101,7 +107,7 @@ export default function ClaimsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadToken])
 
   if (!hasBackend) {
     return (
@@ -114,12 +120,17 @@ export default function ClaimsPage() {
     )
   }
 
-  if (loading) {
+  if (loading || error) {
     return (
-      <div className="flex items-center gap-3 py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading Cin7 claim orders…</p>
-      </div>
+      <ReportLoadState
+        loading={loading}
+        error={error}
+        empty={false}
+        onRetry={() => setReloadToken((n) => n + 1)}
+        loadingTitle="Loading Cin7 claim orders"
+        loadingHint="This page does not read Qlik. If the API is restarting, wait — claim files stay on the server. You do not need to re-upload."
+        emptyHint=""
+      />
     )
   }
 
@@ -142,8 +153,6 @@ export default function ClaimsPage() {
           {note}
         </div>
       ))}
-
-      {error ? <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{error}</div> : null}
 
       {data && !data.available ? (
         <Card>

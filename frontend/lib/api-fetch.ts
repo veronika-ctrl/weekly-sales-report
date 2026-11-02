@@ -19,6 +19,13 @@ export function isNetworkFetchErrorMessage(message: string): boolean {
   )
 }
 
+/** Render 502 / CORS Failed to fetch / cold start — retry, do not re-upload. */
+export function isTransientApiError(message: string): boolean {
+  return /failed to fetch|could not reach|networkerror|network request failed|load failed|timed out|502|503|504|gateway timeout|unavailable/i.test(
+    message || ''
+  )
+}
+
 export function describeHttpError(status: number, body: string): string {
   const trimmed = (body || '')
     .replace(/<[^>]+>/g, ' ')
@@ -35,8 +42,8 @@ export function describeHttpError(status: number, body: string): string {
   if (status === 502 || status === 503 || status === 504) {
     return (
       `The API returned ${status} (gateway timeout or unavailable). ` +
-      'A large Shopify customer file can drop this connection. ' +
-      'Headline Adjusted aMER comes from the Dema agent trio and does not need a re-upload — retry in a minute.'
+      'The service is restarting or still reading a large Qlik file. ' +
+      'Uploaded files stay on the server — retry in a minute. You do not need to re-upload.'
     )
   }
   if (trimmed) return trimmed

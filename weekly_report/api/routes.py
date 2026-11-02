@@ -599,6 +599,24 @@ def _supabase_enabled() -> bool:
     return os.getenv("DISABLE_SUPABASE", "").lower() not in ("1", "true", "yes")
 
 
+def prune_disk_if_tight() -> None:
+    """Drop old weekly Qlik/DEMA/Shopify when the 1 GB disk is under 400 MB free.
+
+    Runs in a background thread after boot so /api/health and /api/claims can
+    answer while leftover week folders (W41/W42 on 2 Nov 2026) are deleted.
+    Must not read Qlik workbooks.
+    """
+    try:
+        config = load_config()
+        space = ensure_upload_space(Path(config.data_root))
+        if space.get("pruned"):
+            logger.warning(
+                f"Boot prune freed {space.get('bytes_freed')} bytes; kept {space.get('kept_weeks')}"
+            )
+    except Exception as exc:
+        logger.warning(f"Boot prune skipped: {exc}")
+
+
 @app.on_event("startup")
 def _log_supabase_status():
     """Log whether Supabase is configured and enabled.
@@ -610,16 +628,19 @@ def _log_supabase_status():
     """
     if not _supabase_enabled():
         logger.info("Supabase: disabled (DISABLE_SUPABASE=true). All Supabase read/write skipped.")
-        return
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    if url and key:
-        logger.info("Supabase: configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set)")
     else:
-        logger.warning(
-            "Supabase: not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env at project root. "
-            "Sync and cache will be disabled until then."
-        )
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if url and key:
+            logger.info("Supabase: configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set)")
+        else:
+            logger.warning(
+                "Supabase: not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env at project root. "
+                "Sync and cache will be disabled until then."
+            )
+    import threading
+
+    threading.Thread(target=prune_disk_if_tight, daemon=True, name="disk-prune").start()
 
 
 # Add CORS middleware
@@ -643,6 +664,7 @@ cors_origins = [
     "http://127.0.0.1:3001",
     "http://localhost:3002",
     "http://127.0.0.1:3002",
+    "https://weekly-sales-report-two.vercel.app",
 ]
 
 vercel_url = os.getenv("VERCEL_URL")
@@ -3136,7 +3158,7 @@ def get_klaviyo_email(
 
 @app.get("/api/claims")
 def get_claims():
-    """Cin7 claim orders: monthly counts, replacement cost, freight and discounts."""
+    """Cin7 claim orders. Must not read Qlik — this page should survive a Qlik OOM restart."""
     try:
         config = load_config()
         from weekly_report.src.metrics.claims import calculate_claims

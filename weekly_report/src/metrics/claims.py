@@ -5,6 +5,9 @@ discount) is repeated on every line, so each order is counted once.
 Replacement cost is the landed cost in SEK from the product file, times
 quantity. A line whose item code is not in that file stays at 0. The wholesale
 item price is not used.
+
+Never import Qlik adapters or read Excel workbooks. Claims · Cin7 is a small
+CSV report; a Qlik OOM on another page must not be required to open it.
 """
 
 from __future__ import annotations
@@ -177,6 +180,7 @@ def _count_text(value: float) -> str:
 
 
 def _claim_folders(data_root: Path) -> List[Path]:
+    """Claim CSV folders only. Never walk qlik / dema / shopify slots."""
     root = Path(data_root)
     folders = [
         _bundled_dir(),
