@@ -145,7 +145,12 @@ def _landed_cost_files(data_root: Path) -> List[Path]:
 
 
 def _landed_costs(data_root: Path) -> tuple[Dict[str, float], List[str]]:
-    """Map product code to landed cost SEK. A later file overrides the same code."""
+    """Map product code to landed cost SEK.
+
+    Files are applied in order. A later nonzero cost wins. A later 0 does not
+    replace an existing nonzero cost, so a seasonal product export cannot wipe
+    the catalog.
+    """
     costs: Dict[str, float] = {}
     used: List[str] = []
     for path in _landed_cost_files(data_root):
@@ -166,7 +171,10 @@ def _landed_costs(data_root: Path) -> tuple[Dict[str, float], List[str]]:
                 code = _text(row.get(code_col))
                 if not code:
                     continue
-                costs[code] = _num(row.get(cost_col))
+                cost = _num(row.get(cost_col))
+                previous = costs.get(code)
+                if previous is None or cost != 0:
+                    costs[code] = cost
                 added = True
         if added:
             used.append(path.name)

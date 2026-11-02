@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from weekly_report.src.metrics import claims as claims_mod
-from weekly_report.src.metrics.claims import calculate_claims, carrier_price_eur, product_category
+from weekly_report.src.metrics.claims import (
+    _landed_costs,
+    calculate_claims,
+    carrier_price_eur,
+    product_category,
+)
 
 
 def test_product_category_splits_swim_from_underwear():
@@ -33,10 +38,10 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert totals["discount_sek"] == 0
     wholesale_sek = 66116.59
     assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
-    assert totals["product_cost_sek"] == pytest.approx(15422.09, abs=0.02)
+    assert totals["product_cost_sek"] == pytest.approx(20591.35, abs=0.02)
     assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
     assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
-    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(15422.11, abs=0.05)
+    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(20591.37, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-09"]["units"] == 65
@@ -50,12 +55,16 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert any("SwissPost" in note for note in payload["notes"])
     assert any("Fedex International Priority" in note for note in payload["notes"])
     landed_note = next(note for note in payload["notes"] if note.startswith("Landed cost matched"))
-    assert "88 of 96" in landed_note
-    assert "MTO016031801-9000-L" in landed_note
-    assert "MTO016031801-9000-XXL" in landed_note
+    assert "92 of 96" in landed_note
+    assert "cin7_landed_cost_fw26.csv" in landed_note
+    assert "MTO016031801-9000-L" not in landed_note
+    assert "MTO016031801-9000-XXL" not in landed_note
     assert "MUW002031601-9000-M" in landed_note
+    assert "MUW002031601-9000-L" in landed_note
     assert "Shopping bag M" in landed_note
-    assert "112 units" in landed_note
+    assert "105 units" in landed_note
+    assert "MTO023030301-0246-M" in landed_note
+    assert "MTO024031301-0224-XL" in landed_note
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
     swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
     assert swisspost["freight_sek"] == 0
@@ -106,6 +115,46 @@ def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
     assert months["2026-09"]["orders"] == 35
     assert months["2026-10"]["orders"] == 30
     assert months["2026-11"]["orders"] == 1
+
+
+def test_fw26_fills_unmatched_skus_and_catalog_zeros():
+    payload = calculate_claims(Path("/tmp/does-not-exist-claims"))
+    costs, used = _landed_costs(Path("/tmp/does-not-exist-claims"))
+    assert "cin7_landed_cost_sek.csv" in used
+    assert "cin7_landed_cost_fw26.csv" in used
+    assert costs["MTO016031501-9999-M"] == pytest.approx(370.9)
+    assert costs["MTO016031801-9000-L"] == pytest.approx(225.6923)
+    assert costs["MTO016031801-9000-XXL"] == pytest.approx(225.6923)
+    assert costs["MUW002031603-9000-L"] == pytest.approx(210.59)
+    assert costs["MBO000030401-0224-L"] == pytest.approx(370.2)
+    assert costs["MUW002004801-0224-L"] == pytest.approx(69.6)
+    assert "MUW002031601-9000-M" not in costs
+    assert "MUW002031601-9000-L" not in costs
+    assert "Shopping bag M" not in costs
+    assert costs["MTO023030301-0246-M"] == 0
+    assert costs["MUW001072103-9999-L"] == pytest.approx(167.05)
+    by_ref = {row["order_ref"]: row for row in payload["orders"]}
+    assert by_ref["CCLA78-458"]["product_cost_sek"] == pytest.approx(2253.69, abs=0.02)
+    assert "Shopping bag M × 100" in by_ref["CCLA78-458"]["items"]
+
+
+def test_later_zero_landed_cost_does_not_wipe_catalog(tmp_path: Path):
+    folder = tmp_path / "claims"
+    folder.mkdir()
+    (folder / "landed_zeros.csv").write_text(
+        "Description,Style Code,Code,RRP,LandedCOST SEK Excl\n"
+        "Trunks,MUW001072103-9999,MUW001072103-9999-L,999,0\n"
+        "Joggers,MBO000030401-0224,MBO000030401-0224-L,999,0\n"
+        "Unknown,NOT-A-REAL-SKU,NOT-A-REAL-SKU,999,0\n",
+        encoding="utf-8",
+    )
+    payload = calculate_claims(tmp_path)
+    costs, used = _landed_costs(tmp_path)
+    assert "landed_zeros.csv" in used
+    assert costs["MUW001072103-9999-L"] == pytest.approx(167.05)
+    assert costs["MBO000030401-0224-L"] == pytest.approx(370.2)
+    by_ref = {row["order_ref"]: row for row in payload["orders"]}
+    assert by_ref["CCLA78-431"]["product_cost_sek"] == pytest.approx(167.05, abs=0.01)
 
 
 def test_later_landed_cost_file_overrides_the_bundle(tmp_path: Path):
