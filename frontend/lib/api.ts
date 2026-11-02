@@ -61,6 +61,39 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number, endpoint:
   }
 }
 
+/** Render 502 / Failed to fetch / timeout: ping health and retry. Do not re-upload. */
+const TRANSIENT_RETRY_WINDOW_MS = 90_000
+const HEALTH_PING_TIMEOUT_MS = 15_000
+const TRANSIENT_RETRY_PAUSE_MS = 4_000
+
+async function fetchJsonWithHealthRetry<T>(
+  url: string,
+  timeoutMs: number,
+  endpoint: string,
+  retryWindowMs: number = TRANSIENT_RETRY_WINDOW_MS,
+): Promise<T> {
+  const deadline = Date.now() + retryWindowMs
+  let lastError: unknown
+  while (true) {
+    try {
+      return await fetchJsonWithTimeout<T>(url, timeoutMs, endpoint)
+    } catch (err) {
+      lastError = err
+      const message = err instanceof Error ? err.message : String(err)
+      if (!isTransientApiError(message)) throw err
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) break
+      try {
+        await fetchWithTimeout(`${API_BASE_URL}/api/health`, undefined, HEALTH_PING_TIMEOUT_MS)
+      } catch {
+        /* API may still be waking after a deploy or Qlik OOM restart */
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(TRANSIENT_RETRY_PAUSE_MS, remaining)))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Failed to load ${endpoint}`)
+}
+
 /**
  * When true, the app may call the Python API (uploads, metrics, file metadata).
  * - Production: only if NEXT_PUBLIC_API_URL is set (Supabase-only deploys stay off).
@@ -541,7 +574,7 @@ export interface TopProductsMonthlyResponse {
 }
 
 export async function getWomenMonthly(baseWeek: string, months: number = 13, topN: number = 15): Promise<WomenMonthlyResponse> {
-  return fetchJsonWithTimeout(
+  return fetchJsonWithHealthRetry(
     `${API_BASE_URL}/api/women-monthly?base_week=${encodeURIComponent(baseWeek)}&months=${months}&top_n=${topN}`,
     HEAVY_METRICS_TIMEOUT_MS,
     '/api/women-monthly',
@@ -868,7 +901,7 @@ export async function getTopProductsMonthly(
   months: number = 13,
   topN: number = 30,
 ): Promise<TopProductsMonthlyResponse> {
-  return fetchJsonWithTimeout(
+  return fetchJsonWithHealthRetry(
     `${API_BASE_URL}/api/top-products-monthly?base_week=${encodeURIComponent(baseWeek)}&gender_filter=${genderFilter}&months=${months}&top_n=${topN}`,
     HEAVY_METRICS_TIMEOUT_MS,
     '/api/top-products-monthly',
@@ -2653,25 +2686,5 @@ export interface ClaimsResponse {
 export async function getClaims(): Promise<ClaimsResponse> {
   // Claims is a small Cin7 CSV. A single Failed to fetch usually means Render
   // is 502 / restarting from a Qlik read on another page — retry like uploads.
-  const url = `${API_BASE_URL}/api/claims`
-  const deadline = Date.now() + 90_000
-  let lastError: unknown
-  while (Date.now() < deadline) {
-    try {
-      return await fetchJsonWithTimeout<ClaimsResponse>(url, 20_000, '/api/claims')
-    } catch (err) {
-      lastError = err
-      const message = err instanceof Error ? err.message : String(err)
-      if (!isTransientApiError(message)) throw err
-      try {
-        await fetchWithTimeout(`${API_BASE_URL}/api/health`, undefined, 15_000)
-      } catch {
-        /* API may still be waking after a deploy or Qlik OOM restart */
-      }
-      const remaining = deadline - Date.now()
-      if (remaining <= 0) break
-      await new Promise((resolve) => setTimeout(resolve, Math.min(4000, remaining)))
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('Failed to load claims')
+  return fetchJsonWithHealthRetry<ClaimsResponse>(`${API_BASE_URL}/api/claims`, 20_000, '/api/claims')
 }

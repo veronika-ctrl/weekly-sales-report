@@ -96,6 +96,20 @@ def test_second_excel_read_uses_the_column_cache(tmp_path: Path, monkeypatch):
     assert calls["n"] == 2
 
 
+def test_excel_stream_keep_row_drops_retail_without_using_unfiltered_cache(tmp_path: Path):
+    _write_week(tmp_path)
+    week = tmp_path / "raw" / "2026-44"
+    columns = ["Date", "Sales Channel", "Gross Revenue"]
+    qlik.load_qlik_columns(week, columns)
+
+    def online_only(values):
+        return str(values.get("Sales Channel") or "").strip().lower() == "online"
+
+    frame = qlik.load_qlik_columns(week, columns, keep_row=online_only)
+    assert list(frame["Gross Revenue"]) == [12.0]
+    assert list(frame["Sales Channel"].astype(str).str.strip()) == ["Online"]
+
+
 def test_openpyxl_stream_is_used_when_calamine_fails(tmp_path: Path, monkeypatch):
     _write_week(tmp_path)
 
