@@ -401,6 +401,14 @@ export default function Settings() {
       skipCountry: true,
       hint: 'Upload the week file here, for example discount_groups_daily_2026-10-19_to_2026-10-25.csv. Any file name works if the columns are date, group and discount_amount_usd. It is added onto the history through 18 Oct 2026. A day that is already there is replaced; every other day stays. A file dropped on Full Price vs Sale by mistake is stored in this slot.',
     },
+    {
+      type: 'claims',
+      label: 'Claims orders — Cin7 (not Shopify)',
+      formats: '.csv',
+      accumulate: true,
+      skipCountry: true,
+      hint: 'Upload the Cin7 orders export for CDLP CLAIMS, for example OrdersExport-5-10-2026.csv. Orders are added onto the report. An order that is already there is replaced. Names and addresses are not shown.',
+    },
     { type: 'budget', label: 'Budget Data', formats: '.csv' },
   ]
 

@@ -16,6 +16,7 @@ ACCUMULATING_FILE_TYPES: FrozenSet[str] = frozenset(
     {
         "discounts",
         "discount_types",
+        "claims",
         "full_price_vs_sale_excl_exchanges",
         SHOPIFY_CUSTOMERS_TYPE,
         *AMER_DEMA_FILE_TYPES,

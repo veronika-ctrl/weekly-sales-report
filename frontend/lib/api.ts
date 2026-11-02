@@ -2548,3 +2548,54 @@ export async function registerAdjustedAmerExpected(params: {
     )
   }
 }
+
+export interface ClaimsBucket {
+  label: string
+  orders: number
+  units: number
+  product_cost_sek: number
+  freight_sek: number
+  discount_sek: number
+  key?: string
+}
+
+export interface ClaimsOrderRow {
+  order_ref: string
+  created: string
+  month: string
+  country: string
+  currency: string
+  carrier: string
+  freight_method: string
+  reason: string
+  units: number
+  product_cost_sek: number
+  freight_sek: number
+  discount_sek: number
+  items: string
+}
+
+export interface ClaimsResponse {
+  available: boolean
+  files_used: string[]
+  notes: string[]
+  totals: {
+    orders: number
+    units: number
+    product_cost_sek: number
+    freight_sek: number
+    discount_sek: number
+    surcharge_sek: number
+    recorded_cost_sek: number
+  }
+  months: ClaimsBucket[]
+  reasons: ClaimsBucket[]
+  categories: ClaimsBucket[]
+  countries: ClaimsBucket[]
+  carriers: ClaimsBucket[]
+  orders: ClaimsOrderRow[]
+}
+
+export async function getClaims(): Promise<ClaimsResponse> {
+  return fetchJsonWithTimeout(`${API_BASE_URL}/api/claims`, 60_000, '/api/claims')
+}
