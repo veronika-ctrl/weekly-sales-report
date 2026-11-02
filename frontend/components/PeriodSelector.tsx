@@ -22,16 +22,23 @@ export default function PeriodSelector({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Generate week options (current year ± 2 years)
+  // Generate week options (current year ± 2 years). Weeks with files first so
+  // today's empty ISO week is not the one people land on by scrolling to "now".
   const currentYear = new Date().getFullYear()
   const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1]
-  const weekOptions = []
-  
+  const allWeeks: string[] = []
   for (const year of years) {
     for (let week = 1; week <= 53; week++) {
-      weekOptions.push(`${year}-${week.toString().padStart(2, '0')}`)
+      allWeeks.push(`${year}-${week.toString().padStart(2, '0')}`)
     }
   }
+  const weekOptions =
+    weeksWithData && weeksWithData.size > 0
+      ? [
+          ...allWeeks.filter((week) => weeksWithData.has(week)).reverse(),
+          ...allWeeks.filter((week) => !weeksWithData.has(week)),
+        ]
+      : allWeeks
 
   const fetchPeriods = async (week: string) => {
     setLoading(true)

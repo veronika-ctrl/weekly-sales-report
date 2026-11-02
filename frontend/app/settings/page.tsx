@@ -22,6 +22,7 @@ import {
   getDiskUsage,
   deleteIgnoredPricingFiles,
   deleteWeeks36To40,
+  deleteOldWeeklyFiles,
   type DiscountsHistoryInfo,
   type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
@@ -64,6 +65,7 @@ export default function Settings() {
   const [diskUsageLoading, setDiskUsageLoading] = useState(false)
   const [deletingIgnored, setDeletingIgnored] = useState(false)
   const [deletingStaleWeeks, setDeletingStaleWeeks] = useState(false)
+  const [deletingOldWeeks, setDeletingOldWeeks] = useState(false)
   const [pageHost, setPageHost] = useState('')
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
   const apiTarget = describeApiTarget(getApiBaseUrl(), pageHost)
@@ -76,6 +78,11 @@ export default function Settings() {
     metadata != null &&
     !metadata.error &&
     Object.keys(metadata).filter((k) => k !== 'error').length === 0
+  const noQlikOnApi =
+    Boolean(selectedWeek) &&
+    metadata != null &&
+    !metadata.error &&
+    !metadata.qlik
 
   useEffect(() => {
     setPageHost(typeof window !== 'undefined' ? window.location.hostname : '')
@@ -510,10 +517,7 @@ export default function Settings() {
             </p>
           </div>
 
-          {(diskUsage?.near_full ||
-            (diskUsage?.ignored_count ?? 0) > 0 ||
-            (diskUsage?.stale_week_count ?? 0) > 0 ||
-            diskUsageError) && (
+          {(diskUsage || diskUsageError) && (
             <div
               className={
                 diskUsage?.near_full
@@ -531,7 +535,7 @@ export default function Settings() {
               >
                 {diskUsage?.near_full
                   ? 'API disk is full — uploads will fail until space is freed'
-                  : 'Old unused Full Price vs Sale files are still on the API disk'}
+                  : 'API disk (Render). Old weekly Qlik files fill this 1 GB disk and then uploads fail.'}
               </div>
               <p
                 className={
@@ -541,7 +545,7 @@ export default function Settings() {
                 {diskUsageError
                   ? diskUsageError
                   : diskUsage
-                    ? `Disk ${diskUsage.used_pct ?? '–'}% used · ${formatUploadFileSize(diskUsage.free_bytes)} free · ${diskUsage.ignored_count} ignored Full Price file(s) (${formatUploadFileSize(diskUsage.ignored_bytes)}) · W36–W40 weekly files ${diskUsage.stale_week_count ?? 0} (${formatUploadFileSize(diskUsage.stale_week_bytes || 0)}). Deleting W36–W40 removes Qlik/DEMA/Shopify for those weeks so W42 can upload. Month-named 2026-41 files and aMER/retention/CAC/Klaviyo history stay.`
+                    ? `Disk ${diskUsage.used_pct ?? '–'}% used · ${formatUploadFileSize(diskUsage.free_bytes)} free · last Qlik week ${diskUsage.latest_qlik_week ?? 'none'} · older weekly files ${diskUsage.old_week_count ?? 0} (${formatUploadFileSize(diskUsage.old_week_bytes || 0)}). “Keep last 2 weeks” deletes older Qlik/DEMA/Shopify. Month-named Full Price, aMER, customers, retention, CAC, and Klaviyo stay.`
                     : 'Checking API disk…'}
               </p>
               {diskUsage && diskUsage.ignored_files.length > 0 && (
@@ -564,6 +568,38 @@ export default function Settings() {
                 >
                   <RefreshCw className={`h-4 w-4 ${diskUsageLoading ? 'animate-spin' : ''}`} />
                   Refresh disk
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                  disabled={deletingOldWeeks || !(diskUsage?.old_week_count)}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `Delete older weekly Qlik/DEMA/Shopify files (${diskUsage?.old_week_count ?? 0} files, ${formatUploadFileSize(diskUsage?.old_week_bytes || 0)}) and keep ${diskUsage?.kept_weeks?.join(', ') || 'the last 2 weeks'}? Month-named Full Price files, aMER, customers, retention, CAC, and Klaviyo stay.`,
+                      )
+                    ) {
+                      return
+                    }
+                    setDeletingOldWeeks(true)
+                    try {
+                      const result = await deleteOldWeeklyFiles()
+                      setDiskUsage(result.disk)
+                      await loadMetadata(true)
+                      window.alert(
+                        `Deleted ${result.count} file(s), freed ${formatUploadFileSize(result.bytes_freed)}. Kept ${result.kept_weeks?.join(', ') || 'recent weeks'}. Re-upload Qlik for this week if needed.`,
+                      )
+                    } catch (err) {
+                      window.alert(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setDeletingOldWeeks(false)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deletingOldWeeks ? 'Deleting…' : 'Keep last 2 weeks'}
                 </Button>
                 <Button
                   type="button"
@@ -662,16 +698,18 @@ export default function Settings() {
             </div>
           )}
 
-          {noFilesOnApi && (
+          {(noFilesOnApi || noQlikOnApi) && (
             <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1">
               <div className="text-sm font-medium text-amber-900">
-                No files on the API for week {selectedWeek}
+                {noFilesOnApi
+                  ? `No files on the API for week ${selectedWeek}`
+                  : `No Qlik file for week ${selectedWeek} — reports will look empty`}
               </div>
               <p className="text-xs text-amber-800">
-                Current Files is empty for every slot (Qlik, weekly DEMA, Adjusted aMER, retention,
-                CAC). This is the API disk, not your laptop. Re-upload while this page still shows
-                the API URL above, and wait until Current Files lists each CSV. A later Render
-                deploy wipes an ephemeral disk even if the upload succeeded earlier today.
+                Sales reports need a Qlik file on this week. Last complete week with Qlik is{' '}
+                {diskUsage?.latest_qlik_week || 'listed with ✓ in the week dropdown'}. Switch to
+                that week to see reports, or stay here and upload Qlik (then DEMA and Shopify) for{' '}
+                {selectedWeek}. Wait until Current Files lists Qlik Sales Data.
               </p>
             </div>
           )}

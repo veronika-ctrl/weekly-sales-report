@@ -114,7 +114,7 @@ describe('audience total self-load wiring', () => {
   it('does not label the week bar empty just because Summary table1 has not run', () => {
     const layout = readFileSync(join(here, '../components/LayoutContent.tsx'), 'utf8')
     assert.match(layout, /weeksWithData\.has\(baseWeek\)/)
-    assert.match(layout, /weeks-with-uploads/)
+    assert.match(layout, /getUploadWeeksInfo/)
   })
 
   it('loads per-market audience without waiting on the summary cache', () => {

@@ -45,7 +45,8 @@ export default function FileUpload({
       formData.append('week', currentWeek)
       formData.append('file_type', fileType)
 
-      const response = await fetch('http://localhost:8000/api/upload-file', {
+      const { getApiBaseUrl } = await import('@/lib/api')
+      const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
         method: 'POST',
         body: formData
       })

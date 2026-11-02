@@ -169,12 +169,57 @@ export default function BatchFileUpload({
         }, 200)
       }
 
-      const response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        signal: controller.signal
-      })
+      const postUpload = () =>
+        fetch(`${getApiBaseUrl()}/api/upload-file`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          signal: controller.signal
+        })
+
+      let response: Response
+      try {
+        response = await postUpload()
+      } catch (firstError: any) {
+        const retryable =
+          firstError?.name === 'TypeError' ||
+          /failed to fetch|networkerror|load failed/i.test(String(firstError?.message || ''))
+        if (!retryable || cancelledRef.current) throw firstError
+        await new Promise((resolve) => setTimeout(resolve, 8000))
+        try {
+          await fetch(`${getApiBaseUrl()}/api/health`, { signal: AbortSignal.timeout(15000) })
+        } catch {
+          /* API may still be waking; retry the upload anyway */
+        }
+        const retryForm = new FormData()
+        retryForm.append('file', file)
+        retryForm.append('week', currentWeek)
+        retryForm.append('file_type', fileType)
+        response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
+          method: 'POST',
+          body: retryForm,
+          credentials: 'include',
+          signal: controller.signal
+        })
+      }
+      if (response.status === 502 || response.status === 503) {
+        await new Promise((resolve) => setTimeout(resolve, 8000))
+        try {
+          await fetch(`${getApiBaseUrl()}/api/health`, { signal: AbortSignal.timeout(15000) })
+        } catch {
+          /* wake */
+        }
+        const retryForm = new FormData()
+        retryForm.append('file', file)
+        retryForm.append('week', currentWeek)
+        retryForm.append('file_type', fileType)
+        response = await fetch(`${getApiBaseUrl()}/api/upload-file`, {
+          method: 'POST',
+          body: retryForm,
+          credentials: 'include',
+          signal: controller.signal
+        })
+      }
 
       if (timeoutId) clearTimeout(timeoutId)
       if (progressInterval) clearInterval(progressInterval)

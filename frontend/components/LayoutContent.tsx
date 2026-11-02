@@ -21,21 +21,32 @@ function LayoutContentInner({
 }) {
   const { loading, baseWeek, setBaseWeek, hasRestoredWeek, isDataReady, periods } = useDataCache()
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
+  const [latestQlikWeek, setLatestQlikWeek] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const fromDisk = await import('@/lib/api').then((m) => m.getWeeksWithUploads()).catch(() => [] as string[])
+      const info = await import('@/lib/api').then((m) => m.getUploadWeeksInfo()).catch(() => ({
+        weeks: [] as string[],
+        qlikWeeks: [] as string[],
+        latestQlikWeek: null as string | null,
+      }))
       const fromSupabase = await import('@/lib/supabase-queries')
         .then((m) => m.getWeeksWithDataFromSupabase())
         .catch(() => [] as string[])
       if (cancelled) return
-      setWeeksWithData(new Set([...fromDisk, ...fromSupabase]))
+      setWeeksWithData(new Set([...info.weeks, ...info.qlikWeeks, ...fromSupabase]))
+      setLatestQlikWeek(info.latestQlikWeek || info.qlikWeeks[0] || info.weeks[0] || null)
     })()
     return () => {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!hasRestoredWeek || baseWeek || !latestQlikWeek) return
+    setBaseWeek(latestQlikWeek)
+  }, [hasRestoredWeek, baseWeek, latestQlikWeek, setBaseWeek])
   const pathname = usePathname()
   const isSettings = pathname === '/settings'
   const isAdjustedAmer = pathname === '/adjusted-amer'
@@ -119,6 +130,19 @@ function LayoutContentInner({
             Settings
           </Link>
         </div>
+        {dataStatus === 'no-data' && latestQlikWeek && latestQlikWeek !== baseWeek && (
+          <div className="mx-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Week {baseWeek} has no Qlik file, so reports stay empty. Last week with files is{' '}
+            <button
+              type="button"
+              className="font-semibold underline"
+              onClick={() => setBaseWeek(latestQlikWeek)}
+            >
+              {latestQlikWeek}
+            </button>
+            . Open Settings to upload Qlik for {baseWeek}.
+          </div>
+        )}
         {children}
       </div>
     )

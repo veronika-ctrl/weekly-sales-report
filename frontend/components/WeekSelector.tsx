@@ -22,8 +22,11 @@ export default function WeekSelector({ value, onChange, className = '', weeksWit
         options.push(`${year}-${week.toString().padStart(2, '0')}`)
       }
     }
-    return options
-  }, [])
+    if (!weeksWithData || weeksWithData.size === 0) return options
+    const withData = options.filter((week) => weeksWithData.has(week)).reverse()
+    const rest = options.filter((week) => !weeksWithData.has(week))
+    return [...withData, ...rest]
+  }, [weeksWithData])
 
   const optionLabel = (week: string) => {
     if (weeksWithData == null) return week

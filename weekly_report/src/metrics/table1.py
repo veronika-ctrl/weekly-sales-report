@@ -37,6 +37,26 @@ TABLE1_QLIK_COLUMNS = (
     "Customer E-mail",
 )
 
+# Audience / contribution / country pages still call load_all_raw_data. They
+# must not pd.read_excel the full ~100MB xlsx — that restarts Render (502) and
+# then Settings uploads fail with Failed to fetch.
+ALL_RAW_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Country",
+    "Gender",
+    "Product Category",
+    "Product",
+    "Color",
+    "Gross Revenue",
+    "Net Revenue",
+    "Returns",
+    "Sales Qty",
+    "New/Returning Customer",
+    "Customer E-mail",
+    "Order No",
+)
+
 
 def _online_segment_net_revenue(qlik_df: pd.DataFrame, cust_seg: pd.Series) -> tuple[float, float]:
     """Online net revenue for new vs returning customers. Returns (new_net, returning_net)."""
@@ -321,8 +341,8 @@ def _load_all_raw_data_uncached(data_path: Path, data_path_str: str) -> Dict[str
     
     # Load Qlik data
     try:
-        data_sources['qlik'] = qlik.load_data(data_path)
-        logger.info(f"Loaded Qlik data: {data_sources['qlik'].shape}")
+        data_sources['qlik'] = qlik.load_qlik_columns(data_path, ALL_RAW_QLIK_COLUMNS)
+        logger.info(f"Loaded Qlik columns: {data_sources['qlik'].shape}")
     except FileNotFoundError as e:
         logger.error(f"Qlik data not found: {e}")
         raise
@@ -991,14 +1011,14 @@ def load_data_for_period(period_week: str, data_root: Path) -> Dict[str, pd.Data
     
     try:
         # Load Qlik data
-        data_sources['qlik'] = qlik.load_data(raw_data_path)
-        logger.info(f"Loaded Qlik data: {data_sources['qlik'].shape}")
+        data_sources['qlik'] = qlik.load_qlik_columns(raw_data_path, ALL_RAW_QLIK_COLUMNS)
+        logger.info(f"Loaded Qlik columns: {data_sources['qlik'].shape}")
     except FileNotFoundError as e:
         logger.warning(f"Qlik data not found for {period_week}: {e}")
         # Try to load from the week-specific directory
         try:
             latest_data_path = data_root / "raw" / period_week
-            all_qlik_data = qlik.load_data(latest_data_path)
+            all_qlik_data = qlik.load_qlik_columns(latest_data_path, ALL_RAW_QLIK_COLUMNS)
             logger.info(f"Loading from latest data and filtering for {period_week}")
             
             # Filter data by ISO week

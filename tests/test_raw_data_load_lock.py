@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import threading
 from pathlib import Path
 
@@ -10,6 +11,12 @@ import pandas as pd
 from weekly_report.src.adapters import qlik
 from weekly_report.src.cache.manager import raw_data_cache
 from weekly_report.src.metrics import table1
+
+
+def test_load_all_raw_data_projects_qlik_columns():
+    source = inspect.getsource(table1._load_all_raw_data_uncached)
+    assert "load_qlik_columns" in source
+    assert "qlik.load_data(" not in source
 
 
 def test_concurrent_raw_loads_only_read_qlik_once(monkeypatch):
@@ -25,7 +32,7 @@ def test_concurrent_raw_loads_only_read_qlik_once(monkeypatch):
         return pd.DataFrame({"Date": pd.to_datetime(["2026-09-14"]), "Gross Revenue": [1.0]})
 
     empty = pd.DataFrame()
-    monkeypatch.setattr(table1.qlik, "load_data", fake_qlik)
+    monkeypatch.setattr(table1.qlik, "load_qlik_columns", lambda path, _cols: fake_qlik(path))
     monkeypatch.setattr(table1.dema, "load_data", lambda _p: empty.copy())
     monkeypatch.setattr(table1.dema_gm2, "load_data", lambda _p: empty.copy())
     monkeypatch.setattr(table1.shopify, "load_data", lambda _p: empty.copy())
@@ -61,7 +68,7 @@ def test_second_week_replaces_cached_raw_data(monkeypatch):
         return pd.DataFrame({"Date": pd.to_datetime(["2026-09-14"]), "path": [path.name]})
 
     empty = pd.DataFrame({"Days": pd.to_datetime(["2026-09-14"])})
-    monkeypatch.setattr(table1.qlik, "load_data", fake_qlik)
+    monkeypatch.setattr(table1.qlik, "load_qlik_columns", lambda path, _cols: fake_qlik(path))
     monkeypatch.setattr(table1.dema, "load_data", lambda _p: empty.copy())
     monkeypatch.setattr(table1.dema_gm2, "load_data", lambda _p: empty.copy())
     monkeypatch.setattr(table1.shopify, "load_data", lambda _p: empty.copy())
