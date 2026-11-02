@@ -669,68 +669,77 @@ def calculate_table1_for_periods_with_ytd(periods: Dict[str, str], data_root: Pa
     
     # Load all raw data for the base week
     latest_data_path = data_root / "raw" / base_week
-    
-    try:
-        logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
-        all_raw_data = load_summary_frames(latest_data_path)
-        logger.info("Successfully loaded summary frames")
-    except Exception as e:
-        logger.error(f"Failed to load raw data: {e}")
-        raise
-    
-    results = {}
-    
-    # Calculate regular periods
-    for period_name, period_week in periods.items():
-        logger.info(f"Processing {period_name}: {period_week}")
-        
+
+    # Hold the Qlik lock until every frame from this call is dropped.
+    # The context exit runs after the finally block, so a Summary retry
+    # cannot open the workbook beside the last YTD slice.
+    with qlik.qlik_resident_section():
+        all_raw_data = None
+        filtered_data = None
         try:
-            filtered_data = filter_data_for_period(all_raw_data, period_week)
-            metrics = calculate_table1_metrics(
-                filtered_data['qlik'],
-                filtered_data['dema_spend'], 
-                filtered_data['dema_gm2'],
-                period_week
-            )
-            results[period_name] = metrics
-        except Exception as e:
-            logger.warning(f"Failed to process {period_name} ({period_week}): {e}")
-            results[period_name] = _get_zero_metrics()
-    
-    # Calculate YTD periods
-    try:
-        ytd_periods = get_ytd_periods_for_week(base_week)
-        
-        for ytd_name, date_range in ytd_periods.items():
-            logger.info(f"Processing {ytd_name}: {date_range['start']} to {date_range['end']}")
-            
             try:
-                filtered_data = filter_data_for_date_range(
-                    all_raw_data,
-                    date_range['start'],
-                    date_range['end']
-                )
-                
-                metrics = calculate_table1_metrics_for_date_range(
-                    filtered_data['qlik'],
-                    filtered_data['dema_spend'],
-                    filtered_data['dema_gm2'],
-                    date_range['start'],
-                    date_range['end']
-                )
-                
-                results[ytd_name] = metrics
+                logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
+                all_raw_data = load_summary_frames(latest_data_path)
+                logger.info("Successfully loaded summary frames")
             except Exception as e:
-                logger.warning(f"Failed to process {ytd_name}: {e}")
-                results[ytd_name] = _get_zero_metrics()
-    except Exception as e:
-        logger.error(f"Failed to calculate YTD periods: {e}")
-    
-    logger.info(f"Completed metrics calculation for {len(results)} periods")
-    all_raw_data.clear()
-    del all_raw_data
-    gc.collect()
-    return results
+                logger.error(f"Failed to load raw data: {e}")
+                raise
+
+            results = {}
+
+            # Calculate regular periods
+            for period_name, period_week in periods.items():
+                logger.info(f"Processing {period_name}: {period_week}")
+
+                try:
+                    filtered_data = filter_data_for_period(all_raw_data, period_week)
+                    metrics = calculate_table1_metrics(
+                        filtered_data['qlik'],
+                        filtered_data['dema_spend'],
+                        filtered_data['dema_gm2'],
+                        period_week
+                    )
+                    results[period_name] = metrics
+                except Exception as e:
+                    logger.warning(f"Failed to process {period_name} ({period_week}): {e}")
+                    results[period_name] = _get_zero_metrics()
+
+            # Calculate YTD periods
+            try:
+                ytd_periods = get_ytd_periods_for_week(base_week)
+
+                for ytd_name, date_range in ytd_periods.items():
+                    logger.info(f"Processing {ytd_name}: {date_range['start']} to {date_range['end']}")
+
+                    try:
+                        filtered_data = filter_data_for_date_range(
+                            all_raw_data,
+                            date_range['start'],
+                            date_range['end']
+                        )
+
+                        metrics = calculate_table1_metrics_for_date_range(
+                            filtered_data['qlik'],
+                            filtered_data['dema_spend'],
+                            filtered_data['dema_gm2'],
+                            date_range['start'],
+                            date_range['end']
+                        )
+
+                        results[ytd_name] = metrics
+                    except Exception as e:
+                        logger.warning(f"Failed to process {ytd_name}: {e}")
+                        results[ytd_name] = _get_zero_metrics()
+            except Exception as e:
+                logger.error(f"Failed to calculate YTD periods: {e}")
+
+            logger.info(f"Completed metrics calculation for {len(results)} periods")
+            return results
+        finally:
+            filtered_data = None
+            if all_raw_data is not None:
+                all_raw_data.clear()
+            gc.collect()
 
 
 def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, Any]:
@@ -740,12 +749,23 @@ def calculate_table1_mtd_and_ytd(base_week: str, data_root: Path) -> Dict[str, A
     Returns dict with keys: periods (actual, mtd_actual, mtd_last_year, mtd_last_month, ytd_actual, ytd_last_year),
     and date_ranges for each (for display).
     """
-    try:
-        all_raw_data = load_summary_frames(data_root / "raw" / base_week)
-    except Exception as e:
-        logger.error(f"Failed to load raw data for MTD/YTD: {e}")
-        raise
+    with qlik.qlik_resident_section():
+        all_raw_data = None
+        try:
+            try:
+                all_raw_data = load_summary_frames(data_root / "raw" / base_week)
+            except Exception as e:
+                logger.error(f"Failed to load raw data for MTD/YTD: {e}")
+                raise
 
+            return _table1_mtd_and_ytd_from_frames(base_week, all_raw_data)
+        finally:
+            if all_raw_data is not None:
+                all_raw_data.clear()
+            gc.collect()
+
+
+def _table1_mtd_and_ytd_from_frames(base_week: str, all_raw_data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     results: Dict[str, Dict[str, Any]] = {}
     date_ranges: Dict[str, Dict[str, str]] = {}
 
@@ -1006,40 +1026,46 @@ def calculate_table1_for_periods(
     
     # Load all raw data for the base week
     latest_data_path = data_root / "raw" / base_week
-    
-    try:
-        logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
-        all_raw_data = load_summary_frames(latest_data_path)
-        logger.info("Successfully loaded summary frames - now filtering for each period")
-    except Exception as e:
-        logger.error(f"Failed to load raw data: {e}")
-        raise
-    
-    results = {}
-    
-    for period_name, period_week in periods.items():
-        logger.info(f"Processing {period_name}: {period_week}")
-        
+
+    with qlik.qlik_resident_section():
+        all_raw_data = None
+        filtered_data = None
         try:
-            # OPTIMIZATION: Filter pre-loaded data instead of loading again
-            filtered_data = filter_data_for_period(all_raw_data, period_week)
-            
-            # Calculate metrics using filtered data
-            metrics = calculate_table1_metrics(
-                filtered_data['qlik'],
-                filtered_data['dema_spend'], 
-                filtered_data['dema_gm2'],
-                period_week
-            )
-            
-            results[period_name] = metrics
-            
-        except Exception as e:
-            logger.warning(f"Failed to process {period_name} ({period_week}): {e}")
-            results[period_name] = _get_zero_metrics()
-    
-    logger.info(f"Completed metrics calculation for {len(results)} periods")
-    all_raw_data.clear()
-    del all_raw_data
-    gc.collect()
-    return results
+            try:
+                logger.info(f"Loading summary frames for week {base_week} from {latest_data_path}...")
+                all_raw_data = load_summary_frames(latest_data_path)
+                logger.info("Successfully loaded summary frames - now filtering for each period")
+            except Exception as e:
+                logger.error(f"Failed to load raw data: {e}")
+                raise
+
+            results = {}
+
+            for period_name, period_week in periods.items():
+                logger.info(f"Processing {period_name}: {period_week}")
+
+                try:
+                    # OPTIMIZATION: Filter pre-loaded data instead of loading again
+                    filtered_data = filter_data_for_period(all_raw_data, period_week)
+
+                    # Calculate metrics using filtered data
+                    metrics = calculate_table1_metrics(
+                        filtered_data['qlik'],
+                        filtered_data['dema_spend'],
+                        filtered_data['dema_gm2'],
+                        period_week
+                    )
+
+                    results[period_name] = metrics
+
+                except Exception as e:
+                    logger.warning(f"Failed to process {period_name} ({period_week}): {e}")
+                    results[period_name] = _get_zero_metrics()
+
+            logger.info(f"Completed metrics calculation for {len(results)} periods")
+            return results
+        finally:
+            filtered_data = None
+            if all_raw_data is not None:
+                all_raw_data.clear()
+            gc.collect()

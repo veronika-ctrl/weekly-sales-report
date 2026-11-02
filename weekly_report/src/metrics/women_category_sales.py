@@ -5,7 +5,7 @@ import pandas as pd
 from loguru import logger
 from pathlib import Path
 
-from weekly_report.src.adapters.qlik import load_category_qlik
+from weekly_report.src.adapters.qlik import load_category_qlik, qlik_resident_section
 from weekly_report.src.metrics.result_cache import ResultCache
 
 _cache = ResultCache("women-category-sales")
@@ -55,16 +55,15 @@ def calculate_women_category_sales_for_weeks(base_week: str, num_weeks: int, dat
 
 
 def _calculate_women_category_sales_uncached(base_week: str, num_weeks: int, data_root: Path) -> List[Dict[str, Any]]:
-    results = []
-
     raw_data_path = data_root / "raw" / base_week
     logger.info(f"Loading Qlik columns for women category sales from {raw_data_path}")
-    qlik_df = load_category_qlik(raw_data_path)
-    try:
-        return _women_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path)
-    finally:
-        del qlik_df
-        gc.collect()
+    with qlik_resident_section():
+        qlik_df = load_category_qlik(raw_data_path)
+        try:
+            return _women_rows_from_frame(qlik_df, base_week, num_weeks, raw_data_path)
+        finally:
+            del qlik_df
+            gc.collect()
 
 
 def _women_rows_from_frame(qlik_df: pd.DataFrame, base_week: str, num_weeks: int, raw_data_path: Path) -> List[Dict[str, Any]]:
