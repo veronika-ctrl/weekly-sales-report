@@ -327,11 +327,14 @@ def test_mtd_summary_releases_the_qlik_lock(monkeypatch):
 def test_api_startup_does_not_read_the_qlik_workbook():
     routes = Path(__file__).resolve().parents[1] / "weekly_report" / "api" / "routes.py"
     text = routes.read_text(encoding="utf-8")
-    start = text.index("def _log_supabase_status")
+    start = text.index("def prune_disk_if_tight")
     window = text[start : text.index("def _append_cors_origin")]
-    assert "Thread" not in window
+    assert "prune_disk_if_tight" in window
+    assert "ensure_upload_space" in window
     assert "calculate_women_category" not in window
     assert "read_excel" not in window
+    assert "load_qlik" not in window
+    assert "load_all_raw_data" not in window
 
 
 def _category_frame() -> pd.DataFrame:

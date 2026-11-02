@@ -1,10 +1,11 @@
 import {
   describeApiFetchFailure,
   describeHttpError,
+  isTransientApiError,
   withApiCredentials,
 } from './api-fetch'
 
-export { describeApiFetchFailure, describeHttpError } from './api-fetch'
+export { describeApiFetchFailure, describeHttpError, isTransientApiError } from './api-fetch'
 
 /** Default when NEXT_PUBLIC_API_URL is unset (avoids IPv6 `localhost` quirks vs uvicorn on 127.0.0.1). */
 const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000'
@@ -2650,5 +2651,27 @@ export interface ClaimsResponse {
 }
 
 export async function getClaims(): Promise<ClaimsResponse> {
-  return fetchJsonWithTimeout(`${API_BASE_URL}/api/claims`, 60_000, '/api/claims')
+  // Claims is a small Cin7 CSV. A single Failed to fetch usually means Render
+  // is 502 / restarting from a Qlik read on another page — retry like uploads.
+  const url = `${API_BASE_URL}/api/claims`
+  const deadline = Date.now() + 90_000
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      return await fetchJsonWithTimeout<ClaimsResponse>(url, 20_000, '/api/claims')
+    } catch (err) {
+      lastError = err
+      const message = err instanceof Error ? err.message : String(err)
+      if (!isTransientApiError(message)) throw err
+      try {
+        await fetchWithTimeout(`${API_BASE_URL}/api/health`, undefined, 15_000)
+      } catch {
+        /* API may still be waking after a deploy or Qlik OOM restart */
+      }
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) break
+      await new Promise((resolve) => setTimeout(resolve, Math.min(4000, remaining)))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Failed to load claims')
 }

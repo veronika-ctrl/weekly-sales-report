@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
 
+from weekly_report.src.metrics import claims as claims_mod
 from weekly_report.src.metrics.claims import calculate_claims, carrier_price_eur, product_category
 
 
@@ -123,3 +125,62 @@ def test_later_landed_cost_file_overrides_the_bundle(tmp_path: Path):
     assert "cin7_landed_cost_sek.csv" in note
     assert "landed.csv" in note
     assert "gmail" not in str(payload).lower()
+
+
+def test_claims_module_never_loads_qlik():
+    source = inspect.getsource(claims_mod)
+    assert "from weekly_report.src.adapters" not in source
+    assert "import qlik" not in source
+    assert "load_all_raw_data" not in source
+    assert "read_excel" not in source
+    assert "openpyxl" not in source
+    assert "calamine" not in source
+    assert "Never walk qlik" in inspect.getsource(claims_mod._claim_folders)
+
+
+def test_claims_endpoint_never_loads_qlik():
+    from weekly_report.api import routes
+
+    source = inspect.getsource(routes.get_claims)
+    assert "calculate_claims" in source
+    assert "qlik" in source.lower()
+    assert "Must not read Qlik" in source
+    assert "load_all_raw_data" not in source
+    assert "load_qlik" not in source
+    assert "https://weekly-sales-report-two.vercel.app" in routes.cors_origins
+
+
+def test_claims_endpoint_returns_bundled_october_without_reading_qlik(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    fake_qlik = tmp_path / "raw" / "2026-44" / "qlik" / "Qlik_W44.xlsx"
+    fake_qlik.parent.mkdir(parents=True)
+    fake_qlik.write_bytes(b"not-an-excel-workbook" * 1000)
+    from weekly_report.api import routes
+
+    payload = routes.get_claims()
+    assert payload["available"] is True
+    assert payload["totals"]["orders"] == 65
+    assert payload["totals"]["units"] == 227
+    assert "cin7_claims_orders_2026-10.csv" in payload["files_used"]
+    assert fake_qlik.exists()
+
+
+def test_boot_prune_does_not_read_qlik(monkeypatch, tmp_path: Path):
+    from weekly_report.api import routes
+
+    called = {}
+
+    monkeypatch.setattr(routes, "load_config", lambda: type("C", (), {"data_root": tmp_path})())
+
+    def fake_space(root, extra_keep=()):
+        called["root"] = root
+        return {"pruned": True, "bytes_freed": 12, "kept_weeks": ["2026-44"]}
+
+    monkeypatch.setattr(routes, "ensure_upload_space", fake_space)
+    routes.prune_disk_if_tight()
+    assert called["root"] == tmp_path
+    source = inspect.getsource(routes.prune_disk_if_tight)
+    assert "ensure_upload_space" in source
+    assert "load_qlik" not in source
+    assert "read_excel" not in source
