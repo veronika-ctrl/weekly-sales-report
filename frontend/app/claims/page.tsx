@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getClaims, hasBackend, type ClaimsBucket, type ClaimsResponse } from '@/lib/api'
+import { bucketHasShipping, claimsPageNotes } from '@/lib/claims-columns'
 
 function sek(value: number | null | undefined): string {
   if (value == null || Number.isNaN(Number(value))) return '—'
@@ -35,12 +36,23 @@ function MoneyTable({
   description,
   rows,
   firstColumn,
+  showShipping = true,
 }: {
   title: string
   description?: string
   rows: ClaimsBucket[]
   firstColumn: string
+  showShipping?: boolean
 }) {
+  const columns: { header: string; value: (row: ClaimsBucket) => string }[] = [
+    { header: 'Claims', value: (row) => count(row.orders) },
+    { header: 'Units', value: (row) => count(row.units) },
+    { header: 'Landed cost', value: (row) => sek(row.product_cost_sek) },
+  ]
+  if (showShipping) {
+    columns.push({ header: 'Shipping', value: (row) => sek(row.freight_sek) })
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -52,22 +64,28 @@ function MoneyTable({
           <thead>
             <tr className="text-left text-muted-foreground border-b">
               <th className="py-2 pr-3">{firstColumn}</th>
-              <th className="py-2 pr-3 text-right">Claims</th>
-              <th className="py-2 pr-3 text-right">Units</th>
-              <th className="py-2 pr-3 text-right">Landed cost</th>
-              <th className="py-2 pr-3 text-right">Shipping</th>
-              <th className="py-2 text-right">Extra discount</th>
+              {columns.map((column, index) => (
+                <th
+                  key={column.header}
+                  className={`py-2 text-right${index < columns.length - 1 ? ' pr-3' : ''}`}
+                >
+                  {column.header}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key || row.label} className="border-b last:border-0">
                 <td className="py-2 pr-3">{row.label}</td>
-                <td className="py-2 pr-3 text-right">{count(row.orders)}</td>
-                <td className="py-2 pr-3 text-right">{count(row.units)}</td>
-                <td className="py-2 pr-3 text-right">{sek(row.product_cost_sek)}</td>
-                <td className="py-2 pr-3 text-right">{sek(row.freight_sek)}</td>
-                <td className="py-2 text-right">{sek(row.discount_sek)}</td>
+                {columns.map((column, index) => (
+                  <td
+                    key={column.header}
+                    className={`py-2 text-right${index < columns.length - 1 ? ' pr-3' : ''}`}
+                  >
+                    {column.value(row)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -137,7 +155,7 @@ export default function ClaimsPage() {
         ) : null}
       </div>
 
-      {(data?.notes ?? []).map((note) => (
+      {claimsPageNotes(data?.notes ?? []).map((note) => (
         <div key={note} className="text-sm text-amber-950 bg-amber-50 border border-amber-200 rounded p-3">
           {note}
         </div>
@@ -161,11 +179,10 @@ export default function ClaimsPage() {
       ) : null}
 
       {totals && data?.available ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Kpi title="Claim orders" value={count(totals.orders)} hint={`${count(totals.units)} replacement units`} />
           <Kpi title="Landed cost" value={sek(totals.product_cost_sek)} hint="Replacement cost in SEK" />
           <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
-          <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
         </div>
       ) : null}
 
@@ -189,6 +206,7 @@ export default function ClaimsPage() {
             description="An order with two product types is counted in each type."
             firstColumn="Product"
             rows={data.categories}
+            showShipping={bucketHasShipping(data.categories)}
           />
         ) : null}
         {data?.countries?.length ? <MoneyTable title="Destination country" firstColumn="Country" rows={data.countries} /> : null}
@@ -215,8 +233,7 @@ export default function ClaimsPage() {
                   <th className="py-2 pr-3">Shipping</th>
                   <th className="py-2 pr-3 text-right">Units</th>
                   <th className="py-2 pr-3 text-right">Landed cost</th>
-                  <th className="py-2 pr-3 text-right">Shipping cost</th>
-                  <th className="py-2 text-right">Discount</th>
+                  <th className="py-2 text-right">Shipping cost</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,8 +249,7 @@ export default function ClaimsPage() {
                     <td className="py-2 pr-3">{row.freight_method}</td>
                     <td className="py-2 pr-3 text-right">{count(row.units)}</td>
                     <td className="py-2 pr-3 text-right">{sek(row.product_cost_sek)}</td>
-                    <td className="py-2 pr-3 text-right">{sek(row.freight_sek)}</td>
-                    <td className="py-2 text-right">{sek(row.discount_sek)}</td>
+                    <td className="py-2 text-right">{sek(row.freight_sek)}</td>
                   </tr>
                 ))}
               </tbody>
