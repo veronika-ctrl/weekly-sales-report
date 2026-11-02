@@ -3130,6 +3130,22 @@ def get_klaviyo_email(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/claims")
+def get_claims():
+    """Cin7 claim orders: monthly counts, replacement cost, freight and discounts."""
+    try:
+        config = load_config()
+        from weekly_report.src.metrics.claims import calculate_claims
+
+        return calculate_claims(Path(config.data_root))
+    except Exception as e:
+        import traceback
+
+        logger.error(f"Error claims: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.get("/api/klaviyo-status")
 def get_klaviyo_status():
     """Whether a Klaviyo private key is configured (never returns the key)."""
@@ -4327,7 +4343,7 @@ async def upload_file(
         
         # Validate file_type
         allowed_types = [
-            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types",
+            "qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", "claims",
             FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget",
             *AMER_ALL_FILE_TYPES,
             RETENTION_CUSTOMERS_TYPE,
@@ -4341,7 +4357,7 @@ async def upload_file(
         file_extension = Path(file.filename).suffix.lower()
         if file_type == "qlik" and file_extension not in ['.xlsx', '.csv']:
             raise HTTPException(status_code=400, detail="Qlik file must be .xlsx or .csv")
-        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
+        csv_types = ["dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", "claims", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]
         if file_type in csv_types and file_extension != '.csv':
             raise HTTPException(status_code=400, detail=f"{file_type} file must be .csv")
 
@@ -4361,6 +4377,8 @@ async def upload_file(
         # beside the other discount-type CSVs so it is preferred over the bundled snapshot.
         if file_type == "discount_types":
             target_dir = Path(config.data_root) / "discount_types"
+        elif file_type == "claims":
+            target_dir = Path(config.data_root) / "claims"
         else:
             target_dir = config.raw_data_path / file_type
         target_path = prepare_slot_for_upload(target_dir, file_type, file.filename)
@@ -4381,6 +4399,18 @@ async def upload_file(
                     target_path = dest
                 file_type = "discount_types"
                 logger.info(f"Stored discount-code CSV in {target_path}")
+            elif file_type != "claims":
+                from weekly_report.src.metrics.claims import is_claims_csv
+
+                if is_claims_csv(target_path):
+                    dest_dir = Path(config.data_root) / "claims"
+                    dest = prepare_slot_for_upload(dest_dir, "claims", target_path.name)
+                    if dest.resolve() != target_path.resolve():
+                        dest.write_bytes(target_path.read_bytes())
+                        target_path.unlink(missing_ok=True)
+                        target_path = dest
+                    file_type = "claims"
+                    logger.info(f"Stored Cin7 claims CSV in {target_path}")
         
         logger.info(f"File uploaded: {target_path} ({bytes_written} bytes)")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")
@@ -4707,8 +4737,13 @@ async def get_file_metadata(week: str = Query(...)):
         
         metadata = {}
         file_hashes = []
-        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
-            type_path = Path(config.data_root) / "discount_types" if file_type == "discount_types" else raw_path / file_type
+        for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", "claims", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
+            if file_type == "discount_types":
+                type_path = Path(config.data_root) / "discount_types"
+            elif file_type == "claims":
+                type_path = Path(config.data_root) / "claims"
+            else:
+                type_path = raw_path / file_type
             files = list_slot_files(type_path)
             if files:
                 latest_file = files[-1]
