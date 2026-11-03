@@ -9,6 +9,7 @@ from weekly_report.src.metrics.commercial_full_price import (
     NOTE,
     attach_trigger_discounts,
     build_commercial_periods,
+    calculate_commercial_full_price,
     trigger_discounts_from_daily,
 )
 from weekly_report.src.periods.calculator import get_week_date_range
@@ -116,3 +117,86 @@ def test_duplicate_pricing_dates_do_not_double_trigger_discounts():
     assert current["full_price"] == pytest.approx(120.0)
     assert current["discounted"] == pytest.approx(30.0)
     assert current["last_year"]["internal_discount"] == pytest.approx(2.0)
+
+
+def test_commercial_history_and_month_capped_at_week_sunday(tmp_path, monkeypatch):
+    pricing = pd.DataFrame(
+        {
+            "_date": pd.to_datetime(["2026-11-01", "2026-11-02"]),
+            "_full": [100.0, 50.0],
+            "_discounted": [10.0, 5.0],
+            "_total": [110.0, 55.0],
+            "_discount": [2.0, 1.0],
+        }
+    )
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.commercial_full_price.load_pricing_type_daily_history",
+        lambda root: {
+            "df": pricing,
+            "files_used": ["nov.csv"],
+            "fx": {"applied": False},
+            "currency": "USD",
+            "has_discount": True,
+        },
+    )
+    daily = pd.DataFrame(
+        {
+            "_date": pd.to_datetime(["2026-11-01", "2026-11-02"]),
+            "group": ["1 Klaviyo", "1 Klaviyo"],
+            "_discount_amount_usd": [8.0, 900.0],
+            "_gross_sales_usd": [10.0, 10.0],
+        }
+    )
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.commercial_full_price._prepared_discount_daily",
+        lambda root: {"daily": daily, "files_used": ["d.csv"], "fx": {"applied": False}},
+    )
+    payload = calculate_commercial_full_price("2026-44", tmp_path, granularity="month", months=1)
+    assert payload["history_range"]["end"] == "2026-11-01"
+    assert payload["discount_range"]["end"] == "2026-11-01"
+    nov = next(p for p in payload["periods"] if p["key"] == "2026-11")
+    assert nov["end"] == "2026-11-01"
+    assert nov["total"] == pytest.approx(110.0)
+    assert nov["klaviyo_discount"] == pytest.approx(8.0)
+
+
+def test_w44_trigger_discounts_attach_when_pricing_days_exist(tmp_path, monkeypatch):
+    days = pd.date_range("2026-10-26", "2026-11-01", freq="D")
+    pricing = pd.DataFrame(
+        {
+            "_date": days,
+            "_full": [100.0] * len(days),
+            "_discounted": [10.0] * len(days),
+            "_total": [110.0] * len(days),
+            "_discount": [2.0] * len(days),
+        }
+    )
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.commercial_full_price.load_pricing_type_daily_history",
+        lambda root: {
+            "df": pricing,
+            "files_used": ["october.csv"],
+            "fx": {"applied": False},
+            "currency": "USD",
+            "has_discount": True,
+        },
+    )
+    daily = pd.DataFrame(
+        {
+            "_date": pd.to_datetime(["2026-10-26", "2026-10-27", "2026-11-02"]),
+            "group": ["1 Klaviyo", "2 Customer care", "1 Klaviyo"],
+            "_discount_amount_usd": [1175.02, 63.50, 900.0],
+            "_gross_sales_usd": [10.0, 10.0, 10.0],
+        }
+    )
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.commercial_full_price._prepared_discount_daily",
+        lambda root: {"daily": daily, "files_used": ["w44.csv"], "fx": {"applied": False}},
+    )
+    payload = calculate_commercial_full_price("2026-44", tmp_path, granularity="week", num_weeks=1)
+    assert payload["discount_range"]["end"] == "2026-10-27"
+    assert payload["history_range"]["end"] == "2026-11-01"
+    row = next(p for p in payload["periods"] if p["key"] == "2026-44")
+    assert row["klaviyo_discount"] == pytest.approx(1175.02)
+    assert row["customer_care_discount"] == pytest.approx(63.50)
+    assert row["internal_discount"] == pytest.approx(0.0)
