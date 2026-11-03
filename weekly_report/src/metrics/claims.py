@@ -26,6 +26,10 @@ NOTE_COST = (
     "Replacement cost is the landed cost in SEK, times quantity. It is not the wholesale item price."
 )
 
+# Not B2C (gift wrap / shopping bags). Order ref and Cin7 numeric id so a later
+# export cannot bring the order back. Drop the whole order, not only bag lines.
+EXCLUDED_CLAIM_ORDERS = frozenset({"ccla78-458", "130923"})
+
 # Carrier price we pay, from Shipping costs 2026, sheet "Delivery charges_pricing",
 # column "Pricelist 2026 inkl DMT EURO". Amounts are EUR before SEK conversion.
 # ECB EUR→SEK on the 15th of the claim month (Frankfurter). Other months use October.
@@ -392,6 +396,12 @@ def _lines_from_files(paths: Sequence[Path]) -> tuple[pd.DataFrame, List[str]]:
     combined = pd.concat(frames, ignore_index=True)
     winning = combined.groupby("_order_id")["_rank"].transform("max")
     kept = combined.loc[combined["_rank"].eq(winning)].drop(columns=["_rank"])
+    order_id = kept["_order_id"].map(lambda value: _text(value).lower())
+    excluded = order_id.isin(EXCLUDED_CLAIM_ORDERS)
+    if "Order Ref" in kept.columns:
+        refs = kept["Order Ref"].map(lambda value: _text(value).lower())
+        excluded = excluded | refs.isin(EXCLUDED_CLAIM_ORDERS)
+    kept = kept.loc[~excluded]
     return kept.reset_index(drop=True), used
 
 

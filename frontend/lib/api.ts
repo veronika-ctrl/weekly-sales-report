@@ -406,11 +406,11 @@ export async function getTopMarkets(
     num_weeks: String(numWeeks),
     ...(recalculate && { recalculate: 'true' }),
   })
-  const response = await fetch(`${API_BASE_URL}/api/markets/top?${params}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch markets: ${response.statusText}`)
-  }
-  return response.json()
+  return fetchJsonWithHealthRetry<MarketsResponse>(
+    `${API_BASE_URL}/api/markets/top?${params}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/markets/top',
+  )
 }
 
 export async function getTopMarketsNetMtd(
@@ -421,13 +421,11 @@ export async function getTopMarketsNetMtd(
     base_week: baseWeek,
     num_weeks: String(numWeeks),
   })
-  const response = await fetch(`${API_BASE_URL}/api/markets/top-net-mtd?${params}`)
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}))
-    const detail = typeof errBody?.detail === 'string' ? errBody.detail : response.statusText
-    throw new Error(detail)
-  }
-  return response.json()
+  return fetchJsonWithHealthRetry<TopMarketsNetMtdResponse>(
+    `${API_BASE_URL}/api/markets/top-net-mtd?${params}`,
+    HEAVY_METRICS_TIMEOUT_MS,
+    '/api/markets/top-net-mtd',
+  )
 }
 
 export async function getOnlineKPIs(
@@ -1290,7 +1288,7 @@ export async function getAudienceMetricsPerCountry(
   const key = `audience-metrics-per-country:${week}:${numWeeks}`
   return withShortCache(key, () => {
     const params = new URLSearchParams({ base_week: week, num_weeks: String(numWeeks) })
-    return fetchJsonWithTimeout<AudienceMetricsPerCountryResponse>(
+    return fetchJsonWithHealthRetry<AudienceMetricsPerCountryResponse>(
       `${API_BASE_URL}/api/audience-metrics-per-country?${params}`,
       HEAVY_METRICS_TIMEOUT_MS,
       '/api/audience-metrics-per-country',

@@ -9,6 +9,7 @@ import pytest
 
 from weekly_report.src.metrics import claims as claims_mod
 from weekly_report.src.metrics.claims import (
+    EXCLUDED_CLAIM_ORDERS,
     _landed_costs,
     calculate_claims,
     carrier_price_eur,
@@ -32,30 +33,30 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
         "cin7_claims_orders_2026-10.csv",
     }
     totals = payload["totals"]
-    assert totals["orders"] == 65
-    assert totals["units"] == 227
-    assert totals["freight_sek"] == pytest.approx(9423.22, abs=0.05)
+    assert totals["orders"] == 64
+    assert totals["units"] == 115
+    assert totals["freight_sek"] == pytest.approx(9194.54, abs=0.05)
     assert totals["discount_sek"] == 0
     wholesale_sek = 66116.59
     assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
-    assert totals["product_cost_sek"] == pytest.approx(22035.26, abs=0.02)
+    assert totals["product_cost_sek"] == pytest.approx(19781.57, abs=0.02)
     assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
     assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
-    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(22035.28, abs=0.05)
+    assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(19781.59, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
     assert months["2026-09"]["units"] == 65
-    assert months["2026-10"]["orders"] == 30
-    assert months["2026-10"]["units"] == 162
+    assert months["2026-10"]["orders"] == 29
+    assert months["2026-10"]["units"] == 50
     assert payload["reasons"][0]["label"] == "Not specified in the Cin7 export"
-    assert payload["reasons"][0]["orders"] == 65
+    assert payload["reasons"][0]["orders"] == 64
     assert any("not Shopify" in note for note in payload["notes"])
     assert any("landed cost in SEK" in note for note in payload["notes"])
     assert any("2026 carrier price" in note for note in payload["notes"])
     assert any("SwissPost" in note for note in payload["notes"])
     assert any("Fedex International Priority" in note for note in payload["notes"])
     landed_note = next(note for note in payload["notes"] if note.startswith("Landed cost matched"))
-    assert "95 of 96" in landed_note
+    assert "89 of 89" in landed_note
     assert "cin7_landed_cost_fw26.csv" in landed_note
     assert "cin7_landed_cost_overlay.csv" in landed_note
     assert "MTO016031801-9000-L" not in landed_note
@@ -64,10 +65,12 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     assert "MUW002031601-9000-L" not in landed_note
     assert "MTO023030301-0246-M" not in landed_note
     assert "MTO024031301-0224-XL" not in landed_note
-    assert "Shopping bag M" in landed_note
-    assert "100 units" in landed_note
+    assert "Shopping bag M" not in landed_note
+    assert "100 units" not in landed_note
     assert "landed cost of 0 SEK" not in landed_note
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
+    assert "CCLA78-458" not in by_ref
+    assert all(row["order_id"] != "130923" for row in payload["orders"])
     swisspost = next(row for row in payload["orders"] if "SwissPost" in row["freight_method"])
     assert swisspost["freight_sek"] == 0
     sweden = next(
@@ -112,10 +115,10 @@ def test_later_file_replaces_one_order_and_can_name_the_claim(tmp_path: Path):
     assert "NOT-IN-FILE" in joined
     assert "ALSO-MISSING" in joined
     assert "CCLA78-500" in refs
-    assert payload["totals"]["orders"] == 66
+    assert payload["totals"]["orders"] == 65
     months = {row["key"]: row for row in payload["months"]}
     assert months["2026-09"]["orders"] == 35
-    assert months["2026-10"]["orders"] == 30
+    assert months["2026-10"]["orders"] == 29
     assert months["2026-11"]["orders"] == 1
 
 
@@ -142,8 +145,31 @@ def test_fw26_fills_unmatched_skus_and_catalog_zeros():
     assert "Shopping bag M" not in costs
     assert costs["MUW001072103-9999-L"] == pytest.approx(167.05)
     by_ref = {row["order_ref"]: row for row in payload["orders"]}
-    assert by_ref["CCLA78-458"]["product_cost_sek"] == pytest.approx(2253.69, abs=0.02)
-    assert "Shopping bag M × 100" in by_ref["CCLA78-458"]["items"]
+    assert "CCLA78-458" not in by_ref
+    assert all("Shopping bag M" not in row["items"] for row in payload["orders"])
+
+
+def test_excluded_non_b2c_order_stays_out_after_reupload(tmp_path: Path):
+    assert "ccla78-458" in EXCLUDED_CLAIM_ORDERS
+    assert "130923" in EXCLUDED_CLAIM_ORDERS
+    folder = tmp_path / "claims"
+    folder.mkdir()
+    (folder / "again.csv").write_text(
+        "Order Id,Order Ref,Created Date,Delivery Country,Currency Name,Carrier,Freight Description,"
+        "Freight Cost (Local Currency),Discount Total (Local Currency),Item Total Discount (Local Currency),"
+        "Item Name,Item Code,Item Qty,Item Price (Local Currency)\n"
+        "130923,CCLA78-458,30 Oct 2026 9:47 am,Sweden,SEK,DHL Express,DHL Express - Home Delivery,0,0,0,"
+        "Shopping bag M,Shopping bag M,100,1\n"
+        "130923,CCLA78-458,30 Oct 2026 9:47 am,Sweden,SEK,DHL Express,DHL Express - Home Delivery,0,0,0,"
+        "LYOCELL MIDWEIGHT T-SHIRT - BLACK,MTO016012101-9999-L,4,1000\n",
+        encoding="utf-8",
+    )
+    payload = calculate_claims(tmp_path)
+    refs = {row["order_ref"] for row in payload["orders"]}
+    ids = {row["order_id"] for row in payload["orders"]}
+    assert "CCLA78-458" not in refs
+    assert "130923" not in ids
+    assert all("Shopping bag M" not in row["items"] for row in payload["orders"])
 
 
 def test_later_zero_landed_cost_does_not_wipe_catalog(tmp_path: Path):
@@ -217,8 +243,8 @@ def test_claims_endpoint_returns_bundled_october_without_reading_qlik(tmp_path: 
 
     payload = routes.get_claims()
     assert payload["available"] is True
-    assert payload["totals"]["orders"] == 65
-    assert payload["totals"]["units"] == 227
+    assert payload["totals"]["orders"] == 64
+    assert payload["totals"]["units"] == 115
     assert "cin7_claims_orders_2026-10.csv" in payload["files_used"]
     assert fake_qlik.exists()
 

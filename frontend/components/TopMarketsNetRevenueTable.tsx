@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { getTopMarketsNetMtd, hasBackend, type TopMarketsNetMtdResponse } from '@/lib/api'
-import { Loader2 } from 'lucide-react'
+import ReportLoadState from '@/components/ReportLoadState'
 
 interface TopMarketsNetRevenueTableProps {
   baseWeek: string
@@ -84,6 +84,7 @@ export default function TopMarketsNetRevenueTable({
   const [data, setData] = useState<TopMarketsNetMtdResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     if (!baseWeek || !hasBackend) {
@@ -113,7 +114,7 @@ export default function TopMarketsNetRevenueTable({
     return () => {
       cancelled = true
     }
-  }, [baseWeek])
+  }, [baseWeek, reloadToken])
 
   const formatNetK = (value: number): string => {
     if (value === 0) return '0'
@@ -160,21 +161,18 @@ export default function TopMarketsNetRevenueTable({
     )
   }
 
-  if (loading) {
+  if (loading || err || !data?.markets?.length) {
     return (
-      <div className="flex items-center gap-3 py-6">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <span className="text-gray-600">Loading net revenue by market…</span>
-      </div>
+      <ReportLoadState
+        loading={loading}
+        error={err}
+        empty={!loading && !err}
+        onRetry={() => setReloadToken((n) => n + 1)}
+        loadingTitle="Loading net revenue by market"
+        loadingHint="Reading online net by country. If the API is restarting, this table retries automatically. Uploaded files stay on the server — you do not need to re-upload."
+        emptyHint="No market net revenue on the latest uploaded week. Files already on the server stay there."
+      />
     )
-  }
-
-  if (err) {
-    return <p className="text-sm text-red-700">{err}</p>
-  }
-
-  if (!data?.markets?.length) {
-    return <p className="text-sm text-muted-foreground">No market data for this week.</p>
   }
 
   const dr = data.date_ranges || {}

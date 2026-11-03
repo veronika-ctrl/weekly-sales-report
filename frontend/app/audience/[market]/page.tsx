@@ -183,8 +183,8 @@ export default function AudienceMarketPage() {
           empty={!hasData}
           onRetry={retry}
           loadingTitle={`Loading audience metrics for ${marketName}`}
-          loadingHint="Reading Qlik and DEMA by country. Large exports can take a few minutes."
-          emptyHint={`No audience metrics for ${marketName} this week. Upload Qlik (online sales by country) and DEMA in Settings, then open this page again.`}
+          loadingHint="Reading Qlik and DEMA by country. If the API is restarting, this page retries automatically. Uploaded files stay on the server — you do not need to re-upload."
+          emptyHint={`No audience metrics for ${marketName} on the latest uploaded week. Files already on the server stay there.`}
         />
       )}
       {hasData && (

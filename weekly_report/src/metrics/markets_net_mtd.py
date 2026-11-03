@@ -22,14 +22,17 @@ import gc
 
 import pandas as pd
 
-from weekly_report.src.adapters.qlik import load_qlik_columns
-from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks
+from weekly_report.src.adapters.qlik import qlik_resident_section, resolve_existing_qlik_week
+from weekly_report.src.metrics.markets import load_online_market_frame, markets_payload_from_frame
+from weekly_report.src.metrics.result_cache import ResultCache
 from weekly_report.src.periods.calculator import (
     get_mtd_periods_for_week,
     get_periods_for_week,
     get_week_date_range,
     get_ytd_periods_for_week,
 )
+
+_cache = ResultCache("markets-net-mtd")
 
 
 def _online_net_by_country(qlik_df: pd.DataFrame) -> Dict[str, float]:
@@ -593,7 +596,56 @@ def calculate_top_markets_net_revenue_mtd(
     budget_online_net = budget_online_net or {}
     use_file = bool(budget_by_market_month and any(budget_by_market_month.values()))
 
-    top = calculate_top_markets_for_weeks(base_week, num_weeks, data_root)
+    qlik_week = resolve_existing_qlik_week(base_week, Path(data_root))
+    raw_path = Path(data_root) / "raw" / qlik_week
+
+    def _compute() -> Dict[str, Any]:
+        with qlik_resident_section():
+            qlik_df = load_online_market_frame(raw_path)
+            try:
+                return _net_mtd_from_frame(
+                    qlik_df,
+                    base_week,
+                    num_weeks,
+                    Path(data_root),
+                    raw_path,
+                    budget_online_net,
+                    budget_by_market_month,
+                    use_file,
+                )
+            finally:
+                del qlik_df
+                gc.collect()
+
+    rows = _cache.get_or_compute(
+        Path(data_root),
+        raw_path,
+        qlik_week,
+        num_weeks,
+        lambda: [_compute()],
+        extra=f"sel{base_week}|file{int(use_file)}",
+    )
+    return rows[0]
+
+
+def _net_mtd_from_frame(
+    qlik_df: pd.DataFrame,
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+    raw_path: Path,
+    budget_online_net: Dict[str, Optional[float]],
+    budget_by_market_month: Optional[Dict[str, Dict[str, float]]],
+    use_file: bool,
+) -> Dict[str, Any]:
+    top = markets_payload_from_frame(
+        qlik_df,
+        base_week,
+        num_weeks,
+        data_root,
+        raw_path,
+        load_missing_ly_folders=False,
+    )
     markets_def = top.get("markets") or []
     detail_names = [m["country"] for m in markets_def if m["country"] not in ("ROW", "Total")]
     if not markets_def:
@@ -603,29 +655,21 @@ def calculate_top_markets_net_revenue_mtd(
             "date_ranges": {},
         }
 
-    qlik_df = load_qlik_columns(
-        data_root / "raw" / base_week,
-        ("Date", "Sales Channel", "Country", "Net Revenue"),
+    net_w = _online_net_by_country(_slice_iso_week(qlik_df, base_week))
+    ly_week = get_periods_for_week(base_week)["last_year"]
+    net_wly = _online_net_by_country(_slice_iso_week(qlik_df, ly_week))
+
+    mtd_p = get_mtd_periods_for_week(base_week)
+    net_m = _online_net_by_country(_slice_dates(qlik_df, mtd_p["mtd_actual"]["start"], mtd_p["mtd_actual"]["end"]))
+    net_mly = _online_net_by_country(
+        _slice_dates(qlik_df, mtd_p["mtd_last_year"]["start"], mtd_p["mtd_last_year"]["end"])
     )
-    try:
-        net_w = _online_net_by_country(_slice_iso_week(qlik_df, base_week))
-        ly_week = get_periods_for_week(base_week)["last_year"]
-        net_wly = _online_net_by_country(_slice_iso_week(qlik_df, ly_week))
 
-        mtd_p = get_mtd_periods_for_week(base_week)
-        net_m = _online_net_by_country(_slice_dates(qlik_df, mtd_p["mtd_actual"]["start"], mtd_p["mtd_actual"]["end"]))
-        net_mly = _online_net_by_country(
-            _slice_dates(qlik_df, mtd_p["mtd_last_year"]["start"], mtd_p["mtd_last_year"]["end"])
-        )
-
-        ytd_p = get_ytd_periods_for_week(base_week)
-        net_y = _online_net_by_country(_slice_dates(qlik_df, ytd_p["ytd_actual"]["start"], ytd_p["ytd_actual"]["end"]))
-        net_yly = _online_net_by_country(
-            _slice_dates(qlik_df, ytd_p["ytd_last_year"]["start"], ytd_p["ytd_last_year"]["end"])
-        )
-    finally:
-        del qlik_df
-        gc.collect()
+    ytd_p = get_ytd_periods_for_week(base_week)
+    net_y = _online_net_by_country(_slice_dates(qlik_df, ytd_p["ytd_actual"]["start"], ytd_p["ytd_actual"]["end"]))
+    net_yly = _online_net_by_country(
+        _slice_dates(qlik_df, ytd_p["ytd_last_year"]["start"], ytd_p["ytd_last_year"]["end"])
+    )
 
     bw_summary = budget_online_net.get("week")
     bw = bw_summary

@@ -1,13 +1,36 @@
 """Audience metrics per country: Total AOV, customers, return rates (overall/new/returning), COS, CAC, aMER."""
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+import gc
 import pandas as pd
 from loguru import logger
 from pathlib import Path
 
+from weekly_report.src.adapters import dema
+from weekly_report.src.adapters.qlik import (
+    load_qlik_columns,
+    qlik_resident_section,
+    resolve_existing_qlik_week,
+)
 from weekly_report.src.metrics.discounts_sales import _normalize_customer_segment, _pick_column
-from weekly_report.src.metrics.table1 import load_all_raw_data
+from weekly_report.src.metrics.result_cache import ResultCache
 from weekly_report.src.periods.calculator import get_week_date_range
+
+# Online audience columns only. Product/Color for every channel is what 502s Render.
+AUDIENCE_QLIK_COLUMNS = (
+    "Date",
+    "Sales Channel",
+    "Country",
+    "Gross Revenue",
+    "Net Revenue",
+    "Returns",
+    "Order No",
+    "Customer E-mail",
+    "New/Returning Customer",
+)
+
+_cache = ResultCache("audience-metrics-per-country")
 
 # Lowercase Qlik/DEMA labels -> exact names used by Audience frontend (see SLUG_TO_NAME).
 _COUNTRY_ALIASES_LOWER_TO_CANONICAL: Dict[str, str] = {
@@ -278,6 +301,76 @@ def _get_last_year_week(week_str: str) -> str:
     """Same ISO week number, previous year (for YoY comparison)."""
     year, week_num = map(int, week_str.split("-"))
     return f"{year - 1}-{week_num:02d}"
+
+
+def _cell_date(raw: object) -> Optional[date]:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()
+    if not text or text.lower() in {"nan", "nat", "none", "natype"}:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    parsed = pd.to_datetime(raw, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def _keep_online_audience_weeks(weeks: List[str]):
+    """Drop retail and out-of-window rows while the Excel sheet is still streaming."""
+    needed = list(weeks)
+    for week in weeks:
+        last_year = _get_last_year_week(week)
+        if last_year not in needed:
+            needed.append(last_year)
+    starts: List[date] = []
+    ends: List[date] = []
+    for week in needed:
+        try:
+            date_range = get_week_date_range(week)
+            starts.append(date.fromisoformat(date_range["start"]))
+            ends.append(date.fromisoformat(date_range["end"]))
+        except (ValueError, KeyError, TypeError):
+            continue
+    start = min(starts) if starts else None
+    end = max(ends) if ends else None
+
+    def keep(values: Dict[str, object]) -> bool:
+        channel = str(values.get("Sales Channel") or "").strip().lower()
+        if channel != "online":
+            return False
+        if start is None or end is None:
+            return True
+        parsed = _cell_date(values.get("Date"))
+        if parsed is None:
+            return False
+        return start <= parsed <= end
+
+    return keep
+
+
+def _load_audience_dema(raw_path: Path) -> pd.DataFrame:
+    try:
+        frame = dema.load_data(raw_path)
+    except FileNotFoundError:
+        return pd.DataFrame()
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+    slim = frame.copy()
+    slim.columns = slim.columns.astype(str).str.strip()
+    date_col = "Days" if "Days" in slim.columns else ("Day" if "Day" in slim.columns else None)
+    if date_col:
+        slim[date_col] = pd.to_datetime(slim[date_col], errors="coerce")
+        iso_cal = slim[date_col].dt.isocalendar()
+        slim["iso_week"] = iso_cal["year"].astype(str) + "-" + iso_cal["week"].astype(str).str.zfill(2)
+    return slim
 
 
 def _segment_return_rate_pct(
@@ -618,20 +711,10 @@ def calculate_audience_metrics_per_country_for_week(
     return result
 
 
-def calculate_audience_metrics_per_country_for_weeks(
-    base_week: str, num_weeks: int, data_root: Path
+def _payload_from_frames(
+    qlik_df: pd.DataFrame, dema_df: pd.DataFrame, base_week: str, num_weeks: int
 ) -> Dict[str, Any]:
-    """
-    Returns audience metrics per country for the last N weeks.
-    Response: { "audience_metrics_per_country": [ { week, countries: { country: { total_aov, total_customers, total_orders, new_customers, returning_customers, return_rate_pct, cos_pct, cac } } } ], "period_info": { ... } }
-    """
-    raw_path = data_root / "raw" / base_week
-    raw = load_all_raw_data(raw_path)
-    qlik_df = raw.get("qlik", pd.DataFrame())
-    dema_df = raw.get("dema_spend", pd.DataFrame())
-
-    if qlik_df.empty:
-        logger.warning(f"No Qlik data in {raw_path}")
+    if qlik_df is None or qlik_df.empty:
         return {"audience_metrics_per_country": [], "period_info": {"latest_week": base_week, "latest_dates": ""}}
 
     if "iso_week" not in qlik_df.columns and "Date" in qlik_df.columns:
@@ -639,31 +722,26 @@ def calculate_audience_metrics_per_country_for_weeks(
         qlik_df["Date"] = pd.to_datetime(qlik_df["Date"], errors="coerce")
         ic = qlik_df["Date"].dt.isocalendar()
         qlik_df["iso_week"] = ic["year"].astype(str) + "-" + ic["week"].astype(str).str.zfill(2)
-    if not dema_df.empty and "iso_week" not in dema_df.columns and "Days" in dema_df.columns:
-        dema_df = dema_df.copy()
-        dema_df["Days"] = pd.to_datetime(dema_df["Days"], errors="coerce")
-        ic = dema_df["Days"].dt.isocalendar()
-        dema_df["iso_week"] = ic["year"].astype(str) + "-" + ic["week"].astype(str).str.zfill(2)
 
     weeks = _build_weeks(base_week, num_weeks)
     results = []
     for w in weeks:
         w_qlik = qlik_df[qlik_df["iso_week"] == w]
-        w_dema = dema_df[dema_df["iso_week"] == w] if not dema_df.empty else pd.DataFrame()
+        w_dema = dema_df[dema_df["iso_week"] == w] if not dema_df.empty and "iso_week" in dema_df.columns else pd.DataFrame()
         week_result = calculate_audience_metrics_per_country_for_week(w_qlik, w_dema, w)
 
-        # Add last year (same ISO week, previous year) from the same loaded data
         last_year_week = _get_last_year_week(w)
         ly_qlik = qlik_df[qlik_df["iso_week"] == last_year_week]
-        ly_dema = dema_df[dema_df["iso_week"] == last_year_week] if not dema_df.empty else pd.DataFrame()
+        ly_dema = (
+            dema_df[dema_df["iso_week"] == last_year_week]
+            if not dema_df.empty and "iso_week" in dema_df.columns
+            else pd.DataFrame()
+        )
         ly_result = calculate_audience_metrics_per_country_for_week(ly_qlik, ly_dema, last_year_week)
 
         for country in week_result.get("countries", {}):
             ly_country = ly_result.get("countries", {}).get(country)
-            if ly_country is not None:
-                week_result["countries"][country]["last_year"] = ly_country
-            else:
-                week_result["countries"][country]["last_year"] = None
+            week_result["countries"][country]["last_year"] = ly_country if ly_country is not None else None
 
         results.append(week_result)
     date_range = get_week_date_range(base_week)
@@ -671,3 +749,42 @@ def calculate_audience_metrics_per_country_for_weeks(
         "audience_metrics_per_country": results,
         "period_info": {"latest_week": base_week, "latest_dates": date_range.get("display", "")},
     }
+
+
+def _compute_audience_metrics(base_week: str, num_weeks: int, data_root: Path, qlik_week: str) -> Dict[str, Any]:
+    raw_path = Path(data_root) / "raw" / qlik_week
+    weeks = _build_weeks(base_week, num_weeks)
+    with qlik_resident_section():
+        try:
+            qlik_df = load_qlik_columns(
+                raw_path, AUDIENCE_QLIK_COLUMNS, keep_row=_keep_online_audience_weeks(weeks)
+            )
+        except FileNotFoundError:
+            logger.warning(f"No Qlik data in {raw_path}")
+            return {"audience_metrics_per_country": [], "period_info": {"latest_week": base_week, "latest_dates": ""}}
+        try:
+            dema_df = _load_audience_dema(raw_path)
+            return _payload_from_frames(qlik_df, dema_df, base_week, num_weeks)
+        finally:
+            del qlik_df
+            gc.collect()
+
+
+def calculate_audience_metrics_per_country_for_weeks(
+    base_week: str, num_weeks: int, data_root: Path
+) -> Dict[str, Any]:
+    """
+    Returns audience metrics per country for the last N weeks.
+    Response: { "audience_metrics_per_country": [ { week, countries: { country: { total_aov, total_customers, total_orders, new_customers, returning_customers, return_rate_pct, cos_pct, cac } } } ], "period_info": { ... } }
+    """
+    qlik_week = resolve_existing_qlik_week(base_week, Path(data_root))
+    raw_path = Path(data_root) / "raw" / qlik_week
+    rows = _cache.get_or_compute(
+        Path(data_root),
+        raw_path,
+        qlik_week,
+        num_weeks,
+        lambda: [_compute_audience_metrics(base_week, num_weeks, Path(data_root), qlik_week)],
+        extra=f"sel{base_week}",
+    )
+    return rows[0]

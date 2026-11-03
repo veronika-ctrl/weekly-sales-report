@@ -2903,7 +2903,11 @@ def get_top_markets_net_mtd(
         )
     except FileNotFoundError as e:
         logger.warning(f"No data for top-net-mtd {base_week}: {e}")
-        raise HTTPException(status_code=404, detail=str(e))
+        return TopMarketsNetMtdResponse(
+            markets=[],
+            period_info={"latest_week": base_week, "latest_dates": ""},
+            date_ranges={},
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -4047,7 +4051,7 @@ async def get_total_contribution_per_country(
 
 
 @app.get("/api/audience-metrics-per-country", response_model=AudienceMetricsPerCountryResponse)
-async def get_audience_metrics_per_country(
+def get_audience_metrics_per_country(
     base_week: str = Query(..., description="Base ISO week like '2025-42'"),
     num_weeks: int = Query(8, description="Number of weeks to analyze")
 ):
