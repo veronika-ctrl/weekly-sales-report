@@ -18,6 +18,8 @@ import {
   resetDiscountsHistory,
   getExclExchangesHistoryInfo,
   getKlaviyoStatus,
+  getShopifyDiscountStatus,
+  fetchShopifyDiscountTypes,
   verifySupabase,
   getDiskUsage,
   deleteIgnoredPricingFiles,
@@ -26,6 +28,7 @@ import {
   type DiscountsHistoryInfo,
   type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
+  type ShopifyDiscountStatus,
   type DiskUsageResponse,
 } from '@/lib/api'
 import { formatUploadFileSize } from '@/lib/upload-timeout'
@@ -60,6 +63,9 @@ export default function Settings() {
   const [exclHistoryLoading, setExclHistoryLoading] = useState(false)
   const [resettingDiscounts, setResettingDiscounts] = useState(false)
   const [klaviyoStatus, setKlaviyoStatus] = useState<KlaviyoStatusResponse | null>(null)
+  const [shopifyDiscountStatus, setShopifyDiscountStatus] = useState<ShopifyDiscountStatus | null>(null)
+  const [shopifyDiscountFetching, setShopifyDiscountFetching] = useState(false)
+  const [shopifyDiscountMessage, setShopifyDiscountMessage] = useState<string | null>(null)
   const [diskUsage, setDiskUsage] = useState<DiskUsageResponse | null>(null)
   const [diskUsageError, setDiskUsageError] = useState<string | null>(null)
   const [diskUsageLoading, setDiskUsageLoading] = useState(false)
@@ -112,6 +118,15 @@ export default function Settings() {
           connected: false,
           error: 'Could not reach backend',
           scopes_needed: ['flows:read', 'campaigns:read', 'metrics:read'],
+        })
+      )
+    getShopifyDiscountStatus()
+      .then(setShopifyDiscountStatus)
+      .catch(() =>
+        setShopifyDiscountStatus({
+          configured: false,
+          connected: false,
+          error: 'Could not reach backend',
         })
       )
   }, [])
@@ -406,7 +421,7 @@ export default function Settings() {
       formats: '.csv',
       accumulate: true,
       skipCountry: true,
-      hint: 'Upload the week file here, for example discount_groups_daily_2026-10-19_to_2026-10-25.csv. Any file name works if the columns are date, group and discount_amount_usd. It is added onto the history through 18 Oct 2026. A day that is already there is replaced; every other day stays. A file dropped on Full Price vs Sale by mistake is stored in this slot.',
+      hint: 'Upload the week file here, for example discount_groups_daily_2026-10-26_to_2026-11-01.csv. Files from any week folder are merged. A day that is already there is replaced by the later file; every other day stays. A file dropped on Full Price vs Sale by mistake is stored in this slot. Prefer “Fetch this week from Shopify” below when Admin API credentials are set.',
     },
     {
       type: 'claims',
@@ -1018,6 +1033,70 @@ export default function Settings() {
                   loading={loading}
                   loadingProgress={loadingProgress}
                 />
+              </div>
+            )}
+
+            {selectedWeek && (
+              <div className="mt-8 rounded-md border bg-muted/20 p-4 space-y-3" data-testid="shopify-discount-fetch">
+                <div>
+                  <h4 className="text-sm font-medium">Discount types — fetch from Shopify</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                    Pulls the selected week (Monday–Sunday) with ShopifyQL{' '}
+                    <code>FROM sales SHOW orders, gross_sales, discounts GROUP BY day, discount_name</code>
+                    , classifies codes with <code>discount_code_mapping.csv</code>, and merges by day
+                    like an uploaded file. Set on the <strong>backend</strong> (never{' '}
+                    <code>NEXT_PUBLIC_*</code>): <code>SHOPIFY_SHOP</code> or{' '}
+                    <code>SHOPIFY_STORE</code>, and <code>SHOPIFY_ACCESS_TOKEN</code> or{' '}
+                    <code>SHOPIFY_ADMIN_API_TOKEN</code>. Optional <code>SHOPIFY_API_VERSION</code>{' '}
+                    (default 2024-10). Until those are set, upload the week CSV in the slot above.
+                  </p>
+                  <p className="text-xs mt-2">
+                    {shopifyDiscountStatus == null ? (
+                      <span className="text-muted-foreground">Checking Shopify connection…</span>
+                    ) : shopifyDiscountStatus.configured ? (
+                      <span className="text-green-700 font-medium">
+                        Shopify Admin API configured{shopifyDiscountStatus.shop ? ` (${shopifyDiscountStatus.shop})` : ''}.
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {shopifyDiscountStatus.error ||
+                          'Shopify credentials not configured — using uploaded / bundled CSVs.'}
+                      </span>
+                    )}
+                  </p>
+                  {shopifyDiscountMessage ? (
+                    <p className="text-xs mt-2 text-muted-foreground">{shopifyDiscountMessage}</p>
+                  ) : null}
+                  <Button
+                    className="mt-3"
+                    variant="outline"
+                    disabled={!selectedWeek || shopifyDiscountFetching || !shopifyDiscountStatus?.configured}
+                    onClick={async () => {
+                      if (!selectedWeek) return
+                      setShopifyDiscountFetching(true)
+                      setShopifyDiscountMessage(null)
+                      try {
+                        const result = await fetchShopifyDiscountTypes(selectedWeek)
+                        setShopifyDiscountMessage(
+                          result.ok
+                            ? `Saved ${result.file || 'week file'} (${result.rows ?? 0} rows${
+                                result.unknown_codes?.length
+                                  ? `, ${result.unknown_codes.length} unknown codes`
+                                  : ''
+                              }). Refresh the Full Price vs Sale page.`
+                            : result.error || 'ShopifyQL fetch did not save a file.',
+                        )
+                        await loadMetadata(true)
+                      } catch (e) {
+                        setShopifyDiscountMessage(e instanceof Error ? e.message : String(e))
+                      } finally {
+                        setShopifyDiscountFetching(false)
+                      }
+                    }}
+                  >
+                    {shopifyDiscountFetching ? 'Fetching…' : `Fetch ${selectedWeek} from Shopify`}
+                  </Button>
+                </div>
               </div>
             )}
 

@@ -1805,6 +1805,33 @@ export interface DiscountTypesPeriod {
   }
 }
 
+export interface DiscountTypesUnknownCode {
+  code_or_title: string
+  orders: number
+  discount_amount: number
+}
+
+export interface ShopifyDiscountStatus {
+  configured: boolean
+  connected?: boolean
+  shop?: string | null
+  api_version?: string
+  error?: string | null
+  env_vars?: string[]
+}
+
+export interface ShopifyDiscountFetchResult {
+  ok: boolean
+  reason?: string
+  week?: string
+  start?: string
+  end?: string
+  rows?: number
+  unknown_codes?: string[]
+  file?: string
+  error?: string
+}
+
 export interface DiscountTypesResponse {
   base_week: string
   granularity: string
@@ -1813,6 +1840,14 @@ export interface DiscountTypesResponse {
   currency?: string
   fx?: FullPriceVsSaleFx | null
   history_range?: { start: string; end: string } | null
+  unknown_codes?: DiscountTypesUnknownCode[]
+  shopifyql?: {
+    configured?: boolean
+    ok?: boolean
+    reason?: string
+    error?: string
+    file?: string
+  }
   periods: DiscountTypesPeriod[]
 }
 
@@ -1833,6 +1868,30 @@ export async function getDiscountTypes(
     FULL_PRICE_TIMEOUT_MS,
     '/api/discounts/discount-types',
   )
+}
+
+export async function getShopifyDiscountStatus(): Promise<ShopifyDiscountStatus> {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/discounts/shopify-status`)
+  if (!response.ok) {
+    const t = await response.text()
+    throw new Error(describeHttpError(response.status, t))
+  }
+  return response.json()
+}
+
+export async function fetchShopifyDiscountTypes(baseWeek: string): Promise<ShopifyDiscountFetchResult> {
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/discounts/fetch-shopify-discount-types?base_week=${encodeURIComponent(baseWeek)}`,
+    {
+      method: 'POST',
+    },
+    120_000,
+  )
+  const body = await response.text()
+  if (!response.ok) {
+    throw new Error(describeHttpError(response.status, body))
+  }
+  return JSON.parse(body) as ShopifyDiscountFetchResult
 }
 
 export async function resetDiscountsHistory(baseWeek: string): Promise<{ deleted: string[]; count: number }> {

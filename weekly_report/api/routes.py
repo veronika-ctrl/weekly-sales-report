@@ -4415,6 +4415,8 @@ async def upload_file(
         # Discount-code history is one running export, not a week file. Keep it
         # beside the other discount-type CSVs so it is preferred over the bundled snapshot.
         if file_type == "discount_types":
+            # Shared accumulating slot, plus a copy under the week she uploaded
+            # from, so a later week still sees the file.
             target_dir = Path(config.data_root) / "discount_types"
         elif file_type == "claims":
             target_dir = Path(config.data_root) / "claims"
@@ -4457,6 +4459,13 @@ async def upload_file(
                         target_path = dest
                     file_type = "claims"
                     logger.info(f"Stored Cin7 claims CSV in {target_path}")
+
+        if file_type == "discount_types":
+            week_slot = config.raw_data_path / "discount_types"
+            week_copy = prepare_slot_for_upload(week_slot, "discount_types", target_path.name)
+            if week_copy.resolve() != target_path.resolve():
+                week_copy.write_bytes(target_path.read_bytes())
+                logger.info(f"Copied discount-code CSV into week folder {week_copy}")
         
         logger.info(f"File uploaded: {target_path} ({bytes_written} bytes)")
         logger.info(f"DEBUG: file_type='{file_type}', week='{week}', filename='{file.filename}'")
@@ -4785,12 +4794,15 @@ async def get_file_metadata(week: str = Query(...)):
         file_hashes = []
         for file_type in ["qlik", "dema_spend", "dema_gm2", "shopify", "discounts", "discount_types", "claims", FULL_PRICE_EXCL_EXCHANGES_TYPE, "budget", *AMER_ALL_FILE_TYPES, RETENTION_CUSTOMERS_TYPE, *CAC_PAYBACK_FILE_TYPES, KLAVIYO_EMAIL_TYPE]:
             if file_type == "discount_types":
-                type_path = Path(config.data_root) / "discount_types"
+                from weekly_report.src.metrics.discount_types import list_discount_type_slot_files
+
+                files = list_discount_type_slot_files(Path(config.data_root))
             elif file_type == "claims":
                 type_path = Path(config.data_root) / "claims"
+                files = list_slot_files(type_path)
             else:
                 type_path = raw_path / file_type
-            files = list_slot_files(type_path)
+                files = list_slot_files(type_path)
             if files:
                 latest_file = files[-1]
                 file_entries = [
@@ -5158,6 +5170,58 @@ async def get_discount_types(
     except Exception as e:
         logger.error(f"Error loading discount types: {e}")
         raise HTTPException(status_code=500, detail="Failed to load discount types")
+
+
+@app.get("/api/discounts/shopify-status")
+def get_shopify_discount_status():
+    """Whether Shopify Admin API credentials are set (never returns the token)."""
+    from weekly_report.src.shopify_discounts import shopify_api_version, shopify_configured, shopify_shop
+
+    configured = shopify_configured()
+    shop = shopify_shop()
+    return {
+        "configured": configured,
+        "connected": False,
+        "shop": shop,
+        "api_version": shopify_api_version(),
+        "error": None
+        if configured
+        else (
+            "Set SHOPIFY_SHOP (or SHOPIFY_STORE) and SHOPIFY_ACCESS_TOKEN "
+            "(or SHOPIFY_ADMIN_API_TOKEN) on the backend."
+        ),
+        "env_vars": [
+            "SHOPIFY_SHOP",
+            "SHOPIFY_STORE",
+            "SHOPIFY_SHOP_DOMAIN",
+            "SHOPIFY_ACCESS_TOKEN",
+            "SHOPIFY_ADMIN_ACCESS_TOKEN",
+            "SHOPIFY_ADMIN_API_TOKEN",
+            "SHOPIFY_API_VERSION",
+        ],
+    }
+
+
+@app.post("/api/discounts/fetch-shopify-discount-types")
+def fetch_shopify_discount_types(base_week: str = Query(...)):
+    """Pull the selected week's discount usage from ShopifyQL and merge by day."""
+    if not validate_iso_week(base_week):
+        raise HTTPException(status_code=400, detail="Invalid ISO week format")
+    config = load_config(week=base_week)
+    from weekly_report.src.shopify_discounts import fetch_and_save_week, shopify_configured
+
+    if not shopify_configured():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Shopify Admin API is not configured. Set SHOPIFY_SHOP and "
+                "SHOPIFY_ACCESS_TOKEN on the backend, then retry."
+            ),
+        )
+    result = fetch_and_save_week(base_week, Path(config.data_root))
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("error") or "ShopifyQL fetch failed")
+    return result
 
 
 @app.post("/api/discounts/reset-history")
