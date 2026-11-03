@@ -23,7 +23,7 @@ import gc
 import pandas as pd
 
 from weekly_report.src.adapters.qlik import qlik_resident_section, resolve_existing_qlik_week
-from weekly_report.src.metrics.markets import load_online_market_frame, markets_payload_from_frame
+from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks, load_online_market_frame
 from weekly_report.src.metrics.result_cache import ResultCache
 from weekly_report.src.periods.calculator import (
     get_mtd_periods_for_week,
@@ -36,24 +36,20 @@ _cache = ResultCache("markets-net-mtd")
 
 
 def _online_net_by_country(qlik_df: pd.DataFrame) -> Dict[str, float]:
-    """Sum Net Revenue for Sales Channel Online, by Country (stripped string keys)."""
+    """Sum Net Revenue by Country. Frame is already Online-only; do not copy it."""
     if qlik_df is None or qlik_df.empty:
         return {}
-    df = qlik_df.copy()
-    df.columns = df.columns.str.strip()
-    ch = "Sales Channel"
-    net = "Net Revenue"
-    co = "Country"
-    if ch not in df.columns or net not in df.columns or co not in df.columns:
-        logger.warning("markets_net_mtd: missing Sales Channel / Net Revenue / Country on Qlik frame")
+    if "Net Revenue" not in qlik_df.columns or "Country" not in qlik_df.columns:
+        logger.warning("markets_net_mtd: missing Net Revenue / Country on Qlik frame")
         return {}
-    df[ch] = df[ch].astype(str).str.strip()
-    df[co] = df[co].astype(str).str.strip()
-    online = df[df[ch].str.lower().eq("online")]
-    if online.empty:
-        return {}
-    g = online.groupby(co, dropna=False)[net].sum()
-    return {str(k): float(v) for k, v in g.items() if k is not None and str(k).strip() != ""}
+    net = pd.to_numeric(qlik_df["Net Revenue"], errors="coerce").fillna(0.0)
+    country = qlik_df["Country"].astype(str).str.strip()
+    grouped = net.groupby(country, dropna=False).sum()
+    return {
+        str(k): float(v)
+        for k, v in grouped.items()
+        if k is not None and str(k).strip() not in ("", "nan", "None")
+    }
 
 
 def _slice_iso_week(qlik_df: pd.DataFrame, week: str) -> pd.DataFrame:
@@ -596,19 +592,22 @@ def calculate_top_markets_net_revenue_mtd(
     budget_online_net = budget_online_net or {}
     use_file = bool(budget_by_market_month and any(budget_by_market_month.values()))
 
+    # Ranking is already JSON-cached by /api/markets/top. Do not stream Qlik for it.
+    top = calculate_top_markets_for_weeks(base_week, num_weeks, data_root)
     qlik_week = resolve_existing_qlik_week(base_week, Path(data_root))
     raw_path = Path(data_root) / "raw" / qlik_week
+    ytd_p = get_ytd_periods_for_week(base_week)
+    window_start = date.fromisoformat(ytd_p["ytd_last_year"]["start"])
+    window_end = date.fromisoformat(get_week_date_range(base_week)["end"])
 
     def _compute() -> Dict[str, Any]:
         with qlik_resident_section():
-            qlik_df = load_online_market_frame(raw_path)
+            qlik_df = load_online_market_frame(raw_path, start=window_start, end=window_end)
             try:
                 return _net_mtd_from_frame(
                     qlik_df,
+                    top,
                     base_week,
-                    num_weeks,
-                    Path(data_root),
-                    raw_path,
                     budget_online_net,
                     budget_by_market_month,
                     use_file,
@@ -630,22 +629,12 @@ def calculate_top_markets_net_revenue_mtd(
 
 def _net_mtd_from_frame(
     qlik_df: pd.DataFrame,
+    top: Dict[str, Any],
     base_week: str,
-    num_weeks: int,
-    data_root: Path,
-    raw_path: Path,
     budget_online_net: Dict[str, Optional[float]],
     budget_by_market_month: Optional[Dict[str, Dict[str, float]]],
     use_file: bool,
 ) -> Dict[str, Any]:
-    top = markets_payload_from_frame(
-        qlik_df,
-        base_week,
-        num_weeks,
-        data_root,
-        raw_path,
-        load_missing_ly_folders=False,
-    )
     markets_def = top.get("markets") or []
     detail_names = [m["country"] for m in markets_def if m["country"] not in ("ROW", "Total")]
     if not markets_def:
