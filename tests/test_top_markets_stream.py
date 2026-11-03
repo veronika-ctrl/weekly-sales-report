@@ -90,7 +90,8 @@ def test_markets_path_uses_column_stream_and_resident_lock():
     net_source = inspect.getsource(net_mod)
     assert "load_online_market_frame" in net_source
     assert "qlik_resident_section" in net_source
-    assert "calculate_top_markets_for_weeks" not in net_source
+    assert "calculate_top_markets_for_weeks" in net_source
+    assert "qlik_df.copy" not in inspect.getsource(net_mod._online_net_by_country)
 
 
 def test_top_markets_endpoints_missing_week_is_not_500(tmp_path, monkeypatch):
@@ -105,3 +106,44 @@ def test_top_markets_endpoints_missing_week_is_not_500(tmp_path, monkeypatch):
     assert gross.markets
     net = routes.get_top_markets_net_mtd("2026-45", num_weeks=2)
     assert net.markets
+
+
+def test_net_mtd_reuses_slim_pickle_and_ranking_cache(tmp_path, monkeypatch):
+    data_root = _write_markets_qlik(tmp_path)
+    calculate_top_markets_for_weeks("2026-44", 1, data_root)
+
+    calls = {"n": 0}
+    real = qlik.load_qlik_columns
+
+    def count_loads(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(qlik, "load_qlik_columns", count_loads)
+    monkeypatch.setattr(markets_mod, "load_qlik_columns", count_loads)
+
+    first = calculate_top_markets_net_revenue_mtd("2026-44", data_root, num_weeks=1)
+    usa = next(row for row in first["markets"] if row["country"] == "United States")
+    assert usa["week"]["actual"] == 3600.0
+    assert calls["n"] == 0
+
+    second = calculate_top_markets_net_revenue_mtd("2026-44", data_root, num_weeks=1)
+    assert second["markets"]
+    assert calls["n"] == 0
+
+
+def test_top_net_mtd_route_returns_quickly_on_fixture(tmp_path, monkeypatch):
+    import time
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    _write_markets_qlik(tmp_path)
+    from weekly_report.api import routes
+
+    started = time.perf_counter()
+    net = routes.get_top_markets_net_mtd("2026-44", num_weeks=1)
+    elapsed = time.perf_counter() - started
+    assert net.markets
+    usa = next(row for row in net.markets if row["country"] == "United States")
+    assert usa["week"]["actual"] == 3600.0
+    assert elapsed < 5.0

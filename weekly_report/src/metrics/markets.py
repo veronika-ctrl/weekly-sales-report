@@ -1,15 +1,17 @@
 """Markets calculation module for top markets analysis."""
 
 import gc
+from datetime import date, datetime
+from typing import Dict, List, Any, Optional
 
 import pandas as pd
-from typing import Dict, List, Any, Optional
 from pathlib import Path
 from loguru import logger
 
 from weekly_report.src.adapters.qlik import (
     load_qlik_columns,
     qlik_resident_section,
+    qlik_source_signature,
     resolve_existing_qlik_week,
 )
 from weekly_report.src.metrics.result_cache import ResultCache
@@ -23,17 +25,117 @@ def _keep_online_row(values: Dict[str, object]) -> bool:
     return str(values.get("Sales Channel") or "").strip().lower() == "online"
 
 
-def load_online_market_frame(raw_data_path: Path) -> pd.DataFrame:
-    """Online gross/net by country. Retail and unused Qlik columns are not kept."""
-    qlik_df = load_qlik_columns(raw_data_path, _MARKET_COLUMNS, keep_row=_keep_online_row)
-    keep = [
-        col
-        for col in ("iso_week", "Date", "Country", "Gross Revenue", "Net Revenue", "Sales Channel")
-        if col in qlik_df.columns
+def _cell_date(raw: object) -> Optional[date]:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()
+    if not text or text.lower() in {"nan", "nat", "none", "natype"}:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    parsed = pd.to_datetime(raw, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def _keep_online_between(start: date, end: date):
+    def keep(values: Dict[str, object]) -> bool:
+        if str(values.get("Sales Channel") or "").strip().lower() != "online":
+            return False
+        parsed = _cell_date(values.get("Date"))
+        if parsed is None:
+            return False
+        return start <= parsed <= end
+
+    return keep
+
+
+def _frame_cache_path(raw_data_path: Path, tag: str) -> Path:
+    sig = qlik_source_signature(raw_data_path)
+    if raw_data_path.parent.name == "raw":
+        root = raw_data_path.parent.parent
+    else:
+        root = raw_data_path
+    return root / "cache" / "qlik-columns" / f"markets-{tag}-{sig}.pkl"
+
+
+def _read_frame_cache(path: Path) -> Optional[pd.DataFrame]:
+    try:
+        if not path.is_file():
+            return None
+        cached = pd.read_pickle(path)
+        if isinstance(cached, pd.DataFrame) and not cached.empty:
+            logger.info(f"markets online cache hit {path.name}: {cached.shape}")
+            return cached
+    except Exception as exc:
+        logger.warning(f"markets online cache unreadable ({exc})")
+    return None
+
+
+def _write_frame_cache(path: Path, frame: pd.DataFrame) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".pkl.tmp")
+        frame.to_pickle(temporary)
+        temporary.replace(path)
+    except Exception as exc:
+        logger.warning(f"markets online cache not written ({exc})")
+
+
+def _restrict_dates(frame: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    if frame is None or frame.empty or "Date" not in frame.columns:
+        return frame
+    dates = pd.to_datetime(frame["Date"], errors="coerce")
+    return frame.loc[(dates >= pd.Timestamp(start)) & (dates <= pd.Timestamp(end))]
+
+
+def load_online_market_frame(
+    raw_data_path: Path,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+) -> pd.DataFrame:
+    """Online gross/net by country. Retail and unused Qlik columns are not kept.
+
+    /api/markets/top and /api/markets/top-net-mtd share one slim pickle. keep_row
+    skips the unfiltered column pickle, which is what 502s Render. A date window
+    (net-MTD) is applied in pandas when the shared pickle already exists; otherwise
+    it is applied while streaming so the first request does not keep all history.
+    """
+    shared_path = _frame_cache_path(raw_data_path, "online")
+    cached = _read_frame_cache(shared_path)
+    if cached is not None:
+        if start is not None and end is not None:
+            return _restrict_dates(cached, start, end)
+        return cached
+
+    windowed = start is not None and end is not None
+    if windowed:
+        cache_path = _frame_cache_path(
+            raw_data_path, f"online-{start.isoformat()}-{end.isoformat()}"
+        )
+        cached = _read_frame_cache(cache_path)
+        if cached is not None:
+            return cached
+        keep = _keep_online_between(start, end)
+    else:
+        cache_path = shared_path
+        keep = _keep_online_row
+
+    qlik_df = load_qlik_columns(raw_data_path, _MARKET_COLUMNS, keep_row=keep)
+    keep_cols = [
+        col for col in ("iso_week", "Date", "Country", "Gross Revenue", "Net Revenue") if col in qlik_df.columns
     ]
-    slim = qlik_df.loc[:, keep].copy() if keep else qlik_df.iloc[0:0].copy()
+    slim = qlik_df.loc[:, keep_cols].copy() if keep_cols else qlik_df.iloc[0:0].copy()
     del qlik_df
     gc.collect()
+    _write_frame_cache(cache_path, slim)
     return slim
 
 
