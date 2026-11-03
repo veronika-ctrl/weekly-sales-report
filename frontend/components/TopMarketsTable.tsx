@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useMarkets } from '@/contexts/DataCacheContext'
 import { getTopMarkets } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Loader2 } from 'lucide-react'
+import ReportLoadState from '@/components/ReportLoadState'
 
 interface TopMarketsTableProps {
   baseWeek: string
@@ -15,15 +15,19 @@ export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMark
   const { markets: marketsData } = useMarkets()
   const [fetched, setFetched] = useState<unknown>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(() => Boolean(baseWeek) && !marketsData)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     if (!baseWeek || marketsData) {
       setFetched(null)
       setFetchError(null)
+      setLoading(false)
       return
     }
     let cancelled = false
     setFetchError(null)
+    setLoading(true)
     getTopMarkets(baseWeek, 8)
       .then((data) => {
         if (!cancelled) setFetched(data)
@@ -34,10 +38,13 @@ export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMark
           setFetchError(err instanceof Error ? err.message : 'Failed to load markets')
         }
       })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [baseWeek, marketsData])
+  }, [baseWeek, marketsData, reloadToken])
 
   const resolvedMarkets = marketsData || fetched
 
@@ -146,10 +153,30 @@ export default function TopMarketsTable({ baseWeek, isPdfMode = false }: TopMark
   }
 
   if (!markets || markets.length === 0) {
+    if (!isPdfMode) {
+      return (
+        <ReportLoadState
+          loading={loading && !fetchError}
+          error={fetchError}
+          empty={!loading && !fetchError}
+          onRetry={() => setReloadToken((n) => n + 1)}
+          loadingTitle="Loading eight-week market trend"
+          loadingHint="Reading online gross by country. If the API is restarting, this table retries automatically. Uploaded files stay on the server — you do not need to re-upload."
+          emptyHint="No market rows on the latest uploaded week. Files already on the server stay there."
+          skeleton={
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full" />
+              {[...Array(8)].map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          }
+        />
+      )
+    }
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          {fetchError ? null : <Loader2 className="h-5 w-5 animate-spin text-primary" />}
           <span className="text-gray-600">{fetchError || 'Loading markets data...'}</span>
         </div>
         <div className="space-y-2">

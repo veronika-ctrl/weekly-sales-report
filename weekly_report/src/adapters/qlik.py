@@ -662,3 +662,23 @@ def qlik_source_signature(raw_data_path: Path) -> str:
         stat = path.stat()
         parts.append(f"{path.name}:{stat.st_size}:{getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1e9))}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:20]
+
+
+def resolve_existing_qlik_week(base_week: str, data_root: Path) -> str:
+    """Prefer the selected ISO week; if it has no Qlik, use the newest week that does.
+
+    Monday of a new ISO week (2026-45) must not 500. Audience and Top Markets
+    still read last week's file.
+    """
+    try:
+        qlik_source_files(Path(data_root) / "raw" / base_week)
+        return base_week
+    except FileNotFoundError:
+        pass
+    from weekly_report.src.storage.disk import list_qlik_weeks
+
+    weeks = list_qlik_weeks(data_root)
+    if weeks:
+        logger.info("no Qlik in %s, using latest week %s", base_week, weeks[0])
+        return weeks[0]
+    return base_week

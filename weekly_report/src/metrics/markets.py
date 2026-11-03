@@ -3,14 +3,38 @@
 import gc
 
 import pandas as pd
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pathlib import Path
 from loguru import logger
 
-from weekly_report.src.adapters.qlik import load_qlik_columns
+from weekly_report.src.adapters.qlik import (
+    load_qlik_columns,
+    qlik_resident_section,
+    resolve_existing_qlik_week,
+)
+from weekly_report.src.metrics.result_cache import ResultCache
 from weekly_report.src.periods.calculator import get_week_date_range
 
-_MARKET_COLUMNS = ("Date", "Sales Channel", "Country", "Gross Revenue")
+_MARKET_COLUMNS = ("Date", "Sales Channel", "Country", "Gross Revenue", "Net Revenue")
+_cache = ResultCache("top-markets")
+
+
+def _keep_online_row(values: Dict[str, object]) -> bool:
+    return str(values.get("Sales Channel") or "").strip().lower() == "online"
+
+
+def load_online_market_frame(raw_data_path: Path) -> pd.DataFrame:
+    """Online gross/net by country. Retail and unused Qlik columns are not kept."""
+    qlik_df = load_qlik_columns(raw_data_path, _MARKET_COLUMNS, keep_row=_keep_online_row)
+    keep = [
+        col
+        for col in ("iso_week", "Date", "Country", "Gross Revenue", "Net Revenue", "Sales Channel")
+        if col in qlik_df.columns
+    ]
+    slim = qlik_df.loc[:, keep].copy() if keep else qlik_df.iloc[0:0].copy()
+    del qlik_df
+    gc.collect()
+    return slim
 
 
 def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: Path) -> Dict[str, Any]:
@@ -71,19 +95,90 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     
     logger.info(f"Analyzing weeks: {weeks_to_analyze}")
     logger.info(f"Last year weeks: {last_year_weeks}")
-    
-    # The base-week Qlik file already holds the current and last-year weeks.
-    # Read only the columns this slide sums. Do not load Dema or Shopify, and
-    # do not keep a second week's raw frame beside this one.
-    latest_data_path = data_root / "raw" / base_week
-    try:
+
+    qlik_week = resolve_existing_qlik_week(base_week, Path(data_root))
+    latest_data_path = Path(data_root) / "raw" / qlik_week
+    rows = _cache.get_or_compute(
+        Path(data_root),
+        latest_data_path,
+        qlik_week,
+        num_weeks,
+        lambda: [
+            _calculate_top_markets_uncached(
+                base_week, num_weeks, Path(data_root), qlik_week, weeks_to_analyze, last_year_weeks
+            )
+        ],
+        extra=f"sel{base_week}",
+    )
+    return rows[0]
+
+
+def _calculate_top_markets_uncached(
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+    qlik_week: str,
+    weeks_to_analyze: List[str],
+    last_year_weeks: List[str],
+) -> Dict[str, Any]:
+    latest_data_path = Path(data_root) / "raw" / qlik_week
+    with qlik_resident_section():
         logger.info(f"Loading Qlik columns from {latest_data_path} for requested week {base_week}")
-        online_df = _online_gross_frame(latest_data_path)
-    except Exception as e:
-        logger.error(f"Failed to load raw data: {e}")
-        raise
-    
-    country_weeks_data = {}
+        online_df = load_online_market_frame(latest_data_path)
+        try:
+            return markets_payload_from_frame(
+                online_df,
+                base_week,
+                num_weeks,
+                Path(data_root),
+                latest_data_path,
+                weeks_to_analyze,
+                last_year_weeks,
+            )
+        finally:
+            del online_df
+            gc.collect()
+
+
+def markets_payload_from_frame(
+    online_df: pd.DataFrame,
+    base_week: str,
+    num_weeks: int,
+    data_root: Path,
+    latest_data_path: Path,
+    weeks_to_analyze: Optional[List[str]] = None,
+    last_year_weeks: Optional[List[str]] = None,
+    load_missing_ly_folders: bool = True,
+) -> Dict[str, Any]:
+    if weeks_to_analyze is None or last_year_weeks is None:
+        match = base_week.split("-")
+        year = int(match[0])
+        week = int(match[1])
+        weeks_to_analyze = []
+        i = 0
+        while len(weeks_to_analyze) < num_weeks:
+            week_num = week - i
+            week_year = year
+            if week_num < 1:
+                prev_year = year - 1
+                week_year = prev_year
+                if _has_53_weeks(prev_year):
+                    week_num = 53 + week_num
+                else:
+                    week_num = 52 + week_num
+                if week_num == 53:
+                    week_num = 52
+                    i += 1
+                    continue
+            week_str = f"{week_year}-{week_num:02d}"
+            if week_str not in weeks_to_analyze:
+                weeks_to_analyze.append(week_str)
+            i += 1
+        last_year_weeks = [get_last_year_week_for_yoy(w) for w in weeks_to_analyze]
+        weeks_to_analyze = weeks_to_analyze[::-1]
+        last_year_weeks = last_year_weeks[::-1]
+
+    country_weeks_data: Dict[str, Dict[str, float]] = {}
     
     def _add_week_revenue_from_df(week_str: str, df: pd.DataFrame) -> None:
         """Filter df by iso_week == week_str and add country revenue (same logic as category_sales)."""
@@ -109,21 +204,18 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     for week_str in last_year_weeks:
         _add_week_revenue_from_df(week_str, online_df)
     
-    # 3) Last-year weeks: if data/raw/{last_year_week}/ exists, load and add (overwrites zeros)
-    #    This is required for Y/Y GROWTH% on 2025-W50/51/52 (baseline 2024-W50/51/52) when base file has no 2024 data
+    # 3) Last-year weeks: only open another workbook when the base file has no Y/Y.
     data_root_resolved = data_root.resolve()
     base_resolved = latest_data_path.resolve()
-    released_base = False
     for week_str in last_year_weeks:
+        already = sum(country_weeks_data.get(c, {}).get(week_str, 0) for c in country_weeks_data)
+        if already > 0:
+            continue
         week_path = data_root_resolved / "raw" / week_str
-        if week_path.exists() and week_path.resolve() != base_resolved:
-            if not released_base:
-                del online_df
-                released_base = True
-                gc.collect()
+        if load_missing_ly_folders and week_path.exists() and week_path.resolve() != base_resolved:
             ly_online = None
             try:
-                ly_online = _online_gross_frame(week_path)
+                ly_online = load_online_market_frame(week_path)
                 _add_week_revenue_from_df(week_str, ly_online)
                 logger.info(f"Loaded last-year data for Y/Y from {week_path}")
             except Exception as e:
@@ -132,10 +224,10 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
                 del ly_online
                 gc.collect()
         else:
-            # No folder for this last-year week; Y/Y will show "-" for that week if base file had no data
-            total_for_week = sum(country_weeks_data.get(c, {}).get(week_str, 0) for c in country_weeks_data)
-            if total_for_week == 0:
-                logger.info(f"Last-year week {week_str}: no data in base file and folder {week_path} not found (Y/Y will show '-' for this week)")
+            logger.info(
+                f"Last-year week {week_str}: no data in base file and folder {week_path} not found "
+                "(Y/Y will show '-' for this week)"
+            )
     
     # Calculate averages and sort (only for current year weeks)
     markets_list = []
@@ -222,20 +314,6 @@ def calculate_top_markets_for_weeks(base_week: str, num_weeks: int, data_root: P
     
     logger.info(f"Calculated top markets: {len(top_13)} entries")
     return result
-
-
-def _online_gross_frame(raw_data_path: Path) -> pd.DataFrame:
-    """Online gross by country and ISO week. The wide Qlik frame is not kept."""
-    qlik_df = load_qlik_columns(raw_data_path, _MARKET_COLUMNS)
-    if qlik_df.empty or "Sales Channel" not in qlik_df.columns:
-        online = qlik_df
-    else:
-        online = qlik_df.loc[qlik_df["Sales Channel"] == "Online"]
-    keep = [col for col in ("iso_week", "Country", "Gross Revenue") if col in online.columns]
-    slim = online.loc[:, keep].copy() if keep else online.iloc[0:0].copy()
-    del qlik_df, online
-    gc.collect()
-    return slim
 
 
 def _has_53_weeks(year: int) -> bool:
