@@ -8,6 +8,8 @@ Read order:
   A) ``weekly_report/data/pricing_type/`` (repo-relative and/or under data_root)
   B) ``data/raw/*/full_price_vs_sale_excl_exchanges/`` — only month-named files
      (and later ISO-week continuation files). Never ``*/discounts/*``.
+  Two files for the same calendar month: later mtime wins; uploading a new
+  November file deletes the earlier November file in any week folder.
 """
 
 from __future__ import annotations
@@ -228,8 +230,105 @@ def pricing_type_dirs(data_root: Path) -> List[Path]:
     return seen
 
 
+def _file_mtime(path: Path) -> float:
+    try:
+        return float(path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _month_file_rank(path: Path) -> Tuple[float, str, str]:
+    """Later mtime wins; same mtime → later ISO-week folder, then name."""
+    week = path.parent.parent.name if path.parent.name == FILE_TYPE else ""
+    return (_file_mtime(path), week, path.name.lower())
+
+
+def iter_pricing_slot_files(data_root: Path) -> List[Path]:
+    """Month/week files in ``pricing_type/`` and ``raw/*/full_price_vs_sale_excl_exchanges/``."""
+    found: List[Path] = []
+    seen: set = set()
+    for folder in pricing_type_dirs(data_root):
+        try:
+            children = list(folder.iterdir())
+        except OSError:
+            continue
+        for path in children:
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            key = str(path.resolve()) if path.exists() else str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(path)
+    raw_root = Path(data_root) / "raw"
+    if raw_root.exists():
+        for path in raw_root.glob(f"*/{FILE_TYPE}/*.*"):
+            if not path.is_file() or path.name.startswith("."):
+                continue
+            key = str(path.resolve()) if path.exists() else str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(path)
+    return found
+
+
+def replace_same_month_pricing_files(data_root: Path, keep: Path) -> List[str]:
+    """Delete other month-named files for the same calendar month as ``keep``.
+
+    A new ``november_2026_full_exchanges.csv`` in week 45 removes the earlier
+    November 2026 file in week 44 so the loader cannot double-count.
+    """
+    month = parse_month_from_filename(keep.name)
+    if month is None:
+        return []
+    try:
+        keep_key = str(keep.resolve())
+    except OSError:
+        keep_key = str(keep)
+    removed: List[str] = []
+    for path in iter_pricing_slot_files(data_root):
+        if parse_month_from_filename(path.name) != month:
+            continue
+        try:
+            if str(path.resolve()) == keep_key:
+                continue
+        except OSError:
+            if path == keep:
+                continue
+        rel = f"{path.parent.parent.name}/{path.name}" if path.parent.name == FILE_TYPE else path.name
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed.append(rel)
+    return removed
+
+
+def _keep_latest_month_files(accepted: List[Path]) -> Tuple[List[Path], List[str]]:
+    """One month-named file per (year, month); later upload wins. Week files stay."""
+    latest: Dict[Tuple[int, int], Path] = {}
+    stale: List[Path] = []
+    rest: List[Path] = []
+    for path in accepted:
+        month = parse_month_from_filename(path.name)
+        if month is None:
+            rest.append(path)
+            continue
+        prev = latest.get(month)
+        if prev is None or _month_file_rank(path) >= _month_file_rank(prev):
+            if prev is not None:
+                stale.append(prev)
+            latest[month] = path
+        else:
+            stale.append(path)
+    kept = rest + list(latest.values())
+    kept.sort(key=lambda p: p.name.lower())
+    return kept, [p.name for p in stale]
+
+
 def discover_pricing_files(data_root: Path) -> Tuple[List[Path], List[str]]:
-    """Return (accepted files, ignored legacy/non-month names in the excl. slot)."""
+    """Return (accepted files, ignored legacy/stale-month names in the excl. slot)."""
     accepted: List[Path] = []
     ignored: List[str] = []
     seen: set = set()
@@ -260,6 +359,8 @@ def discover_pricing_files(data_root: Path) -> Tuple[List[Path], List[str]]:
             # Slot B: month-named (and later ISO-week) files only. Never discounts/.
             _add(f, require_month_or_week=True)
 
+    accepted, stale_months = _keep_latest_month_files(accepted)
+    ignored.extend(stale_months)
     return accepted, ignored
 
 
@@ -413,6 +514,9 @@ def _recompute_derived(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_pricing_type_daily_history(data_root: Path) -> Dict[str, Any]:
     """Merge month-named (and later weekly) daily files; own-period dates win.
+
+    Two files for the same calendar month: the later upload is used and the
+    earlier one is ignored (so a rewritten November file replaces the old one).
 
     Discounted is the explicit sum of sale-type columns (missing = 0), not
     Total − Full Price. Weighted-disc discount = Discount Amount + Markdown.

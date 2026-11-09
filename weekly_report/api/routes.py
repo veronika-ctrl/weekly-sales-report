@@ -4495,6 +4495,12 @@ async def upload_file(
                 "row_count": inspected.get("row_count"),
                 "date_column": inspected.get("date_column"),
             }
+            from weekly_report.src.metrics.pricing_history import replace_same_month_pricing_files
+
+            replaced = replace_same_month_pricing_files(Path(config.data_root), target_path)
+            if replaced:
+                upload_meta_extra["replaced_files"] = replaced
+                logger.info(f"Replaced same-month Full Price files: {replaced}")
         
         # Special handling for budget files: save to Supabase for reuse (only when Supabase is enabled)
         if file_type == "budget" and _supabase_enabled():
