@@ -66,8 +66,33 @@ export default function WomenCategorySales() {
     return { category, total }
   })
 
-  // Sort by total sales descending
-  const sortedCategories = categoryTotals.sort((a, b) => b.total - a.total).map(item => item.category)
+  // Sort by total sales descending, then apply fixed display preference:
+  // Accessories should occupy Resort's grid slot (and vice versa).
+  const bySales = categoryTotals.sort((a, b) => b.total - a.total).map(item => item.category)
+  const findByName = (names: string[], target: string) =>
+    names.findIndex((name) => name.trim().toUpperCase() === target)
+
+  const preferredOrder = [
+    'UNDERWEAR',
+    'TOPS',
+    'SOCKS',
+    'BOTTOMS',
+    'SWIM',
+    'ACCESSORIES',
+    'MATERIAL',
+    'RESORT',
+    'COVERALL',
+  ]
+
+  const sortedCategories: string[] = []
+  for (const wanted of preferredOrder) {
+    const idx = findByName(bySales, wanted)
+    if (idx !== -1) {
+      sortedCategories.push(bySales[idx])
+      bySales.splice(idx, 1)
+    }
+  }
+  sortedCategories.push(...bySales)
 
   return (
     <div className="space-y-8">

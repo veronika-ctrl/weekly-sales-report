@@ -66,15 +66,33 @@ export default function MenCategorySales() {
     return { category, total }
   })
 
-  // Sort by total sales descending, then swap RESORT and ACCESSORIES.
-  const sortedCategories = categoryTotals.sort((a, b) => b.total - a.total).map(item => item.category)
-  const resortIndex = sortedCategories.findIndex((name) => name.toUpperCase() === 'RESORT')
-  const accessoriesIndex = sortedCategories.findIndex((name) => name.toUpperCase() === 'ACCESSORIES')
-  if (resortIndex !== -1 && accessoriesIndex !== -1 && resortIndex !== accessoriesIndex) {
-    const resort = sortedCategories[resortIndex]
-    sortedCategories[resortIndex] = sortedCategories[accessoriesIndex]
-    sortedCategories[accessoriesIndex] = resort
+  // Fixed display order: Accessories before Resort (do not swap by sales rank).
+  const bySales = categoryTotals.sort((a, b) => b.total - a.total).map(item => item.category)
+  const findByName = (names: string[], target: string) =>
+    names.findIndex((name) => name.trim().toUpperCase() === target)
+
+  const preferredOrder = [
+    'UNDERWEAR',
+    'TOPS',
+    'SOCKS',
+    'BOTTOMS',
+    'SWIM',
+    'ACCESSORIES',
+    'MATERIAL',
+    'RESORT',
+    'COVERALL',
+  ]
+
+  const sortedCategories: string[] = []
+  for (const wanted of preferredOrder) {
+    const idx = findByName(bySales, wanted)
+    if (idx !== -1) {
+      sortedCategories.push(bySales[idx])
+      bySales.splice(idx, 1)
+    }
   }
+  // Keep any unexpected categories after the preferred ones, still by sales.
+  sortedCategories.push(...bySales)
 
   return (
     <div className="space-y-8">
