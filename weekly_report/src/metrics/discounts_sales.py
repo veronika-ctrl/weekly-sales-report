@@ -2654,6 +2654,7 @@ def calculate_full_price_vs_sale_weekly(
     """
     history = load_revenue_over_time_history(data_root)
     df = history["df"]
+    week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
     if df.empty:
         return {
             "base_week": base_week,
@@ -2666,6 +2667,20 @@ def calculate_full_price_vs_sale_weekly(
         }
 
     df = df.copy()
+    if not pd.isna(week_end):
+        week_end = pd.Timestamp(week_end).normalize()
+        df["_date"] = pd.to_datetime(df["_date"], errors="coerce").dt.normalize()
+        df = df.loc[df["_date"].notna() & (df["_date"] <= week_end)].copy()
+    if df.empty:
+        return {
+            "base_week": base_week,
+            "num_weeks": num_weeks,
+            "source": "pricing_type",
+            "has_last_year": False,
+            "has_discount": bool(history.get("has_discount")),
+            "files_used": history["files_used"],
+            "weeks": [],
+        }
     df["_week"] = _iso_week_series(df["_date"])
     has_discount = bool(history.get("has_discount"))
 
@@ -2783,6 +2798,11 @@ def calculate_full_price_vs_sale_monthly(
     week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
     if pd.isna(week_end):
         return {**base_out, "error": "Invalid base_week date range", "months_data": [], "ytd": None}
+    week_end = pd.Timestamp(week_end).normalize()
+    df["_date"] = pd.to_datetime(df["_date"], errors="coerce").dt.normalize()
+    df = df.loc[df["_date"].notna() & (df["_date"] <= week_end)].copy()
+    if df.empty:
+        return {**base_out, "has_last_year": False, "months_data": [], "ytd": None, "history_range": None}
 
     def _agg(start: pd.Timestamp, end: pd.Timestamp) -> Dict[str, Any]:
         m = (df["_date"] >= start) & (df["_date"] <= end)
