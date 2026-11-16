@@ -146,21 +146,34 @@ def list_iso_week_dirs(data_root: Path) -> List[str]:
     return weeks
 
 
+# Same files Settings lists under Qlik Sales Data (Current Files).
+QLIK_FILE_SUFFIXES = frozenset({".csv", ".xlsx", ".xls", ".parquet"})
+
+
+def is_qlik_file(path: Path) -> bool:
+    """True for a Qlik export Settings would show in the qlik slot.
+
+    ``Qlik_W46.csv`` in ``raw/2026-46/qlik/`` counts. Suffix case does not matter.
+    """
+    if not path.is_file() or path.name.startswith("."):
+        return False
+    return path.suffix.lower() in QLIK_FILE_SUFFIXES
+
+
+def week_qlik_files(data_root: Path, week: str) -> List[Path]:
+    """Qlik CSV/xlsx files in ``raw/{week}/qlik/`` — same slot as file-metadata."""
+    from weekly_report.src.storage.uploads import list_slot_files
+
+    return [path for path in list_slot_files(Path(data_root) / "raw" / week / "qlik") if is_qlik_file(path)]
+
+
+def week_has_qlik(data_root: Path, week: str) -> bool:
+    return bool(week_qlik_files(data_root, week))
+
+
 def list_qlik_weeks(data_root: Path) -> List[str]:
     """ISO weeks that have a Qlik CSV/xlsx — the weeks the sales reports can open."""
-    raw = Path(data_root) / "raw"
-    found: List[str] = []
-    for week in list_iso_week_dirs(data_root):
-        slot = raw / week / "qlik"
-        if not slot.is_dir():
-            continue
-        if any(
-            child.is_file() and child.suffix.lower() in {".csv", ".xlsx", ".parquet"}
-            for child in slot.iterdir()
-            if not child.name.startswith(".")
-        ):
-            found.append(week)
-    return found
+    return [week for week in list_iso_week_dirs(data_root) if week_has_qlik(data_root, week)]
 
 
 def _qlik_cache_dir(data_root: Path) -> Path:

@@ -1,11 +1,12 @@
 'use client'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useDataCache } from '@/contexts/DataCacheContext'
 import { useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Calendar, Settings, Loader2 } from 'lucide-react'
 import WeekSelector from '@/components/WeekSelector'
+import { UPLOAD_WEEKS_CHANGED_EVENT } from '@/lib/upload-weeks-events'
 
 /**
  * `useSearchParams()` opts the subtree into client rendering and can suspend.
@@ -22,32 +23,55 @@ function LayoutContentInner({
   const { loading, baseWeek, setBaseWeek, hasRestoredWeek, isDataReady, periods } = useDataCache()
   const [weeksWithData, setWeeksWithData] = useState<Set<string> | null>(null)
   const [latestQlikWeek, setLatestQlikWeek] = useState<string | null>(null)
+  const pathname = usePathname()
+
+  const loadQlikWeeks = useCallback(async (): Promise<{ qlik: string[]; latest: string | null }> => {
+    const info = await import('@/lib/api').then((m) => m.getUploadWeeksInfo()).catch(() => ({
+      weeks: [] as string[],
+      qlikWeeks: [] as string[],
+      latestQlikWeek: null as string | null,
+    }))
+    // Banner / ✓ must match Settings Current Files (qlik slot), not DEMA-only
+    // weeks and not a Supabase cache that has not caught up after upload.
+    const qlik = info.qlikWeeks.length ? info.qlikWeeks : info.weeks
+    if (qlik.length) {
+      return { qlik, latest: info.latestQlikWeek || qlik[0] || null }
+    }
+    const fromSupabase = await import('@/lib/supabase-queries')
+      .then((m) => m.getWeeksWithDataFromSupabase())
+      .catch(() => [] as string[])
+    return { qlik: fromSupabase, latest: fromSupabase[0] || null }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      const info = await import('@/lib/api').then((m) => m.getUploadWeeksInfo()).catch(() => ({
-        weeks: [] as string[],
-        qlikWeeks: [] as string[],
-        latestQlikWeek: null as string | null,
-      }))
-      const fromSupabase = await import('@/lib/supabase-queries')
-        .then((m) => m.getWeeksWithDataFromSupabase())
-        .catch(() => [] as string[])
+    const apply = (qlik: string[], latest: string | null) => {
       if (cancelled) return
-      setWeeksWithData(new Set([...info.weeks, ...info.qlikWeeks, ...fromSupabase]))
-      setLatestQlikWeek(info.latestQlikWeek || info.qlikWeeks[0] || info.weeks[0] || null)
-    })()
+      setWeeksWithData(new Set(qlik))
+      setLatestQlikWeek(latest)
+    }
+    void loadQlikWeeks().then(({ qlik, latest }) => apply(qlik, latest))
+    const onUploadsChanged = () => {
+      void loadQlikWeeks().then(({ qlik, latest }) => apply(qlik, latest))
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadQlikWeeks().then(({ qlik, latest }) => apply(qlik, latest))
+      }
+    }
+    window.addEventListener(UPLOAD_WEEKS_CHANGED_EVENT, onUploadsChanged)
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
+      window.removeEventListener(UPLOAD_WEEKS_CHANGED_EVENT, onUploadsChanged)
+      document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [])
+  }, [pathname, loadQlikWeeks])
 
   useEffect(() => {
     if (!hasRestoredWeek || baseWeek || !latestQlikWeek) return
     setBaseWeek(latestQlikWeek)
   }, [hasRestoredWeek, baseWeek, latestQlikWeek, setBaseWeek])
-  const pathname = usePathname()
   const isSettings = pathname === '/settings'
   const isAdjustedAmer = pathname === '/adjusted-amer'
   const isRetentionByChannel = pathname === '/retention-by-channel'

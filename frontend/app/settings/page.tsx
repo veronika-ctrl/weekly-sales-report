@@ -30,6 +30,7 @@ import {
 } from '@/lib/api'
 import { formatUploadFileSize } from '@/lib/upload-timeout'
 import { describeApiTarget, getApiStorageWarning } from '@/lib/api-storage'
+import { UPLOAD_WEEKS_CHANGED_EVENT } from '@/lib/upload-weeks-events'
 const METADATA_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 const DIMENSIONS_CACHE_EXPIRY = 10 * 60 * 1000 // 10 minutes
 
@@ -88,19 +89,38 @@ export default function Settings() {
     setPageHost(typeof window !== 'undefined' ? window.location.hostname : '')
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const fromDisk = await import('@/lib/api').then((m) => m.getWeeksWithUploads()).catch(() => [] as string[])
-      const fromSupabase = await import('@/lib/supabase-queries')
-        .then((m) => m.getWeeksWithDataFromSupabase())
-        .catch(() => [] as string[])
-      if (!cancelled) setWeeksWithData(new Set([...fromDisk, ...fromSupabase]))
-    })()
-    return () => {
-      cancelled = true
-    }
+  const loadWeeksWithData = useCallback(async () => {
+    const info = await import('@/lib/api')
+      .then((m) => m.getUploadWeeksInfo())
+      .catch(() => ({
+        weeks: [] as string[],
+        qlikWeeks: [] as string[],
+        latestQlikWeek: null as string | null,
+      }))
+    const qlik = info.qlikWeeks.length ? info.qlikWeeks : info.weeks
+    setWeeksWithData(new Set(qlik))
   }, [])
+
+  useEffect(() => {
+    void loadWeeksWithData()
+    const onUploadsChanged = () => {
+      void loadWeeksWithData()
+    }
+    window.addEventListener(UPLOAD_WEEKS_CHANGED_EVENT, onUploadsChanged)
+    return () => {
+      window.removeEventListener(UPLOAD_WEEKS_CHANGED_EVENT, onUploadsChanged)
+    }
+  }, [loadWeeksWithData])
+
+  useEffect(() => {
+    if (!selectedWeek || !metadata?.qlik) return
+    setWeeksWithData((prev) => {
+      if (prev?.has(selectedWeek)) return prev
+      const next = new Set(prev ?? [])
+      next.add(selectedWeek)
+      return next
+    })
+  }, [selectedWeek, metadata?.qlik])
 
   useEffect(() => {
     if (!hasBackend) return

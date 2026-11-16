@@ -1047,11 +1047,16 @@ export type UploadWeeksInfo = {
   latestQlikWeek: string | null
 }
 
+export { UPLOAD_WEEKS_CHANGED_EVENT, notifyUploadWeeksChanged } from './upload-weeks-events'
+
 export async function getUploadWeeksInfo(): Promise<UploadWeeksInfo> {
   const empty: UploadWeeksInfo = { weeks: [], qlikWeeks: [], latestQlikWeek: null }
   if (!hasBackend) return empty
   try {
-    const response = await fetchWithTimeout(`${API_BASE_URL}/api/weeks-with-uploads`)
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/weeks-with-uploads?_=${Date.now()}`,
+      { cache: 'no-store' },
+    )
     if (!response.ok) return empty
     const body = (await response.json()) as {
       weeks?: string[]
@@ -1074,7 +1079,7 @@ export async function getUploadWeeksInfo(): Promise<UploadWeeksInfo> {
 
 export async function getWeeksWithUploads(): Promise<string[]> {
   const info = await getUploadWeeksInfo()
-  return info.weeks
+  return info.qlikWeeks.length ? info.qlikWeeks : info.weeks
 }
 
 export type DiskUsageFile = {

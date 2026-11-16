@@ -9,8 +9,10 @@ from weekly_report.src.storage.disk import (
     ensure_upload_space,
     is_disk_full_error,
     is_ignored_pricing_upload,
+    is_qlik_file,
     list_ignored_pricing_uploads,
     list_qlik_weeks,
+    week_has_qlik,
 )
 
 
@@ -237,6 +239,45 @@ def test_gender_sales_missing_qlik_is_404_not_500(tmp_path: Path, monkeypatch):
     except HTTPException as exc:
         assert exc.status_code == 404
         assert "2026-45" in str(exc.detail)
+
+
+def test_qlik_w46_csv_counts_as_qlik_week(tmp_path: Path):
+    path = tmp_path / "raw" / "2026-46" / "qlik" / "Qlik_W46.csv"
+    _touch(path, 178)
+    assert is_qlik_file(path)
+    assert week_has_qlik(tmp_path, "2026-46")
+    assert list_qlik_weeks(tmp_path) == ["2026-46"]
+    _touch(tmp_path / "raw" / "2026-45" / "dema_spend" / "Dema_Marketing_spend_W45.csv", 10)
+    assert list_qlik_weeks(tmp_path) == ["2026-46"]
+    assert not week_has_qlik(tmp_path, "2026-45")
+
+
+def test_keep_last_two_weeks_keeps_qlik_w46(tmp_path: Path):
+    _touch(tmp_path / "raw" / "2026-44" / "qlik" / "Qlik_W44.xlsx", 90)
+    _touch(tmp_path / "raw" / "2026-45" / "qlik" / "Qlik_W45.csv", 20)
+    _touch(tmp_path / "raw" / "2026-46" / "qlik" / "Qlik_W46.csv", 10)
+    result = delete_old_weekly_bulk(tmp_path)
+    assert KEEP_RECENT_WEEKLY == 2
+    assert (tmp_path / "raw" / "2026-46" / "qlik" / "Qlik_W46.csv").exists()
+    assert (tmp_path / "raw" / "2026-45" / "qlik" / "Qlik_W45.csv").exists()
+    assert not (tmp_path / "raw" / "2026-44" / "qlik" / "Qlik_W44.xlsx").exists()
+    assert result["kept_weeks"] == ["2026-46", "2026-45"]
+    assert list_qlik_weeks(tmp_path) == ["2026-46", "2026-45"]
+
+
+def test_weeks_with_uploads_treats_qlik_w46_csv_as_qlik_week(tmp_path: Path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    _touch(tmp_path / "raw" / "2026-46" / "qlik" / "Qlik_W46.csv", 10)
+    _touch(tmp_path / "raw" / "2026-45" / "dema_gm2" / "Dema_Net_GM2.csv", 8)
+    from weekly_report.api import routes
+
+    body = asyncio.run(routes.get_weeks_with_uploads())
+    assert body["weeks"] == ["2026-46", "2026-45"]
+    assert body["qlik_weeks"] == ["2026-46"]
+    assert body["latest_qlik_week"] == "2026-46"
 
 
 def test_weeks_with_uploads_includes_qlik_weeks(tmp_path: Path, monkeypatch):
