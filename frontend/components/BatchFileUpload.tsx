@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { CheckCircle, XCircle, Loader2, Upload, RefreshCw } from 'lucide-react'
 import { getApiBaseUrl } from '@/lib/api'
+import { notifyUploadWeeksChanged } from '@/lib/upload-weeks-events'
 import { releaseUploadLock, tryAcquireUploadLock } from '@/lib/upload-lock'
 import {
   computeUploadTimeoutMs,
@@ -291,7 +292,8 @@ export default function BatchFileUpload({
       try {
         // First call onUploadComplete to update metadata
         await onUploadComplete()
-        
+        notifyUploadWeeksChanged()
+
         // Then trigger refreshData (this includes Supabase sync via DataCacheContext)
         await refreshData()
       } catch (e) {
@@ -412,6 +414,7 @@ export default function BatchFileUpload({
       setOverallStatus('complete')
       try {
         await onUploadComplete()
+        notifyUploadWeeksChanged()
       } catch (error) {
         console.error('Error updating metadata after upload:', error)
       }

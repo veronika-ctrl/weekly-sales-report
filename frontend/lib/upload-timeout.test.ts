@@ -123,5 +123,7 @@ describe('disk full upload copy', () => {
     assert.match(upload, /\/api\/health/)
     assert.match(layout, /latestQlikWeek/)
     assert.match(layout, /getUploadWeeksInfo/)
+    assert.match(layout, /UPLOAD_WEEKS_CHANGED_EVENT/)
+    assert.match(upload, /notifyUploadWeeksChanged/)
   })
 })

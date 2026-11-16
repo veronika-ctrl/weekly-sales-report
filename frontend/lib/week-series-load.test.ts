@@ -117,6 +117,22 @@ describe('audience total self-load wiring', () => {
     assert.match(layout, /getUploadWeeksInfo/)
   })
 
+  it('marks a week from qlik_weeks and refreshes after Settings upload', () => {
+    const layout = readFileSync(join(here, '../components/LayoutContent.tsx'), 'utf8')
+    const api = readFileSync(join(here, 'api.ts'), 'utf8')
+    const upload = readFileSync(join(here, '../components/BatchFileUpload.tsx'), 'utf8')
+    const settings = readFileSync(join(here, '../app/settings/page.tsx'), 'utf8')
+    const events = readFileSync(join(here, 'upload-weeks-events.ts'), 'utf8')
+    assert.match(layout, /info\.qlikWeeks/)
+    assert.match(layout, /UPLOAD_WEEKS_CHANGED_EVENT/)
+    assert.match(layout, /pathname/)
+    assert.match(api, /weeks-with-uploads\?_=\$\{Date\.now\(\)\}/)
+    assert.match(api, /cache: 'no-store'/)
+    assert.match(upload, /notifyUploadWeeksChanged/)
+    assert.match(settings, /metadata\?\.qlik/)
+    assert.match(events, /weekly-report-uploads-changed/)
+  })
+
   it('loads per-market audience without waiting on the summary cache', () => {
     const page = readFileSync(join(here, '../app/audience/[market]/page.tsx'), 'utf8')
     const api = readFileSync(join(here, 'api.ts'), 'utf8')
