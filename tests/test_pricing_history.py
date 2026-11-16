@@ -48,6 +48,30 @@ def test_iso_week_continuation_names():
     assert parse_iso_week_from_filename("Full_Price_vs_Sale_W40.csv") is None
 
 
+def test_discover_keeps_latest_november_file_only(tmp_path: Path):
+    import os
+
+    from weekly_report.src.metrics.pricing_history import FILE_TYPE
+
+    slot = tmp_path / "raw"
+    old = slot / "2026-44" / FILE_TYPE / "november_2026_full_exchanges.csv"
+    new = slot / "2026-45" / FILE_TYPE / "november_2026_full_exchanges.csv"
+    oct_file = slot / "2026-44" / FILE_TYPE / "october_2026_full_exchanges.csv"
+    for path in (old, new, oct_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Date\n2026-11-01\n", encoding="utf-8")
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    os.utime(oct_file, (1_100_000_000, 1_100_000_000))
+    os.utime(new, (1_800_000_000, 1_800_000_000))
+
+    accepted, ignored = discover_pricing_files(tmp_path)
+    names_weeks = {(p.name, p.parent.parent.name) for p in accepted}
+    assert ("november_2026_full_exchanges.csv", "2026-45") in names_weeks
+    assert ("november_2026_full_exchanges.csv", "2026-44") not in names_weeks
+    assert ("october_2026_full_exchanges.csv", "2026-44") in names_weeks
+    assert "november_2026_full_exchanges.csv" in ignored
+
+
 @pytest.fixture(autouse=True)
 def _disable_fx(monkeypatch):
     monkeypatch.setenv("DISABLE_FX_CONVERSION", "1")

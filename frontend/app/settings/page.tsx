@@ -398,7 +398,7 @@ export default function Settings() {
       accumulate: true,
       skipCountry: true,
       extraFields: [],
-      hint: 'Shopify “Sales by Pricing Type Adv” daily export (exchange-aware). Date is the primary key — overlapping dates are replaced, new dates are appended. Not mixed with the all-orders slot above.',
+      hint: 'Shopify “Sales by Pricing Type Adv” daily export (exchange-aware). Name it like november_2026_full_exchanges.csv. A later file for the same calendar month replaces the earlier one in any week folder. Not mixed with the all-orders slot above.',
     },
     {
       type: 'discount_types',

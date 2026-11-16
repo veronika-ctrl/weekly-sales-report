@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -130,6 +131,36 @@ def test_zero_sales_dates_preserved(tmp_path: Path):
     assert dates == ["2026-09-01", "2026-09-02"]
     zero = hist["df"][hist["df"]["_date"] == pd.Timestamp("2026-09-02")].iloc[0]
     assert zero["_total"] == 0.0
+
+
+def test_later_november_file_replaces_earlier_same_month(tmp_path: Path):
+    """Two november_2026 files: later mtime is the rewrite; earlier November days drop."""
+    old = _slot(tmp_path, "2026-44", "november_2026_full_exchanges.csv")
+    _write_csv(
+        old,
+        [
+            _row("2026-11-01", full="1", total="10"),
+            _row("2026-11-15", full="99", total="99"),
+        ],
+    )
+    new = _slot(tmp_path, "2026-45", "november_2026_full_exchanges.csv")
+    _write_csv(
+        new,
+        [
+            _row("2026-11-01", full="80", total="100"),
+            _row("2026-11-09", full="50", total="60"),
+        ],
+    )
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    os.utime(new, (1_800_000_000, 1_800_000_000))
+    hist = load_full_price_vs_sale_excl_exchanges_history(tmp_path)
+    dates = [str(d.date()) for d in hist["df"]["_date"]]
+    assert dates == ["2026-11-01", "2026-11-09"]
+    by_date = {str(r["_date"].date()): r for _, r in hist["df"].iterrows()}
+    assert by_date["2026-11-01"]["_full"] == 80.0
+    assert by_date["2026-11-09"]["_total"] == 60.0
+    assert hist["files_used"] == ["november_2026_full_exchanges.csv"]
+    assert "november_2026_full_exchanges.csv" in hist.get("ignored_files", [])
 
 
 def test_own_month_wins_and_extra_days_are_dropped(tmp_path: Path):
@@ -365,6 +396,49 @@ def test_upload_accepts_valid_headers_and_returns_date_range(tmp_path: Path, mon
     assert result["date_range"] == {"start": "2026-09-01", "end": "2026-09-03"}
     saved = tmp_path / "raw" / "2026-36" / FILE_TYPE / "full-price-vs-sale-excl-exchanges-2026-09-01-to-2026-09-07.csv"
     assert saved.exists()
+
+
+def test_upload_november_replaces_earlier_november_in_other_week(tmp_path: Path, monkeypatch):
+    import asyncio
+    from io import BytesIO
+
+    from starlette.datastructures import Headers, UploadFile
+
+    from weekly_report.src.metrics.pricing_history import replace_same_month_pricing_files
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("DISABLE_SUPABASE", "true")
+    from weekly_report.api import routes
+
+    monkeypatch.setattr(routes, "_supabase_enabled", lambda: False)
+
+    old = _slot(tmp_path, "2026-44", "november_2026_full_exchanges.csv")
+    _write_csv(old, [_row("2026-11-01", full="1", total="10"), _row("2026-11-02", full="2", total="20")])
+    october = _slot(tmp_path, "2026-44", "october_2026_full_exchanges.csv")
+    _write_csv(october, [_row("2026-10-31", full="9", total="9")])
+    assert old.exists()
+
+    body = (HEADERS + "\n" + _row("2026-11-01") + "\n" + _row("2026-11-09") + "\n").encode("utf-8")
+
+    async def _run():
+        upload = UploadFile(
+            file=BytesIO(body),
+            filename="november_2026_full_exchanges.csv",
+            headers=Headers({"content-type": "text/csv"}),
+        )
+        return await routes.upload_file(file=upload, week="2026-45", file_type=FILE_TYPE)
+
+    result = asyncio.run(_run())
+    assert result["success"] is True
+    assert result["date_range"] == {"start": "2026-11-01", "end": "2026-11-09"}
+    new = tmp_path / "raw" / "2026-45" / FILE_TYPE / "november_2026_full_exchanges.csv"
+    assert new.exists()
+    assert not old.exists()
+    assert october.exists()
+    assert "2026-44/november_2026_full_exchanges.csv" in (result.get("metadata") or {}).get(
+        "replaced_files", []
+    )
+    assert replace_same_month_pricing_files(tmp_path, new) == []
 
 
 def test_weekly_series_period_total_is_not_latest_week_and_mix_stays_flat(tmp_path: Path):
