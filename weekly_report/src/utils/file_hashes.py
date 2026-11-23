@@ -22,6 +22,15 @@ def get_file_hashes_for_week(week: str, data_root: Path) -> Dict[str, str]:
                 out[key] = f"{path.stat().st_mtime}"
             except (OSError, ValueError):
                 continue
+    from weekly_report.src.transform.uk_vat_adjustment import (
+        adjustment_cache_token,
+        reporting_week_uses_adjustment,
+    )
+
+    if reporting_week_uses_adjustment(week):
+        # File bytes are unchanged, but stored metrics for this week include the
+        # VAT window (or compare with it next year) and must be recomputed.
+        out["__uk_vat_adjustment__"] = adjustment_cache_token()
     return out
 
 

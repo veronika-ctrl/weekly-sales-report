@@ -2654,6 +2654,34 @@ async def clear_cache():
         raise HTTPException(status_code=500, detail="Failed to clear cache")
 
 
+@app.get("/api/uk-vat-adjustment")
+async def get_uk_vat_adjustment():
+    """Switch state and how much UK gross the VAT correction removes, per week."""
+    from weekly_report.src.transform.uk_vat_adjustment import adjustment_summary
+
+    return adjustment_summary()
+
+
+@app.post("/api/uk-vat-adjustment")
+async def set_uk_vat_adjustment(payload: Dict[str, Any]):
+    """Persist ADJUST_UK_VAT for this server and drop computed caches."""
+    from weekly_report.src.config import load_config
+    from weekly_report.src.transform.uk_vat_adjustment import (
+        adjustment_summary,
+        invalidate_local_caches,
+        set_adjustment_enabled,
+    )
+
+    enabled = bool(payload.get("enabled", True))
+    try:
+        data_root = load_config().data_root
+    except Exception:
+        data_root = Path(os.getenv("DATA_ROOT", "data"))
+    set_adjustment_enabled(enabled, data_root)
+    invalidate_local_caches(data_root)
+    return adjustment_summary()
+
+
 @app.post("/api/cache/invalidate/{base_week}")
 async def invalidate_cache(base_week: str):
     """Invalidate cache for a specific week."""

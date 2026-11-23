@@ -12,6 +12,12 @@ from loguru import logger
 
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
 from weekly_report.src.cache.manager import raw_data_cache
+from weekly_report.src.transform.uk_vat_adjustment import (
+    QLIK_MATCH_COLUMNS,
+    adjust_qlik,
+    adjustment_active,
+    adjustment_cache_token,
+)
 
 # One Qlik workbook in memory at a time. Render is 2GB. A second read while
 # the first frame is still alive restarts the instance, and the browser then
@@ -117,7 +123,8 @@ def _resolve_qlik_dir(raw_data_path: Path) -> Path:
 def load_data(raw_data_path: Path) -> pd.DataFrame:
     """Load Qlik data from CSV/Excel files."""
     with _qlik_read_lock:
-        return load_csv_files(_resolve_qlik_dir(raw_data_path), "qlik")
+        frame = load_csv_files(_resolve_qlik_dir(raw_data_path), "qlik")
+        return adjust_qlik(frame)
 
 
 def _read_varint(buf: bytes, index: int) -> Tuple[int, int]:
@@ -610,6 +617,11 @@ def load_qlik_columns(
     ``keep_row`` drops rows while streaming Excel so Women’s monthly does not
     materialize Product/Color for retail and out-of-window dates.
     """
+    read_columns: Sequence[str] = columns
+    if adjustment_active():
+        # Order id and country are required to match affected orders. Callers that
+        # only sum revenue still receive adjusted money; the extra keys are dropped.
+        read_columns = list(dict.fromkeys([*columns, *QLIK_MATCH_COLUMNS]))
     with _qlik_read_lock:
         raw_data_cache.clear()
         gc.collect()
@@ -617,8 +629,8 @@ def load_qlik_columns(
         parquet_files = list(source.glob("**/*.parquet"))
         if parquet_files:
             path = parquet_files[0]
-            logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(columns)}")
-            frame = _filter_frame_rows(_read_parquet_columns(path, columns), keep_row)
+            logger.info(f"Loading Qlik columns from Parquet {path.name}: {list(read_columns)}")
+            frame = _filter_frame_rows(_read_parquet_columns(path, read_columns), keep_row)
         else:
             files = list(source.glob("*.csv")) + list(source.glob("*.xlsx"))
             if not files:
@@ -627,13 +639,14 @@ def load_qlik_columns(
                     f"Expected CSV/Excel files in: {source}/*.csv or {source}/*.xlsx"
                 )
             frames = [
-                _load_excel_projected(raw_data_path, path, columns, keep_row=keep_row)
+                _load_excel_projected(raw_data_path, path, read_columns, keep_row=keep_row)
                 if path.suffix.lower() == ".xlsx"
-                else _filter_frame_rows(_read_csv_columns(path, columns), keep_row)
+                else _filter_frame_rows(_read_csv_columns(path, read_columns), keep_row)
                 for path in files
             ]
             frame = frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
-        return _attach_iso_week(frame)
+        frame = adjust_qlik(_attach_iso_week(frame))
+        return _drop_match_columns(frame, columns)
 
 
 def load_category_qlik(raw_data_path: Path) -> pd.DataFrame:
@@ -655,12 +668,27 @@ def qlik_source_files(raw_data_path: Path) -> List[Path]:
     return files
 
 
+def _drop_match_columns(frame: pd.DataFrame, requested: Sequence[str]) -> pd.DataFrame:
+    """Keep the caller's columns plus vat_adjusted. Match keys were only for the load."""
+    if frame is None or frame.empty:
+        return frame
+    keep = [col for col in requested if col in frame.columns]
+    if "vat_adjusted" in frame.columns and "vat_adjusted" not in keep:
+        keep.append("vat_adjusted")
+    if "iso_week" in frame.columns and "iso_week" not in keep:
+        keep.append("iso_week")
+    if not keep:
+        return frame
+    return frame.loc[:, keep].copy()
+
+
 def qlik_source_signature(raw_data_path: Path) -> str:
-    """Changes when the Qlik file that this week folder reads is replaced."""
+    """Changes when the Qlik file or the UK VAT adjustment inputs change."""
     parts = []
     for path in qlik_source_files(raw_data_path):
         stat = path.stat()
         parts.append(f"{path.name}:{stat.st_size}:{getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1e9))}")
+    parts.append(adjustment_cache_token())
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:20]
 
 

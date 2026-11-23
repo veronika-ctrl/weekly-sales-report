@@ -103,7 +103,14 @@ def build_general_pdf(
     # Title
     title = Paragraph(f"Weekly Report - Week {config.week}", title_style)
     story.append(title)
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 8))
+    from weekly_report.src.transform.uk_vat_adjustment import note_for_week
+
+    vat_note = note_for_week(config.week)
+    if vat_note:
+        story.append(Paragraph(vat_note, body_style))
+        story.append(Spacer(1, 8))
+    story.append(Spacer(1, 12))
     
     # KPI Summary
     if 'kpis' in curated_data:
@@ -215,7 +222,13 @@ def build_market_pdf(
     # Title
     title = Paragraph(f"Market Report - Week {config.week}", title_style)
     story.append(title)
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 8))
+    from weekly_report.src.transform.uk_vat_adjustment import note_for_week
+
+    vat_note = note_for_week(config.week)
+    if vat_note:
+        story.append(Paragraph(vat_note, styles["Italic"]))
+        story.append(Spacer(1, 8))
     
     # Market Summary
     if 'markets' in curated_data:

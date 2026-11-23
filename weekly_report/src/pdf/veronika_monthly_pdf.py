@@ -67,6 +67,10 @@ def build_veronika_monthly_pdf(payload: Dict[str, Any], output: Union[Path, Byte
             sub,
         )
     )
+    from weekly_report.src.transform.uk_vat_adjustment import NOTE, adjustment_enabled
+
+    if adjustment_enabled() and str(ym) in {"2026-09", "2026-10", "2026-11"}:
+        story.append(Paragraph(NOTE, lab))
 
     rows = [
         [

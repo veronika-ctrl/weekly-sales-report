@@ -458,7 +458,9 @@ def _take_numeric(df: pd.DataFrame, candidates: Sequence[str], dest: str) -> pd.
 
 
 def load_revenue_frame(path: Path) -> pd.DataFrame:
-    df = _standardize_keys(_load_one_csv(path))
+    from weekly_report.src.transform.uk_vat_adjustment import adjust_dema
+
+    df = adjust_dema(_standardize_keys(_load_one_csv(path)))
     df = _take_numeric(df, ["Revenue_CFA", "Revenue CFA", "RevenueCFA"], "revenue_cfa")
     df = _take_numeric(df, ["Revenue_MTA", "Revenue MTA", "RevenueMTA"], "revenue_mta")
     df = _take_numeric(df, ["Revenue_New_MTA", "Revenue New MTA", "Revenue_New MTA"], "revenue_new_mta")
@@ -488,7 +490,9 @@ def load_spend_frame(path: Path) -> pd.DataFrame:
 
 
 def load_gm2_frame(path: Path) -> pd.DataFrame:
-    df = _standardize_keys(_load_one_csv(path))
+    from weekly_report.src.transform.uk_vat_adjustment import adjust_dema_gm2
+
+    df = adjust_dema_gm2(_standardize_keys(_load_one_csv(path)))
     df = _take_numeric(
         df,
         ["Net gross profit 2", "Net GM2", "Net gross profit2", "Gross margin 2 - Dema MTA"],
