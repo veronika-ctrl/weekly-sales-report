@@ -787,9 +787,8 @@ export default function Settings() {
             </p>
             {ukVat && ukVat.order_count === 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                No Shopify orders export with Name, Created at, Shipping Country, Subtotal and Taxes
-                was in this repository, so the committed list is empty. The reference extract was 178
-                orders. Re-run scripts/build_uk_vat_affected_orders.py when that export is available.
+                The affected-order file is missing or empty. The Shopify list is 177 orders
+                (gross reduction about $12,348). Order #100288414 stays off that list.
               </p>
             )}
             {ukVat && ukVat.weeks.length > 0 && (

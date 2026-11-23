@@ -704,8 +704,8 @@ def adjustment_summary() -> Dict[str, Any]:
         "source": str(affected_orders_csv_path()),
         "note": NOTE,
         "reference": {
-            "expected_orders": 178,
-            "expected_gross_reduction_usd": 12368,
+            "expected_orders": 177,
+            "expected_gross_reduction_usd": 12348,
             "expected_net_reduction_usd": 11558,
         },
     }

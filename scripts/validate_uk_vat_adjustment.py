@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Print and save reports/uk_vat_adjustment_check.csv.
 
-Production week files are read when present under DATA_ROOT or ./data.
-This environment has no Shopify/Qlik extract for W40–W46 2026, so those
-rows explain the gap. A clearly labeled fixture block checks the rule on
-synthetic orders (not the $74,209 reference).
+The weekly gross table is the committed Shopify list
+(weekly_report/data/adjustments/uk_vat_affected_orders.csv): before is
+gross_sales, after is gross_sales/1.2, difference is gross_sales/6.
+That file has no net, discount, or shipping column. Production Shopify,
+Qlik, and Dema week files are read when present. This script does not
+invent those rows.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ from weekly_report.src.transform.uk_vat_adjustment import (  # noqa: E402
     VAT_FACTOR,
     adjust_qlik,
     adjust_shopify,
+    affected_orders_csv_path,
+    clear_runtime_state,
     invalidate_local_caches,
     invalidate_supabase_overlapping,
     load_affected_orders,
@@ -36,7 +40,16 @@ OUTPUT = REPO / "reports" / "uk_vat_adjustment_check.csv"
 def _data_roots() -> list[Path]:
     roots = [Path(os.getenv("DATA_ROOT", REPO / "data"))]
     roots.append(REPO / "data")
-    return roots
+    roots.append(REPO / "weekly_report" / "data")
+    unique: list[Path] = []
+    seen = set()
+    for root in roots:
+        key = str(root.resolve()) if root.exists() else str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(root)
+    return unique
 
 
 def _find_week_frame(slot: str) -> pd.DataFrame | None:
@@ -111,6 +124,151 @@ def _production_rows(source: str, adjust) -> list[dict]:
     return rows
 
 
+def _csv_week_rows() -> list[dict]:
+    """Gross before/after from the committed list. Net is not on that file."""
+    path = affected_orders_csv_path()
+    frame = pd.read_csv(path)
+    created = pd.to_datetime(frame["order_created_at"], utc=True).dt.tz_convert("Europe/Stockholm")
+    iso = created.dt.isocalendar()
+    frame = frame.assign(week=iso.year.astype(str) + "-" + iso.week.astype(int).astype(str).str.zfill(2))
+    rows = []
+    note = (
+        "Shopify affected-orders file only. before = gross_sales, after = gross_sales / 1.2, "
+        "difference = gross_sales / 6. Net sales is not a column on this file."
+    )
+    net_note = (
+        "Net sales, discounts and shipping are not on uk_vat_affected_orders.csv. "
+        "No order-level Shopify or Qlik extract with a net column was loaded, so net before/after is blank."
+    )
+    for week in WEEKS:
+        part = frame.loc[frame["week"].eq(week)]
+        gross = float(part["gross_sales"].sum()) if len(part) else 0.0
+        rows.append(
+            {
+                "section": "affected_orders_csv",
+                "week": week,
+                "metric": "uk_gross",
+                "before": round(gross, 2),
+                "after": round(gross / VAT_FACTOR, 2),
+                "difference": round(gross / 6.0, 2),
+                "affected_orders": int(len(part)),
+                "note": note,
+            }
+        )
+        rows.append(
+            {
+                "section": "affected_orders_csv",
+                "week": week,
+                "metric": "uk_net",
+                "before": None,
+                "after": None,
+                "difference": None,
+                "affected_orders": int(len(part)),
+                "note": net_note,
+            }
+        )
+    gross_total = float(frame["gross_sales"].sum())
+    rows.append(
+        {
+            "section": "affected_orders_csv",
+            "week": "W40-W46",
+            "metric": "uk_gross_total",
+            "before": round(gross_total, 2),
+            "after": round(gross_total / VAT_FACTOR, 2),
+            "difference": round(gross_total / 6.0, 2),
+            "affected_orders": int(len(frame)),
+            "note": note + " Order #100288414 is not in this file.",
+        }
+    )
+    return rows
+
+
+def _order_level_net_rows() -> list[dict]:
+    """Sum net on any loaded extract that names these orders. Does not invent rows."""
+    orders = set(load_affected_orders())
+    net_names = ["Net sales", "Net Sales", "Net Revenue", "net_sales"]
+    found = False
+    for root in _data_roots():
+        if not root.exists():
+            continue
+        for path in list(root.rglob("*.csv")) + list(root.rglob("*.parquet")):
+            if "uk_vat_affected_orders" in path.name or "reports" in path.parts:
+                continue
+            try:
+                frame = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path, nrows=5)
+            except Exception:
+                continue
+            order_col = next((col for col in frame.columns if str(col) in {"Order No", "order_name", "Name", "Order name"}), None)
+            net_col = next((col for col in frame.columns if str(col) in net_names), None)
+            if not order_col or not net_col:
+                continue
+            full = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+            ids = full[order_col].astype(str).str.replace("#", "", regex=False).str.strip()
+            matched = full.loc[ids.isin(orders)]
+            if matched.empty:
+                continue
+            found = True
+            before = float(pd.to_numeric(matched[net_col], errors="coerce").fillna(0).sum())
+            return [
+                {
+                    "section": "order_level_net",
+                    "week": "W40-W46",
+                    "metric": "uk_net",
+                    "before": round(before, 2),
+                    "after": round(before / VAT_FACTOR, 2),
+                    "difference": round(before / 6.0, 2),
+                    "affected_orders": int(len(matched)),
+                    "note": f"Net summed from {path} for order ids on the Shopify list, then divided by 1.2.",
+                }
+            ]
+    if not found:
+        return [
+            {
+                "section": "order_level_net",
+                "week": "W40-W46",
+                "metric": "uk_net",
+                "before": None,
+                "after": None,
+                "difference": None,
+                "affected_orders": 0,
+                "note": (
+                    "No order-level file with both an order id and Net sales / Net Revenue matched the "
+                    "177 Shopify orders. Daily Shopify totals and Cin7 claims are not that extract."
+                ),
+            }
+        ]
+    return []
+
+
+def _slide_unavailable_rows() -> list[dict]:
+    missing = _find_week_frame("qlik") is None
+    note = (
+        "No Qlik week files for 2026-40 through 2026-46, so Top Markets and Audience were not recalculated. "
+        "No Qlik or Dema rows were invented."
+        if missing
+        else "Qlik files were found; slide metrics were not rebuilt in this check."
+    )
+    rows = []
+    for section, metric in (
+        ("top_markets", "uk_revenue_rank_and_total"),
+        ("audience_total", "new_returning_revenue_aov_customers"),
+        ("audience_uk", "new_returning_revenue_aov_customers"),
+    ):
+        rows.append(
+            {
+                "section": section,
+                "week": "W40-W46",
+                "metric": metric,
+                "before": None,
+                "after": None,
+                "difference": None,
+                "affected_orders": None,
+                "note": note,
+            }
+        )
+    return rows
+
+
 def _fixture_rows() -> list[dict]:
     """One affected order and one taxed UK order. Not the 178-order reference."""
     shopify = pd.DataFrame(
@@ -179,110 +337,6 @@ def _fixture_csv() -> Path:
     return path
 
 
-def _slide_rows() -> list[dict]:
-    """W40 fixture passed through Top Markets and Audience. Not production revenue."""
-    from weekly_report.src.metrics.audience_metrics_per_country import (
-        calculate_audience_metrics_per_country_for_weeks,
-    )
-    from weekly_report.src.metrics.markets import calculate_top_markets_for_weeks
-    from weekly_report.src.transform.uk_vat_adjustment import clear_runtime_state
-
-    root = REPO / "reports" / "_uk_vat_fixture_data"
-    week = root / "raw" / "2026-40"
-    qlik = week / "qlik"
-    dema = week / "dema_spend"
-    qlik.mkdir(parents=True, exist_ok=True)
-    dema.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(
-        [
-            {"Date": "2026-09-29", "Sales Channel": "Online", "Country": "United Kingdom", "Gross Revenue": 396.92, "Net Revenue": 396.92, "Returns": 0, "Order No": "#100288154", "Customer E-mail": "uk@example.com", "New/Returning Customer": "New", "Sales Qty": 2},
-            {"Date": "2026-09-29", "Sales Channel": "Online", "Country": "Sweden", "Gross Revenue": 350.0, "Net Revenue": 350.0, "Returns": 0, "Order No": "S1", "Customer E-mail": "se@example.com", "New/Returning Customer": "Returning", "Sales Qty": 1},
-            {"Date": "2026-09-29", "Sales Channel": "Online", "Country": "Germany", "Gross Revenue": 80.0, "Net Revenue": 80.0, "Returns": 0, "Order No": "G1", "Customer E-mail": "de@example.com", "New/Returning Customer": "New", "Sales Qty": 1},
-            {"Date": "2026-09-29", "Sales Channel": "Online", "Country": "Norway", "Gross Revenue": 50.0, "Net Revenue": 50.0, "Returns": 0, "Order No": "N1", "Customer E-mail": "no@example.com", "New/Returning Customer": "New", "Sales Qty": 1},
-            {"Date": "2026-09-29", "Sales Channel": "Online", "Country": "United States", "Gross Revenue": 200.0, "Net Revenue": 200.0, "Returns": 0, "Order No": "U1", "Customer E-mail": "us@example.com", "New/Returning Customer": "Returning", "Sales Qty": 1},
-        ]
-    ).to_csv(qlik / "qlik.csv", index=False)
-    pd.DataFrame({"Days": ["2026-09-29"], "Country": ["United Kingdom"], "Marketing spend": [40.0]}).to_csv(
-        dema / "spend.csv", index=False
-    )
-    os.environ["UK_VAT_AFFECTED_ORDERS_CSV"] = str(_fixture_csv())
-    os.environ["DATA_ROOT"] = str(root)
-
-    def snap(enabled: str) -> dict:
-        os.environ["ADJUST_UK_VAT"] = enabled
-        clear_runtime_state()
-        markets = calculate_top_markets_for_weeks("2026-40", 1, root)
-        audience = calculate_audience_metrics_per_country_for_weeks("2026-40", 1, root)
-        countries = {row["country"]: row for row in markets["markets"]}
-        aud = audience["audience_metrics_per_country"][0]["countries"]
-        ranks = [row["country"] for row in markets["markets"] if row["country"] not in {"ROW", "Total"}]
-        return {"markets": countries, "audience": aud, "ranks": {name: i + 1 for i, name in enumerate(ranks)}}
-
-    on = snap("true")
-    off = snap("false")
-    uk_rank_on = on["ranks"].get("United Kingdom")
-    uk_rank_off = off["ranks"].get("United Kingdom")
-    rows = [
-        {
-            "section": "fixture_top_markets",
-            "week": "2026-40",
-            "metric": "uk_gross_and_rank",
-            "before": off["markets"]["United Kingdom"]["weeks"]["2026-40"],
-            "after": on["markets"]["United Kingdom"]["weeks"]["2026-40"],
-            "difference": off["markets"]["United Kingdom"]["weeks"]["2026-40"] - on["markets"]["United Kingdom"]["weeks"]["2026-40"],
-            "affected_orders": 1,
-            "note": f"rank {uk_rank_off} -> {uk_rank_on}. Sweden stays {off['markets']['Sweden']['weeks']['2026-40']}.",
-        },
-        {
-            "section": "fixture_top_markets",
-            "week": "2026-40",
-            "metric": "total_gross",
-            "before": off["markets"]["Total"]["weeks"]["2026-40"],
-            "after": on["markets"]["Total"]["weeks"]["2026-40"],
-            "difference": off["markets"]["Total"]["weeks"]["2026-40"] - on["markets"]["Total"]["weeks"]["2026-40"],
-            "affected_orders": 1,
-            "note": "Company total drops by the UK difference. Germany unchanged.",
-        },
-    ]
-    for label, key in (("audience_total", "Total"), ("audience_uk", "United Kingdom")):
-        before = off["audience"][key]
-        after = on["audience"][key]
-        rows.append(
-            {
-                "section": f"fixture_{label}",
-                "week": "2026-40",
-                "metric": "new_returning_aov_customers",
-                "before": before["aov_new_customer"],
-                "after": after["aov_new_customer"],
-                "difference": before["aov_new_customer"] - after["aov_new_customer"],
-                "affected_orders": 1,
-                "note": (
-                    f"new customers {before['new_customers']}->{after['new_customers']}, "
-                    f"returning {before['returning_customers']}->{after['returning_customers']}, "
-                    f"orders {before['total_orders']}->{after['total_orders']}, "
-                    f"returning AOV {before['aov_returning_customer']}->{after['aov_returning_customer']}"
-                ),
-            }
-        )
-    rows.append(
-        {
-            "section": "fixture_audience_other",
-            "week": "2026-40",
-            "metric": "germany_usa_row_aov",
-            "before": off["audience"]["Germany"]["total_aov"],
-            "after": on["audience"]["Germany"]["total_aov"],
-            "difference": 0,
-            "affected_orders": 0,
-            "note": (
-                f"Germany {off['audience']['Germany']['total_aov']}->{on['audience']['Germany']['total_aov']}; "
-                f"USA {off['audience']['United States']['total_aov']}->{on['audience']['United States']['total_aov']}; "
-                f"ROW (Norway, not UK) {off['audience']['ROW']['total_aov']}->{on['audience']['ROW']['total_aov']}."
-            ),
-        }
-    )
-    return rows
-
-
 def _print_table(title: str, rows: list[dict]) -> None:
     print(f"\n{title}")
     if not rows:
@@ -296,23 +350,30 @@ def main() -> int:
     orders = load_affected_orders()
     cache = invalidate_local_caches(Path(os.getenv("DATA_ROOT", REPO / "data")))
     supabase = invalidate_supabase_overlapping()
+    clear_runtime_state()
+    csv_weeks = _csv_week_rows()
     production = _production_rows("shopify", adjust_shopify) + _production_rows("qlik", adjust_qlik)
-    fixture = _fixture_rows() + _slide_rows()
+    net_rows = _order_level_net_rows()
+    slides = _slide_unavailable_rows()
+    fixture = _fixture_rows()
+    gross_row = next(row for row in csv_weeks if row["metric"] == "uk_gross_total")
     gap = [
         {
             "section": "gap",
             "week": "W40-W46",
             "metric": "affected_orders",
-            "before": 178,
+            "before": 177,
             "after": len(orders),
-            "difference": len(orders) - 178,
+            "difference": len(orders) - 177,
             "affected_orders": len(orders),
             "note": (
-                "Reference (USD, sale rows created in the window): 178 orders, "
-                "gross $74,209.63, discounts $2,274.07, net $69,348.44, shipping $419.01, tax $0. "
-                "Expected reduction about $12,368 gross and about $11,558 net. "
-                "No Shopify orders export was in the repo or local data/cache, so no order rows were written. "
-                "Cin7 claim orders are warehouse claims, not these Shopify order names, and have no Taxes column."
+                "Updated target: 177 orders, Shopify gross reduction about $12,348, "
+                "net sales reduction about $11,558. "
+                f"This file has {len(orders)} orders and gross sales {gross_row['before']}; "
+                f"gross/6 = {gross_row['difference']}. "
+                "Order #100288414 is excluded (it had GB VAT 26.48 and was later fully refunded). "
+                "Net cannot be recomputed: the file has no net, discount, or shipping column, "
+                "and no order-level extract with those amounts was loaded."
             ),
         },
         {
@@ -366,11 +427,14 @@ def main() -> int:
             "note": f"removed {cache['removed_count']} cache files; source parquet kept; memory caches cleared",
         },
     ]
-    rows = production + fixture + gap
+    rows = csv_weeks + production + net_rows + slides + fixture + gap
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(OUTPUT, index=False)
-    _print_table("Shopify / Qlik weeks W40–W46 (production files)", production)
-    _print_table("Fixture (not the 178-order reference)", fixture)
+    _print_table("Affected-orders CSV, W40–W46 (gross = file, net = not on file)", csv_weeks)
+    _print_table("Shopify / Qlik week folders", production)
+    _print_table("Order-level net, if a source file was loaded", net_rows)
+    _print_table("Top Markets and Audience (not invented)", slides)
+    _print_table("Rule check on #100288154 (not a production slide)", fixture)
     _print_table("Gap, Qlik check, what was not run", gap)
     print(f"\nwrote {OUTPUT}")
     return 0

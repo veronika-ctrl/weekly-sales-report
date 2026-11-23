@@ -102,21 +102,30 @@ def main(argv: List[str]) -> int:
         if len(rows) > len(chosen):
             chosen = rows
             source = str(path)
-    write_affected_orders_csv(chosen, OUTPUT)
+    existing_rows = 0
+    if OUTPUT.is_file():
+        existing_rows = max(0, sum(1 for line in OUTPUT.read_text(encoding="utf-8").splitlines() if line.strip()) - 1)
     gross = sum(float(row["gross_sales"]) for row in chosen)
     print(f"scanned_files {scanned}")
     print(f"source {source or 'none'}")
     print(f"affected_orders {len(chosen)}")
     print(f"gross_sales {gross:.2f}")
-    print(f"wrote {OUTPUT}")
-    if len(chosen) != 178:
+    if existing_rows and len(chosen) < existing_rows and "--replace" not in argv:
         print(
-            "gap vs reference 178 orders / gross sales $74,209.63: "
+            f"refusing to replace {existing_rows} committed orders with {len(chosen)}. "
+            "Pass --replace to overwrite. The Shopify list is copied in place and is not rebuilt here."
+        )
+        return 0
+    write_affected_orders_csv(chosen, OUTPUT)
+    print(f"wrote {OUTPUT}")
+    if len(chosen) != 177:
+        print(
+            "gap vs the Shopify list of 177 orders / gross reduction about $12,348: "
             f"this run kept {len(chosen)} orders"
             + (f" from {source}." if source else " because no orders export with "
                "Name, Created at, Shipping Country, Subtotal and Taxes was found. "
                "Cin7 claim files and Shopify daily totals do not have those columns. "
-               "No order rows were invented.")
+               "No order rows were invented. Order #100288414 is excluded on purpose.")
         )
     return 0
 
