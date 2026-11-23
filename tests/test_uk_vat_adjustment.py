@@ -113,6 +113,53 @@ def test_matched_order_is_divided_and_counts_stay(tmp_path, monkeypatch):
     assert again.iloc[0]["Gross Revenue"] == pytest.approx(row["Gross Revenue"])
 
 
+def test_qlik_vat_amount_does_not_block_a_listed_order(tmp_path, monkeypatch):
+    """Qlik VAT Amount is filled on ordinary rows. It is not Shopify Taxes."""
+    _use_orders(monkeypatch, tmp_path / "orders.csv", ["#100288154"])
+    frame = pd.DataFrame(
+        [
+            _qlik_row(
+                **{
+                    "Order No": "#100288154",
+                    "Gross Revenue": 396.92,
+                    "Net Revenue": 396.92,
+                    "VAT Amount": 66.15,
+                    "Returns VAT": 0,
+                }
+            )
+        ]
+    )
+    adjusted = adjust_qlik(frame)
+    assert adjusted.iloc[0]["Gross Revenue"] == pytest.approx(396.92 / VAT_FACTOR)
+    assert adjusted.iloc[0]["Sales Qty"] == 1
+
+
+def test_repeated_order_no_column_matches(tmp_path, monkeypatch):
+    """The Shopify name can sit in the second Order No. The first column is not that name."""
+    _use_orders(monkeypatch, tmp_path / "orders.csv", ["#100288154"])
+    week = tmp_path / "raw" / "2026-40" / "qlik"
+    week.mkdir(parents=True)
+    (week / "Qlik_W40.csv").write_text(
+        "Date,Sales Channel,Country,Order No,Gross Revenue,Net Revenue,VAT Amount,Sales Qty,Order No\n"
+        "2026-09-29,Online,United Kingdom,111,396.92,396.92,66.15,2,100288154\n"
+        "2026-09-29,Online,Sweden,222,350,350,50,1,222\n",
+        encoding="utf-8",
+    )
+    from weekly_report.src.adapters.qlik import load_qlik_columns
+
+    frame = load_qlik_columns(
+        tmp_path / "raw" / "2026-40",
+        ["Date", "Sales Channel", "Country", "Gross Revenue", "Net Revenue", "Order No", "Sales Qty"],
+    )
+    uk = frame.loc[frame["Country"].eq("United Kingdom")].iloc[0]
+    sweden = frame.loc[frame["Country"].eq("Sweden")].iloc[0]
+    assert uk["Gross Revenue"] == pytest.approx(396.92 / VAT_FACTOR)
+    assert uk["Net Revenue"] == pytest.approx(396.92 / VAT_FACTOR)
+    assert uk["Sales Qty"] == 2
+    assert sweden["Gross Revenue"] == pytest.approx(350.0)
+    assert frame["Order No"].nunique() == 2
+
+
 def test_taxed_uk_order_in_the_window_is_unchanged(tmp_path, monkeypatch):
     _use_orders(monkeypatch, tmp_path / "orders.csv", ["#100288145", "#100288154"])
     frame = pd.DataFrame(

@@ -1,5 +1,6 @@
 """CSV adapters for loading data from different sources."""
 
+import csv
 import gc
 import hashlib
 import struct
@@ -307,28 +308,38 @@ def _parquet_column_names(path: Path) -> Optional[List[str]]:
     return _parquet_footer_column_names(path)
 
 
-def _header_keep(columns: Sequence[str]):
-    """usecols callback: keep only the headers this report aggregates."""
+def _csv_usecol_indexes(path: Path, columns: Sequence[str], encoding: str, sep: str) -> List[int]:
+    """Column positions to keep. A repeated header (two ``Order No`` fields) is kept twice.
+
+    A callable ``usecols`` drops the second copy, so the Shopify order name in that
+    column never reaches the VAT match.
+    """
     wanted = {str(col).strip() for col in columns}
-
-    def keep(name: object) -> bool:
-        return str(name).strip() in wanted
-
-    return keep
+    with path.open("r", encoding=encoding, newline="") as handle:
+        header = next(csv.reader(handle, delimiter=sep), None)
+    if not header:
+        return []
+    return [index for index, name in enumerate(header) if str(name).strip() in wanted]
 
 
 def _read_csv_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
     """Read a CSV without pulling the unused Qlik columns into memory."""
-    keep = _header_keep(columns)
     last_error: Optional[BaseException] = None
     for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         for sep in (",", ";", "\t", "|"):
+            try:
+                indexes = _csv_usecol_indexes(path, columns, encoding, sep)
+            except Exception as exc:
+                last_error = exc
+                continue
+            if not indexes:
+                continue
             try:
                 frame = pd.read_csv(
                     path,
                     sep=sep,
                     encoding=encoding,
-                    usecols=keep,
+                    usecols=indexes,
                     na_values=NA_VALUES,
                     low_memory=False,
                 )
@@ -349,16 +360,16 @@ def _header_cells(header: Iterable[object]) -> List[str]:
 
 
 def _selected_columns(header: Iterable[object], columns: Sequence[str]) -> List[Tuple[str, int]]:
-    """First matching header index for each requested column. Skips names that are absent."""
-    positions: Dict[str, int] = {}
-    for index, name in enumerate(_header_cells(header)):
-        if name and name not in positions:
-            positions[name] = index
+    """Every matching header, including a repeated name. The second copy is ``Name.1``."""
+    wanted = {str(column).strip() for column in columns}
+    seen: Dict[str, int] = {}
     chosen: List[Tuple[str, int]] = []
-    for column in columns:
-        key = str(column).strip()
-        if key in positions:
-            chosen.append((key, positions[key]))
+    for index, name in enumerate(_header_cells(header)):
+        if not name or name not in wanted:
+            continue
+        seen[name] = seen.get(name, 0) + 1
+        label = name if seen[name] == 1 else f"{name}.{seen[name] - 1}"
+        chosen.append((label, index))
     return chosen
 
 
@@ -542,9 +553,17 @@ def _load_excel_projected(
 
 
 def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
-    """Own a copy of the requested columns. Caller must drop the wide frame."""
+    """Own a copy of the requested columns, plus a repeated order id (``Order No.1``)."""
     frame.columns = [str(col).strip() for col in frame.columns]
-    keep = [col for col in wanted if col in frame.columns]
+    wanted_set = {str(col).strip() for col in wanted}
+    keep: List[str] = []
+    for col in frame.columns:
+        if col in wanted_set:
+            keep.append(col)
+            continue
+        base = col.split(".")[0].strip()
+        if base in wanted_set and base.lower().startswith("order"):
+            keep.append(col)
     if not keep:
         return frame
     return frame.loc[:, keep].copy()
@@ -562,6 +581,11 @@ def _read_parquet_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
     if names is not None:
         by_name = {str(name).strip(): name for name in names}
         selected = [by_name[col] for col in wanted if col in by_name]
+        for name in names:
+            text = str(name).strip()
+            base = text.split(".")[0].strip()
+            if text not in {str(item).strip() for item in selected} and base in set(wanted) and base.lower().startswith("order"):
+                selected.append(name)
         if not selected:
             raise ValueError(f"None of {wanted} found in {path.name}")
     try:
