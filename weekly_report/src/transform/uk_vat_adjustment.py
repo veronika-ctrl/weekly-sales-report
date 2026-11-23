@@ -94,17 +94,18 @@ _DATE_COLUMNS = (
     "Datum",
 )
 
+# Shopify "Taxes" means VAT was actually charged. Qlik's "VAT Amount" and
+# "Returns VAT" are filled on ordinary rows, including the orders Shopify
+# booked at tax 0, so they must not veto the affected-order list.
 _TAX_COLUMNS = (
     "Taxes",
     "Tax",
-    "VAT",
-    "VAT Amount",
     "Tax amount",
     "Total tax",
-    "Returns VAT",
 )
 
 # Loaded in addition to the caller's Qlik columns so the match can run, then dropped.
+# VAT Amount is intentionally absent: it is not Shopify Taxes.
 QLIK_MATCH_COLUMNS = (
     "Order No",
     "Order Ref",
@@ -113,8 +114,6 @@ QLIK_MATCH_COLUMNS = (
     "Country",
     "Date",
     "Taxes",
-    "VAT Amount",
-    "Tax",
 )
 
 _REVENUE_PHRASES = (
@@ -196,7 +195,9 @@ def adjustment_cache_token() -> str:
         return "ukvat:on:missing"
     stat = path.stat()
     mtime = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))
-    return f"ukvat:on:{stat.st_size}:{mtime}"
+    # v2: repeated Qlik Order No is kept, and VAT Amount no longer blocks a listed order.
+    # The version is part of the key so a result cache written by v1 is not reused.
+    return f"ukvat:on:v2:{stat.st_size}:{mtime}"
 
 
 def _override_path() -> Path:
@@ -377,14 +378,28 @@ def adjustment_active() -> bool:
     return adjustment_enabled() and bool(load_affected_orders()) and True
 
 
-def _order_column(df: pd.DataFrame) -> Optional[str]:
-    chosen = _pick(df, _ORDER_COLUMNS[:-1])
-    if chosen:
-        return chosen
+def _order_columns(df: pd.DataFrame) -> List[str]:
+    """Every order-id column, including pandas' ``Order No.1`` for a repeated header."""
+    aliases = {_norm_header(name) for name in _ORDER_COLUMNS[:-1]}
+    found: List[str] = []
+    for col in df.columns:
+        header = _norm_header(col)
+        base = header.split(".")[0].strip()
+        if header in aliases or base in aliases:
+            found.append(str(col))
+    if found:
+        return found
     # Bare "Name" is the Shopify order name only on an orders export.
     if _pick(df, ("Created at",)) and _pick(df, ("Shipping Country", "Shipping country")):
-        return _pick(df, ("Name",))
-    return None
+        name = _pick(df, ("Name",))
+        if name:
+            return [name]
+    return []
+
+
+def _order_column(df: pd.DataFrame) -> Optional[str]:
+    columns = _order_columns(df)
+    return columns[0] if columns else None
 
 
 def _already_adjusted_mask(df: pd.DataFrame) -> pd.Series:
@@ -481,16 +496,22 @@ def adjust_order_level(df: pd.DataFrame, *, source: str, register_shares: bool) 
         return df
     if source == "qlik" and not QLIK_INCLUDES_UK_VAT:
         return df
-    order_col = _order_column(df)
-    if not order_col:
+    order_cols = _order_columns(df)
+    if not order_cols:
         return adjust_day_level(df, recompute_margin=source in {"dema_gm2", "gm2"})
     orders = load_affected_orders()
     out = df.copy()
-    order_ids = out[order_col].map(_normalize_order_id)
-    affected = order_ids.isin(orders.keys()) & ~_already_adjusted_mask(out)
-    taxed = _taxed_order_ids(out, order_ids)
+    id_columns = [out[col].map(_normalize_order_id) for col in order_cols]
+    affected = pd.Series(False, index=out.index)
+    for order_ids in id_columns:
+        affected = affected | order_ids.isin(orders.keys())
+    affected = affected & ~_already_adjusted_mask(out)
+    taxed: set = set()
+    for order_ids in id_columns:
+        taxed |= _taxed_order_ids(out, order_ids)
     if taxed:
-        affected = affected & ~order_ids.isin(taxed)
+        for order_ids in id_columns:
+            affected = affected & ~order_ids.isin(taxed)
     money_cols = _revenue_columns(out)
     if not money_cols or not bool(affected.any()):
         return df
@@ -507,7 +528,7 @@ def adjust_order_level(df: pd.DataFrame, *, source: str, register_shares: bool) 
         "UK VAT adjusted {} {} rows on {} ({} revenue columns)",
         source,
         int(affected.sum()),
-        order_col,
+        ",".join(order_cols),
         len(money_cols),
     )
     return out
