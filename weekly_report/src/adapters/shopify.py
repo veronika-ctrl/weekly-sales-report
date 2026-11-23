@@ -6,6 +6,7 @@ import pandas as pd
 from loguru import logger
 
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
+from weekly_report.src.transform.uk_vat_adjustment import adjust_shopify
 
 
 def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
@@ -61,6 +62,6 @@ def load_data(raw_data_path: Path) -> pd.DataFrame:
         fallback_path = raw_data_path.parent / "shopify"
         if fallback_path.exists():
             logger.info(f"Using fallback path: {fallback_path}")
-            return load_csv_files(fallback_path, "shopify")
+            return adjust_shopify(load_csv_files(fallback_path, "shopify"))
     
-    return load_csv_files(source_path, "shopify")
+    return adjust_shopify(load_csv_files(source_path, "shopify"))

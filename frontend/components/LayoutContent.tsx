@@ -6,6 +6,7 @@ import { useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Calendar, Settings, Loader2 } from 'lucide-react'
 import WeekSelector from '@/components/WeekSelector'
+import UkVatAdjustmentNote from '@/components/UkVatAdjustmentNote'
 
 /**
  * `useSearchParams()` opts the subtree into client rendering and can suspend.
@@ -143,6 +144,7 @@ function LayoutContentInner({
             . Open Settings to upload Qlik for {baseWeek}.
           </div>
         )}
+        <UkVatAdjustmentNote week={baseWeek} />
         {children}
       </div>
     )

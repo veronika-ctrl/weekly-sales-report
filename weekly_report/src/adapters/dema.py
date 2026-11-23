@@ -6,6 +6,7 @@ import pandas as pd
 from loguru import logger
 
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
+from weekly_report.src.transform.uk_vat_adjustment import adjust_dema
 
 
 def normalize_dema_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -86,6 +87,6 @@ def load_data(raw_data_path: Path) -> pd.DataFrame:
         fallback_path = raw_data_path.parent / "dema_spend"
         if fallback_path.exists():
             logger.info(f"Using fallback path: {fallback_path}")
-            return load_csv_files(fallback_path, "dema_spend")
+            return adjust_dema(load_csv_files(fallback_path, "dema_spend"))
     
-    return load_csv_files(source_path, "dema_spend")
+    return adjust_dema(load_csv_files(source_path, "dema_spend"))

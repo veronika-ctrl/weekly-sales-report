@@ -6,6 +6,7 @@ import pandas as pd
 from loguru import logger
 
 from weekly_report.src.adapters.csv_util import NA_VALUES, read_csv_auto
+from weekly_report.src.transform.uk_vat_adjustment import adjust_other
 
 
 def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
@@ -55,4 +56,4 @@ def load_csv_files(source_path: Path, source_name: str) -> pd.DataFrame:
 def load_data(raw_data_path: Path) -> pd.DataFrame:
     """Load other data from CSV files."""
     source_path = raw_data_path / "other"
-    return load_csv_files(source_path, "other")
+    return adjust_other(load_csv_files(source_path, "other"))

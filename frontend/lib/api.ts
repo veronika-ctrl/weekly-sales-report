@@ -1111,6 +1111,52 @@ export async function getDiskUsage(): Promise<DiskUsageResponse> {
   return fetchJsonWithTimeout(`${API_BASE_URL}/api/disk-usage`, LIGHT_REQUEST_TIMEOUT_MS, '/api/disk-usage')
 }
 
+export interface UkVatWeekRemoval {
+  week: string
+  orders: number
+  gross_removed: number
+}
+
+export interface UkVatAdjustmentSummary {
+  enabled: boolean
+  qlik_adjusted: boolean
+  order_count: number
+  gross_removed: number
+  weeks: UkVatWeekRemoval[]
+  source: string
+  note: string
+  reference?: {
+    expected_orders: number
+    expected_gross_reduction_usd: number
+    expected_net_reduction_usd: number
+  }
+}
+
+export async function getUkVatAdjustment(): Promise<UkVatAdjustmentSummary> {
+  return fetchJsonWithTimeout(
+    `${API_BASE_URL}/api/uk-vat-adjustment`,
+    LIGHT_REQUEST_TIMEOUT_MS,
+    '/api/uk-vat-adjustment',
+  )
+}
+
+export async function setUkVatAdjustment(enabled: boolean): Promise<UkVatAdjustmentSummary> {
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/api/uk-vat-adjustment`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    },
+    LIGHT_REQUEST_TIMEOUT_MS,
+  )
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(describeHttpError(response.status, text))
+  }
+  return response.json() as Promise<UkVatAdjustmentSummary>
+}
+
 export async function deleteIgnoredPricingFiles(): Promise<{
   deleted: string[]
   count: number

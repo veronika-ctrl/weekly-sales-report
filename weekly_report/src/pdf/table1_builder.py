@@ -72,6 +72,12 @@ def build_table1_pdf(
     title = Paragraph(f"Weekly Report - Table 1", title_style)
     story.append(title)
     story.append(Spacer(1, 10))
+    from weekly_report.src.transform.uk_vat_adjustment import note_for_week
+
+    vat_note = note_for_week(str(actual_week)) if actual_week and actual_week != "N/A" else None
+    if vat_note:
+        story.append(Paragraph(vat_note, styles["Italic"]))
+        story.append(Spacer(1, 8))
     
     # Get date range for actual period
     try:

@@ -19,7 +19,12 @@ def _read_csv_flexible(file_path: Path, nrows: Optional[int] = None) -> pd.DataF
     Important: pandas can "succeed" with the wrong separator and return a single giant column.
     We treat that as a parse failure and retry with other separators.
     """
-    return read_csv_auto(file_path, nrows=nrows)
+    frame = read_csv_auto(file_path, nrows=nrows)
+    if nrows is not None or frame is None or frame.empty:
+        return frame
+    from weekly_report.src.transform.uk_vat_adjustment import adjust_loaded_frame
+
+    return adjust_loaded_frame(frame)
 
 
 def _normalize_col(col: str) -> str:

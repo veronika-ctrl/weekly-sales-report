@@ -20,6 +20,8 @@ import {
   getKlaviyoStatus,
   verifySupabase,
   getDiskUsage,
+  getUkVatAdjustment,
+  setUkVatAdjustment,
   deleteIgnoredPricingFiles,
   deleteWeeks36To40,
   deleteOldWeeklyFiles,
@@ -27,6 +29,7 @@ import {
   type ExclExchangesHistoryInfo,
   type KlaviyoStatusResponse,
   type DiskUsageResponse,
+  type UkVatAdjustmentSummary,
 } from '@/lib/api'
 import { formatUploadFileSize } from '@/lib/upload-timeout'
 import { describeApiTarget, getApiStorageWarning } from '@/lib/api-storage'
@@ -66,6 +69,9 @@ export default function Settings() {
   const [deletingIgnored, setDeletingIgnored] = useState(false)
   const [deletingStaleWeeks, setDeletingStaleWeeks] = useState(false)
   const [deletingOldWeeks, setDeletingOldWeeks] = useState(false)
+  const [ukVat, setUkVat] = useState<UkVatAdjustmentSummary | null>(null)
+  const [ukVatSaving, setUkVatSaving] = useState(false)
+  const [ukVatError, setUkVatError] = useState<string | null>(null)
   const [pageHost, setPageHost] = useState('')
   const supabaseDisabled = process.env.NEXT_PUBLIC_DISABLE_SUPABASE === 'true'
   const apiTarget = describeApiTarget(getApiBaseUrl(), pageHost)
@@ -163,6 +169,20 @@ export default function Settings() {
   useEffect(() => {
     void loadDiskUsage()
   }, [loadDiskUsage])
+
+  const loadUkVat = useCallback(async () => {
+    if (!hasBackend) return
+    try {
+      setUkVat(await getUkVatAdjustment())
+      setUkVatError(null)
+    } catch (err) {
+      setUkVatError(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadUkVat()
+  }, [loadUkVat])
 
   // Sync selectedWeek with baseWeek from context
   useEffect(() => {
@@ -731,6 +751,69 @@ export default function Settings() {
                 </p>
               </div>
             )}
+
+          <div data-testid="uk-vat-adjustment-settings">
+            <h3 className="text-sm font-medium mb-3">UK VAT adjustment</h3>
+            <div className="flex items-center justify-between py-2 gap-4">
+              <div className="flex-1">
+                <div className="text-sm font-medium">ADJUST_UK_VAT</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Divide affected UK orders over £135 (29 Sep 2026 to 9 Nov 2026 10:22 Europe/Stockholm)
+                  by 1.2 at data load. Order counts, customers, costs and marketing spend stay unchanged.
+                  Default is on.
+                </p>
+              </div>
+              <Switch
+                checked={ukVat?.enabled !== false}
+                disabled={ukVatSaving || !hasBackend}
+                onCheckedChange={async (checked) => {
+                  setUkVatSaving(true)
+                  setUkVatError(null)
+                  try {
+                    setUkVat(await setUkVatAdjustment(checked))
+                  } catch (err) {
+                    setUkVatError(err instanceof Error ? err.message : String(err))
+                  } finally {
+                    setUkVatSaving(false)
+                  }
+                }}
+              />
+            </div>
+            {ukVatError && <p className="text-xs text-red-600 mt-1">{ukVatError}</p>}
+            <p className="text-xs text-muted-foreground mt-2">
+              {ukVat
+                ? `${ukVat.order_count} affected orders. Gross revenue removed: ${ukVat.gross_removed.toLocaleString(undefined, { maximumFractionDigits: 2 })} (total).`
+                : 'Affected-order summary loads when the backend is running.'}
+            </p>
+            {ukVat && ukVat.order_count === 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                The affected-order file is missing or empty. The Shopify list is 177 orders
+                (gross reduction about $12,348). Order #100288414 stays off that list.
+              </p>
+            )}
+            {ukVat && ukVat.weeks.length > 0 && (
+              <table className="mt-3 w-full text-xs">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="py-1 pr-3">Week</th>
+                    <th className="py-1 pr-3">Orders</th>
+                    <th className="py-1">Gross removed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ukVat.weeks.map((row) => (
+                    <tr key={row.week}>
+                      <td className="py-0.5 pr-3">{row.week}</td>
+                      <td className="py-0.5 pr-3">{row.orders}</td>
+                      <td className="py-0.5">{row.gross_removed.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <Separator />
 
           {/* Chart Settings */}
           <div>
