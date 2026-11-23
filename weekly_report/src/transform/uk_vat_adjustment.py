@@ -20,7 +20,9 @@ to False if an export shows Qlik is already ex-VAT.
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
 import threading
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -195,9 +197,9 @@ def adjustment_cache_token() -> str:
         return "ukvat:on:missing"
     stat = path.stat()
     mtime = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))
-    # v2: repeated Qlik Order No is kept, and VAT Amount no longer blocks a listed order.
-    # The version is part of the key so a result cache written by v1 is not reused.
-    return f"ukvat:on:v2:{stat.st_size}:{mtime}"
+    # v3: a Qlik Taxes/VAT column does not veto a listed order, and the id match
+    # accepts a repeated or differently named order column. v2 caches stay unused.
+    return f"ukvat:on:v3:{stat.st_size}:{mtime}"
 
 
 def _override_path() -> Path:
@@ -238,15 +240,88 @@ def clear_runtime_state() -> None:
 
 
 def _normalize_order_id(value: Any) -> str:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    """Shopify ``#100288154``, ``100288154``, ``100.288.154`` and ``100288154-1`` share one key."""
+    if value is None or isinstance(value, bool):
         return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if pd.isna(value) or not math.isfinite(value):
+            return ""
+        if value.is_integer():
+            return str(int(value))
     text = str(value).strip()
-    if not text or text.lower() in {"nan", "none", "<na>"}:
+    if not text or text.lower() in {"nan", "none", "<na>", "nat"}:
         return ""
-    text = text.replace("#", "").replace(" ", "")
+    text = (
+        text.replace("\u00a0", "")
+        .replace("\u202f", "")
+        .replace(" ", "")
+        .replace("#", "")
+    )
+    scientific = re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?[eE][+-]?\d+", text)
+    if scientific:
+        try:
+            number = float(text.replace(",", "."))
+        except ValueError:
+            number = None
+        if number is not None and math.isfinite(number):
+            rounded = round(number)
+            if abs(number - rounded) < 1e-6:
+                return str(int(rounded))
+    if re.fullmatch(r"\d+[.,]0+", text):
+        return re.split(r"[.,]", text, maxsplit=1)[0]
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", text):
+        return re.sub(r"[.,]", "", text)
     if text.endswith(".0"):
         text = text[:-2]
+    prefixed = re.fullmatch(r"(\d{6,})(?:[^\d].*)?", text)
+    if prefixed:
+        return prefixed.group(1)
     return text
+
+
+def _candidate_order_ids(value: Any) -> List[str]:
+    """Every id this cell could be. A line suffix or thousands separator still matches."""
+    found: List[str] = []
+    primary = _normalize_order_id(value)
+    if primary:
+        found.append(primary)
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return found
+    compact = re.sub(r"[\s\u00a0\u202f#]", "", str(value))
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", compact):
+        compact = re.sub(r"[.,]", "", compact)
+    for run in re.findall(r"\d{6,}", compact):
+        if run not in found:
+            found.append(run)
+    return found
+
+
+def _matches_affected_order(value: Any, order_ids: set) -> bool:
+    return any(key in order_ids for key in _candidate_order_ids(value))
+
+
+def is_order_id_header(name: Any) -> bool:
+    """True for ``Order No``, pandas' ``Order No.1``, and ``Order Number``."""
+    header = _norm_header(name)
+    if not header:
+        return False
+    base = re.sub(r"[\s._-]*\d+$", "", header.split(".")[0]).strip()
+    aliases = {_norm_header(item) for item in _ORDER_COLUMNS[:-1]}
+    if header in aliases or base in aliases:
+        return True
+    prefixes = (
+        "order no",
+        "order number",
+        "order name",
+        "order id",
+        "order ref",
+        "ordernummer",
+        "bestallning",
+        "beställning",
+    )
+    return any(header.startswith(prefix) or base.startswith(prefix) for prefix in prefixes)
 
 
 def _norm_header(name: Any) -> str:
@@ -379,14 +454,8 @@ def adjustment_active() -> bool:
 
 
 def _order_columns(df: pd.DataFrame) -> List[str]:
-    """Every order-id column, including pandas' ``Order No.1`` for a repeated header."""
-    aliases = {_norm_header(name) for name in _ORDER_COLUMNS[:-1]}
-    found: List[str] = []
-    for col in df.columns:
-        header = _norm_header(col)
-        base = header.split(".")[0].strip()
-        if header in aliases or base in aliases:
-            found.append(str(col))
+    """Every order-id column, including pandas' ``Order No.1`` and ``Order Number``."""
+    found = [str(col) for col in df.columns if is_order_id_header(col)]
     if found:
         return found
     # Bare "Name" is the Shopify order name only on an orders export.
@@ -500,18 +569,22 @@ def adjust_order_level(df: pd.DataFrame, *, source: str, register_shares: bool) 
     if not order_cols:
         return adjust_day_level(df, recompute_margin=source in {"dema_gm2", "gm2"})
     orders = load_affected_orders()
+    order_ids = set(orders)
     out = df.copy()
-    id_columns = [out[col].map(_normalize_order_id) for col in order_cols]
     affected = pd.Series(False, index=out.index)
-    for order_ids in id_columns:
-        affected = affected | order_ids.isin(orders.keys())
+    for col in order_cols:
+        affected = affected | out[col].map(lambda value: _matches_affected_order(value, order_ids))
     affected = affected & ~_already_adjusted_mask(out)
-    taxed: set = set()
-    for order_ids in id_columns:
-        taxed |= _taxed_order_ids(out, order_ids)
-    if taxed:
-        for order_ids in id_columns:
-            affected = affected & ~order_ids.isin(taxed)
+    # Qlik fills VAT Amount / Taxes on the same orders Shopify booked at tax 0.
+    # The affected-order list is the source of truth there. Shopify still honors Taxes.
+    if source != "qlik":
+        id_columns = [out[col].map(_normalize_order_id) for col in order_cols]
+        taxed: set = set()
+        for normalized in id_columns:
+            taxed |= _taxed_order_ids(out, normalized)
+        if taxed:
+            for normalized in id_columns:
+                affected = affected & ~normalized.isin(taxed)
     money_cols = _revenue_columns(out)
     if not money_cols or not bool(affected.any()):
         return df

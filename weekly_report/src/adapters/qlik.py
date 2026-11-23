@@ -18,6 +18,7 @@ from weekly_report.src.transform.uk_vat_adjustment import (
     adjust_qlik,
     adjustment_active,
     adjustment_cache_token,
+    is_order_id_header,
 )
 
 # One Qlik workbook in memory at a time. Render is 2GB. A second read while
@@ -308,18 +309,25 @@ def _parquet_column_names(path: Path) -> Optional[List[str]]:
     return _parquet_footer_column_names(path)
 
 
+def _header_requested(name: str, wanted: set) -> bool:
+    """Requested metric columns, plus any order-id header the VAT match needs."""
+    text = str(name).strip()
+    return bool(text) and (text in wanted or is_order_id_header(text))
+
+
 def _csv_usecol_indexes(path: Path, columns: Sequence[str], encoding: str, sep: str) -> List[int]:
     """Column positions to keep. A repeated header (two ``Order No`` fields) is kept twice.
 
     A callable ``usecols`` drops the second copy, so the Shopify order name in that
-    column never reaches the VAT match.
+    column never reaches the VAT match. ``Order Number`` is kept even when the
+    caller only asked for ``Order No``.
     """
     wanted = {str(col).strip() for col in columns}
     with path.open("r", encoding=encoding, newline="") as handle:
         header = next(csv.reader(handle, delimiter=sep), None)
     if not header:
         return []
-    return [index for index, name in enumerate(header) if str(name).strip() in wanted]
+    return [index for index, name in enumerate(header) if _header_requested(str(name), wanted)]
 
 
 def _read_csv_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
@@ -365,7 +373,7 @@ def _selected_columns(header: Iterable[object], columns: Sequence[str]) -> List[
     seen: Dict[str, int] = {}
     chosen: List[Tuple[str, int]] = []
     for index, name in enumerate(_header_cells(header)):
-        if not name or name not in wanted:
+        if not _header_requested(name, wanted):
             continue
         seen[name] = seen.get(name, 0) + 1
         label = name if seen[name] == 1 else f"{name}.{seen[name] - 1}"
@@ -558,7 +566,7 @@ def _take_columns(frame: pd.DataFrame, wanted: Sequence[str]) -> pd.DataFrame:
     wanted_set = {str(col).strip() for col in wanted}
     keep: List[str] = []
     for col in frame.columns:
-        if col in wanted_set:
+        if col in wanted_set or is_order_id_header(col):
             keep.append(col)
             continue
         base = col.split(".")[0].strip()
@@ -581,11 +589,14 @@ def _read_parquet_columns(path: Path, columns: Sequence[str]) -> pd.DataFrame:
     if names is not None:
         by_name = {str(name).strip(): name for name in names}
         selected = [by_name[col] for col in wanted if col in by_name]
+        chosen = {str(item).strip() for item in selected}
         for name in names:
             text = str(name).strip()
             base = text.split(".")[0].strip()
-            if text not in {str(item).strip() for item in selected} and base in set(wanted) and base.lower().startswith("order"):
+            repeated_order = base in set(wanted) and base.lower().startswith("order")
+            if text not in chosen and (is_order_id_header(text) or repeated_order):
                 selected.append(name)
+                chosen.add(text)
         if not selected:
             raise ValueError(f"None of {wanted} found in {path.name}")
     try:
