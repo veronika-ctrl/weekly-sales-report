@@ -40,7 +40,15 @@ def test_bundled_claims_are_monthly_and_have_no_freight_or_discount():
     wholesale_sek = 66116.59
     assert totals["product_cost_sek"] != pytest.approx(wholesale_sek, abs=0.05)
     assert totals["product_cost_sek"] == pytest.approx(19781.57, abs=0.02)
-    assert totals["recorded_cost_sek"] == pytest.approx(totals["product_cost_sek"] + totals["freight_sek"], abs=0.02)
+    assert totals["handling_sek"] == pytest.approx(35 * round(10.75 * 11.274, 2) + 29 * round(10.75 * 11.1765, 2), abs=0.02)
+    assert totals["recorded_cost_sek"] == pytest.approx(
+        totals["product_cost_sek"] + totals["freight_sek"] + totals["handling_sek"], abs=0.02
+    )
+    assert sum(row["handling_sek"] for row in payload["orders"]) == pytest.approx(totals["handling_sek"], abs=0.02)
+    assert all(row.get("handling_sek", 0) == 0 for row in payload["categories"])
+    assert payload["warehouse_handling"]["per_order_eur"] == pytest.approx(10.75)
+    assert any("Warehouse handling is €10.75" in note for note in payload["notes"])
+    assert any("11.274 SEK per EUR in 2026-09" in note for note in payload["notes"])
     assert sum(row["product_cost_sek"] for row in payload["orders"]) == pytest.approx(totals["product_cost_sek"], abs=0.02)
     assert sum(row["product_cost_sek"] for row in payload["categories"]) == pytest.approx(19781.59, abs=0.05)
     months = {row["key"]: row for row in payload["months"]}

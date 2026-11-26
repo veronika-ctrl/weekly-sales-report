@@ -40,6 +40,18 @@ _EUR_SEK_BY_MONTH = {
 _EUR_SEK_DEFAULT = 11.1765
 _MAILBOX_EUR = 3.15  # DHL sheet: small packet up to 1 kg. Not on the country price list.
 
+# Warehouse handling on each claim order (once per order, not per line). EUR
+# before the same ECB EUR→SEK rate as carrier freight.
+WAREHOUSE_HANDLING_FEES_EUR = (
+    ("Error labels", 6.88),
+    ("Pick", 0.44),
+    ("Pack", 1.32),
+    ("Tape on box", 0.18),
+    ("Translation order", 0.13),
+    ("Packaging management", 1.80),
+)
+WAREHOUSE_HANDLING_EUR = round(sum(amount for _, amount in WAREHOUSE_HANDLING_FEES_EUR), 2)
+
 _REASON_HEADERS = (
     "claim type",
     "claim reason",
@@ -264,6 +276,27 @@ def _parse_created(value: Any) -> Optional[datetime]:
     return parsed.to_pydatetime()
 
 
+def _warehouse_handling_payload() -> Dict[str, Any]:
+    return {
+        "per_order_eur": WAREHOUSE_HANDLING_EUR,
+        "fees": [{"label": label, "eur": amount} for label, amount in WAREHOUSE_HANDLING_FEES_EUR],
+        "rates_sek_per_eur": {**_EUR_SEK_BY_MONTH, "default": _EUR_SEK_DEFAULT},
+    }
+
+
+def _warehouse_handling_note(orders: Sequence[Dict[str, Any]]) -> str:
+    fee_text = ", ".join(f"{label.lower()} €{amount:.2f}" for label, amount in WAREHOUSE_HANDLING_FEES_EUR)
+    months = sorted({str(row.get("month") or "") for row in orders if row.get("month") and row.get("month") != "unknown"})
+    if months:
+        rate_text = ", ".join(f"{_eur_to_sek(month)} SEK per EUR in {month}" for month in months)
+    else:
+        rate_text = f"{_EUR_SEK_DEFAULT} SEK per EUR"
+    return (
+        f"Warehouse handling is €{WAREHOUSE_HANDLING_EUR:.2f} per claim order ({fee_text}), "
+        f"applied once per order. Euro amounts use the same ECB rate as shipping: {rate_text}."
+    )
+
+
 def _eur_to_sek(month: str) -> float:
     return _EUR_SEK_BY_MONTH.get(month, _EUR_SEK_DEFAULT)
 
@@ -413,13 +446,14 @@ def _bucket(label: str) -> Dict[str, Any]:
         "product_cost_sek": 0.0,
         "freight_sek": 0.0,
         "discount_sek": 0.0,
+        "handling_sek": 0.0,
     }
 
 
 def _finish(bucket: Dict[str, Any]) -> Dict[str, Any]:
     bucket["orders"] = int(bucket["orders"])
     bucket["units"] = int(round(bucket["units"]))
-    for key in ("product_cost_sek", "freight_sek", "discount_sek"):
+    for key in ("product_cost_sek", "freight_sek", "discount_sek", "handling_sek"):
         bucket[key] = round(float(bucket[key]), 2)
     return bucket
 
@@ -462,6 +496,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         "freight_sek": 0.0,
         "discount_sek": 0.0,
         "surcharge_sek": 0.0,
+        "handling_sek": 0.0,
         "recorded_cost_sek": 0.0,
     }
     if lines.empty:
@@ -476,6 +511,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             "countries": [],
             "carriers": [],
             "orders": [],
+            "warehouse_handling": _warehouse_handling_payload(),
         }
 
     reason_col = _reason_column(list(lines.columns))
@@ -515,6 +551,8 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             _num(row.get("Item Total Discount (Local Currency)")) for _, row in group.iterrows()
         )
         surcharge = _num(first.get("Surcharge Total (Local Currency)"))
+        rate_month = month_key if month_key != "unknown" else ""
+        handling = round(WAREHOUSE_HANDLING_EUR * _eur_to_sek(rate_month), 2)
         reason = _text(first.get(reason_col)) if reason_col else ""
         if not reason:
             reason = _text(first.get("Order Tags")) or _text(first.get("Item Notes"))
@@ -570,6 +608,9 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             "freight_rate": priced[1] if priced is not None else "",
             "discount_sek": round(discount, 2),
             "surcharge_sek": round(surcharge, 2),
+            "handling_sek": handling,
+            "handling_eur": WAREHOUSE_HANDLING_EUR,
+            "handling_rate": _eur_to_sek(rate_month),
             "items": "; ".join(item_names),
         }
         orders.append(record)
@@ -588,6 +629,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
             bucket["product_cost_sek"] += product
             bucket["freight_sek"] += freight
             bucket["discount_sek"] += discount
+            bucket["handling_sek"] += handling
 
     orders.sort(key=lambda row: (row["created"], row["order_ref"]), reverse=True)
     month_rows = []
@@ -605,6 +647,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
     freight_cost = round(sum(row["freight_sek"] for row in orders), 2)
     discount_cost = round(sum(row["discount_sek"] for row in orders), 2)
     surcharge_cost = round(sum(row["surcharge_sek"] for row in orders), 2)
+    handling_cost = round(sum(row["handling_sek"] for row in orders), 2)
     totals = {
         "orders": len(orders),
         "units": int(sum(row["units"] for row in orders)),
@@ -612,7 +655,10 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         "freight_sek": freight_cost,
         "discount_sek": discount_cost,
         "surcharge_sek": surcharge_cost,
-        "recorded_cost_sek": round(product_cost + freight_cost + discount_cost + surcharge_cost, 2),
+        "handling_sek": handling_cost,
+        "recorded_cost_sek": round(
+            product_cost + freight_cost + discount_cost + surcharge_cost + handling_cost, 2
+        ),
     }
     notes = [NOTE_SOURCE, NOTE_COST, _landed_cost_note(
         matched_lines,
@@ -651,6 +697,7 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         )
     if discount_cost == 0:
         notes.append("No extra discount is attached to these orders in this file.")
+    notes.append(_warehouse_handling_note(orders))
     return {
         "available": True,
         "files_used": files_used,
@@ -662,4 +709,5 @@ def calculate_claims(data_root: Path) -> Dict[str, Any]:
         "countries": ranked(countries),
         "carriers": ranked(carriers),
         "orders": orders,
+        "warehouse_handling": _warehouse_handling_payload(),
     }

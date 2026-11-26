@@ -6,11 +6,12 @@
 export type ClaimsMoneyRow = {
   freight_sek?: number | null
   discount_sek?: number | null
+  handling_sek?: number | null
 }
 
 export function hasNonZeroAmount(
   rows: ReadonlyArray<ClaimsMoneyRow | null | undefined>,
-  key: 'freight_sek' | 'discount_sek',
+  key: 'freight_sek' | 'discount_sek' | 'handling_sek',
 ): boolean {
   return rows.some((row) => {
     if (row == null) return false
@@ -24,6 +25,7 @@ export type ClaimsTableColumnId =
   | 'units'
   | 'product_cost_sek'
   | 'freight_sek'
+  | 'handling_sek'
   | 'discount_sek'
 
 export type ClaimsTableColumn = {
@@ -40,6 +42,9 @@ export function visibleClaimsTableColumns(rows: ReadonlyArray<ClaimsMoneyRow>): 
   ]
   if (hasNonZeroAmount(rows, 'freight_sek')) {
     columns.push({ id: 'freight_sek', header: 'Shipping' })
+  }
+  if (hasNonZeroAmount(rows, 'handling_sek')) {
+    columns.push({ id: 'handling_sek', header: 'Warehouse handling' })
   }
   if (hasNonZeroAmount(rows, 'discount_sek')) {
     columns.push({ id: 'discount_sek', header: 'Extra discount' })

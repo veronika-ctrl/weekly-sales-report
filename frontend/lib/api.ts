@@ -2687,6 +2687,7 @@ export interface ClaimsBucket {
   product_cost_sek: number
   freight_sek: number
   discount_sek: number
+  handling_sek?: number
   key?: string
 }
 
@@ -2703,6 +2704,9 @@ export interface ClaimsOrderRow {
   product_cost_sek: number
   freight_sek: number
   discount_sek: number
+  handling_sek?: number
+  handling_eur?: number
+  handling_rate?: number
   items: string
 }
 
@@ -2717,7 +2721,13 @@ export interface ClaimsResponse {
     freight_sek: number
     discount_sek: number
     surcharge_sek: number
+    handling_sek?: number
     recorded_cost_sek: number
+  }
+  warehouse_handling?: {
+    per_order_eur: number
+    fees: { label: string; eur: number }[]
+    rates_sek_per_eur: Record<string, number>
   }
   months: ClaimsBucket[]
   reasons: ClaimsBucket[]
