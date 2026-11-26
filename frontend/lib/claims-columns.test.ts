@@ -46,6 +46,13 @@ describe('visibleClaimsTableColumns', () => {
     assert.equal(headers.includes('Extra discount'), false)
   })
 
+  it('shows Warehouse handling when a table has a handling amount', () => {
+    const headers = visibleClaimsTableColumns([
+      { freight_sek: 80, discount_sek: 0, handling_sek: 121.2 },
+    ]).map((column) => column.header)
+    assert.deepEqual(headers, ['Claims', 'Units', 'Landed cost', 'Shipping', 'Warehouse handling'])
+  })
+
   it('shows Extra discount again when any row has a discount amount', () => {
     const headers = visibleClaimsTableColumns([
       { freight_sek: 80, discount_sek: 0 },
@@ -77,6 +84,9 @@ describe('claims page column wiring', () => {
     assert.match(page, /showOrderShipping/)
     assert.match(page, /title="Extra discounts"/)
     assert.match(page, /title="Shipping cost"/)
+    assert.match(page, /title="Warehouse handling"/)
+    assert.match(page, /title="Total loss"/)
+    assert.match(page, /Warehouse handling fees/)
     assert.doesNotMatch(page, /claimsPageNotes/)
   })
 })

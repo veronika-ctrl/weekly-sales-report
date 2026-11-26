@@ -40,6 +40,7 @@ function moneyCell(column: ClaimsTableColumn, row: ClaimsBucket): string {
   if (column.id === 'units') return count(row.units)
   if (column.id === 'product_cost_sek') return sek(row.product_cost_sek)
   if (column.id === 'freight_sek') return sek(row.freight_sek)
+  if (column.id === 'handling_sek') return sek(row.handling_sek)
   return sek(row.discount_sek)
 }
 
@@ -157,8 +158,11 @@ export default function ClaimsPage() {
   const totals = data?.totals
   const showShippingKpi = hasNonZeroAmount([totals], 'freight_sek')
   const showDiscountKpi = hasNonZeroAmount([totals], 'discount_sek')
+  const showHandlingKpi = hasNonZeroAmount([totals], 'handling_sek')
   const showOrderShipping = hasNonZeroAmount(data?.orders ?? [], 'freight_sek')
   const showOrderDiscount = hasNonZeroAmount(data?.orders ?? [], 'discount_sek')
+  const showOrderHandling = hasNonZeroAmount(data?.orders ?? [], 'handling_sek')
+  const fees = data?.warehouse_handling
 
   return (
     <div className="space-y-8">
@@ -194,20 +198,62 @@ export default function ClaimsPage() {
       ) : null}
 
       {totals && data?.available ? (
-        <div
-          className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
-            showDiscountKpi && showShippingKpi ? 'xl:grid-cols-4' : 'xl:grid-cols-3'
-          }`}
-        >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <Kpi title="Claim orders" value={count(totals.orders)} hint={`${count(totals.units)} replacement units`} />
+          <Kpi title="Total loss" value={sek(totals.recorded_cost_sek)} hint="Landed cost, shipping, warehouse handling and discounts" />
           <Kpi title="Landed cost" value={sek(totals.product_cost_sek)} hint="Replacement cost in SEK" />
           {showShippingKpi ? (
             <Kpi title="Shipping cost" value={sek(totals.freight_sek)} hint="2026 carrier price, converted to SEK" />
+          ) : null}
+          {showHandlingKpi ? (
+            <Kpi
+              title="Warehouse handling"
+              value={sek(totals.handling_sek)}
+              hint={fees ? `€${fees.per_order_eur.toFixed(2)} per claim order, converted to SEK` : 'Once per claim order'}
+            />
           ) : null}
           {showDiscountKpi ? (
             <Kpi title="Extra discounts" value={sek(totals.discount_sek)} hint="Order and line discounts" />
           ) : null}
         </div>
+      ) : null}
+
+      {fees && data?.available ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Warehouse handling fees</CardTitle>
+            <CardDescription>
+              Applied once per claim order, not per line. €{fees.per_order_eur.toFixed(2)} converted with the same
+              ECB EUR to SEK rate as shipping
+              {fees.rates_sek_per_eur['2026-09'] != null
+                ? ` (${fees.rates_sek_per_eur['2026-09']} SEK per EUR in September 2026, ${fees.rates_sek_per_eur['2026-10']} in October 2026, ${fees.rates_sek_per_eur.default} otherwise)`
+                : ''}
+              .
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm max-w-md">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-3">Fee</th>
+                  <th className="py-2 text-right">EUR per order</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fees.fees.map((fee) => (
+                  <tr key={fee.label} className="border-b last:border-0">
+                    <td className="py-2 pr-3">{fee.label}</td>
+                    <td className="py-2 text-right">€{fee.eur.toFixed(2)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="py-2 pr-3 font-medium">Total</td>
+                  <td className="py-2 text-right font-medium">€{fees.per_order_eur.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       ) : null}
 
       {data?.months?.length ? (
@@ -256,14 +302,17 @@ export default function ClaimsPage() {
                   <th className="py-2 pr-3">Shipping</th>
                   <th className="py-2 pr-3 text-right">Units</th>
                   <th
-                    className={`py-2 text-right${showOrderShipping || showOrderDiscount ? ' pr-3' : ''}`}
+                    className={`py-2 text-right${showOrderShipping || showOrderHandling || showOrderDiscount ? ' pr-3' : ''}`}
                   >
                     Landed cost
                   </th>
                   {showOrderShipping ? (
-                    <th className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>
+                    <th className={`py-2 text-right${showOrderHandling || showOrderDiscount ? ' pr-3' : ''}`}>
                       Shipping cost
                     </th>
+                  ) : null}
+                  {showOrderHandling ? (
+                    <th className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>Warehouse handling</th>
                   ) : null}
                   {showOrderDiscount ? <th className="py-2 text-right">Discount</th> : null}
                 </tr>
@@ -281,13 +330,18 @@ export default function ClaimsPage() {
                     <td className="py-2 pr-3">{row.freight_method}</td>
                     <td className="py-2 pr-3 text-right">{count(row.units)}</td>
                     <td
-                      className={`py-2 text-right${showOrderShipping || showOrderDiscount ? ' pr-3' : ''}`}
+                      className={`py-2 text-right${showOrderShipping || showOrderHandling || showOrderDiscount ? ' pr-3' : ''}`}
                     >
                       {sek(row.product_cost_sek)}
                     </td>
                     {showOrderShipping ? (
-                      <td className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>
+                      <td className={`py-2 text-right${showOrderHandling || showOrderDiscount ? ' pr-3' : ''}`}>
                         {sek(row.freight_sek)}
+                      </td>
+                    ) : null}
+                    {showOrderHandling ? (
+                      <td className={`py-2 text-right${showOrderDiscount ? ' pr-3' : ''}`}>
+                        {sek(row.handling_sek)}
                       </td>
                     ) : null}
                     {showOrderDiscount ? (
