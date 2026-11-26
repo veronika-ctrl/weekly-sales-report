@@ -129,14 +129,6 @@ def _coverage_end(path: Path) -> str:
     return match.group(2) if match else ""
 
 
-def _is_under(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except (OSError, ValueError):
-        return False
-
-
 def _mtime(path: Path) -> float:
     try:
         return path.stat().st_mtime
@@ -145,19 +137,22 @@ def _mtime(path: Path) -> float:
 
 
 def discount_types_dirs(data_root: Path) -> List[Path]:
-    """Bundled snapshot, plus any uploaded history under the data root.
+    """Bundled snapshot, plus uploads under the shared slot or any week folder.
 
-    Uploads land in ``data/discount_types`` or a week slot
-    (``raw/{week}/discount_types`` or ``raw/{week}/discounts``).
+    Files uploaded while a different week was selected still count: the loader
+    walks ``raw/*/discount_types`` and ``raw/*/discounts``, not only the
+    currently selected week.
     """
     root = Path(data_root)
     candidates = [
         _bundled_dir(),
         root / "discount_types",
         root / "weekly_report" / "data" / "discount_types",
+        root / "data" / "discount_types",
     ]
-    raw = root / "raw"
-    if raw.is_dir():
+    for raw in (root / "raw", root / "data" / "raw"):
+        if not raw.is_dir():
+            continue
         for week_dir in raw.iterdir():
             if not week_dir.is_dir():
                 continue
@@ -201,11 +196,15 @@ def is_discount_groups_csv(path: Path) -> bool:
 
 
 def _sort_discount_files(paths: Sequence[Path]) -> List[Path]:
-    bundled = _bundled_dir()
+    """Lowest priority first. Later coverage end wins, then later mtime.
+
+    Files live in the bundled snapshot, the shared ``discount_types`` slot, and
+    any week folder. Overlapping days are taken from the last file in this
+    order — a corrected W43 uploaded under week 44 still replaces W43 days.
+    """
     ordered = list(paths)
     ordered.sort(
         key=lambda path: (
-            not _is_under(path, bundled),
             _coverage_end(path),
             _mtime(path),
             path.name,
@@ -234,11 +233,9 @@ def _group_files(folders: Sequence[Path]) -> List[Path]:
 def _matching_paths(folders: Sequence[Path], prefix: str) -> List[Path]:
     """Every CSV for this prefix, lowest priority first.
 
-    The bundled history stays. An uploaded week file wins on the days it
-    contains, even when a deploy has made the bundled file look newer.
-    A later end date beats an earlier one, then a newer upload.
+    History files stay. A later end date beats an earlier one, then a
+    newer file. Overlapping days are taken from the later file only.
     """
-    bundled = _bundled_dir()
     found: Dict[str, Path] = {}
     for folder in folders:
         if not folder.is_dir():
@@ -249,16 +246,7 @@ def _matching_paths(folders: Sequence[Path], prefix: str) -> List[Path]:
             except OSError:
                 key = str(path)
             found[key] = path
-    paths = list(found.values())
-    paths.sort(
-        key=lambda path: (
-            not _is_under(path, bundled),
-            _coverage_end(path),
-            _mtime(path),
-            path.name,
-        )
-    )
-    return paths
+    return _sort_discount_files(list(found.values()))
 
 
 def _merge_by_day(paths: Sequence[Path], date_col: str) -> Tuple[pd.DataFrame, List[str]]:
@@ -435,6 +423,104 @@ def _group_subgroups(
     return out
 
 
+def clip_to_week_end(df: pd.DataFrame, date_col: str, week_end: pd.Timestamp) -> pd.DataFrame:
+    """Drop rows after the selected week's Sunday (inclusive cap)."""
+    if df is None or df.empty or date_col not in df.columns:
+        return df if df is not None else pd.DataFrame()
+    end = pd.Timestamp(week_end).normalize()
+    dates = pd.to_datetime(df[date_col], errors="coerce")
+    if hasattr(dates.dt, "normalize"):
+        dates = dates.dt.normalize()
+    return df.loc[dates.notna() & (dates <= end)].copy()
+
+
+def _unknown_codes_in_window(
+    daily: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> List[Dict[str, Any]]:
+    """Codes classified as Other / unknown in [start, end], for the mapping list on the page."""
+    if daily is None or daily.empty or "code_or_title" not in daily.columns:
+        return []
+    work = daily.copy()
+    if "_date" in work.columns:
+        dates = pd.to_datetime(work["_date"], errors="coerce").dt.normalize()
+    elif "date" in work.columns:
+        dates = pd.to_datetime(work["date"], errors="coerce").dt.normalize()
+    else:
+        return []
+    mask = dates.notna() & (dates >= start) & (dates <= end)
+    work = work.loc[mask]
+    if work.empty:
+        return []
+    if "group" in work.columns:
+        work = work.loc[work["group"].map(_canonical_group_id).eq("other")]
+    if work.empty:
+        return []
+    amount_col = "_discount_amount_usd" if "_discount_amount_usd" in work.columns else "discount_amount_usd"
+    orders_col = "_orders" if "_orders" in work.columns else "orders"
+    if amount_col not in work.columns:
+        work[amount_col] = 0.0
+    if orders_col not in work.columns:
+        work[orders_col] = 0.0
+    work[amount_col] = pd.to_numeric(work[amount_col], errors="coerce").fillna(0.0)
+    work[orders_col] = pd.to_numeric(work[orders_col], errors="coerce").fillna(0.0)
+    work["code_or_title"] = work["code_or_title"].astype(str).str.strip()
+    grouped = (
+        work.groupby("code_or_title", dropna=False)[[orders_col, amount_col]]
+        .sum()
+        .reset_index()
+        .sort_values(["code_or_title"])
+    )
+    out: List[Dict[str, Any]] = []
+    for _, row in grouped.iterrows():
+        code = str(row["code_or_title"]).strip()
+        if not code or code.lower() in {"nan", "none"}:
+            continue
+        out.append(
+            {
+                "code_or_title": code,
+                "orders": int(round(float(row[orders_col] or 0.0))),
+                "discount_amount": float(row[amount_col] or 0.0),
+            }
+        )
+    return out
+
+
+def _path_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def list_discount_type_slot_files(data_root: Path) -> List[Path]:
+    """Discount-code CSVs from the shared slot and every week folder, oldest first.
+
+    Settings can be on week 44 while a file still lives under week 43 — both count.
+    Bundled repo files are omitted unless DATA_ROOT *is* that bundled folder.
+    """
+    files = _group_files(discount_types_dirs(data_root))
+    bundled = _bundled_dir()
+    data_slot = Path(data_root) / "discount_types"
+    include_bundled = False
+    try:
+        include_bundled = data_slot.resolve() == bundled.resolve()
+    except OSError:
+        include_bundled = False
+    by_name: Dict[str, Path] = {}
+    for path in files:
+        if not include_bundled and _path_under(path, bundled):
+            continue
+        prev = by_name.get(path.name)
+        if prev is None or _mtime(path) >= _mtime(prev):
+            by_name[path.name] = path
+    ordered = list(by_name.values())
+    ordered.sort(key=lambda p: (_mtime(p), p.name.lower()))
+    return ordered
+
+
 def load_discount_type_tables(data_root: Path) -> Dict[str, Any]:
     folders = discount_types_dirs(data_root)
     daily, group_files = _merge_by_day(_group_files(folders), "date")
@@ -585,8 +671,30 @@ def calculate_discount_types(
     granularity: str = "week",
     num_weeks: int = 8,
     months: int = 13,
+    fetch_shopify: bool = True,
 ) -> Dict[str, Any]:
     tables = load_discount_type_tables(data_root)
+    shopifyql: Dict[str, Any] = {"configured": False, "reason": "not_attempted"}
+    if fetch_shopify:
+        try:
+            from weekly_report.src.shopify_discounts import maybe_fetch_week, shopify_configured
+
+            daily_for_cover = tables["daily"]
+            dates: List[str] = []
+            if daily_for_cover is not None and not daily_for_cover.empty and "date" in daily_for_cover.columns:
+                dates = (
+                    pd.to_datetime(daily_for_cover["date"], errors="coerce")
+                    .dt.strftime("%Y-%m-%d")
+                    .dropna()
+                    .tolist()
+                )
+            shopifyql = maybe_fetch_week(base_week, Path(data_root), dates)
+            shopifyql["configured"] = shopify_configured()
+            if shopifyql.get("ok") and shopifyql.get("reason") == "fetched":
+                tables = load_discount_type_tables(data_root)
+        except Exception as exc:
+            shopifyql = {"configured": False, "ok": False, "reason": "error", "error": str(exc)}
+
     daily_raw = tables["daily"]
     totals_raw = tables["totals"]
 
@@ -606,6 +714,14 @@ def calculate_discount_types(
     fx = fx if fx.get("applied") else fx_tot
     currency = fx.get("target_currency", "SEK") if fx.get("applied") else "USD"
 
+    week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
+    if pd.isna(week_end):
+        week_end = pd.NaT
+    else:
+        week_end = pd.Timestamp(week_end).normalize()
+        daily = clip_to_week_end(daily, "_date", week_end)
+        totals = clip_to_week_end(totals, "_date", week_end)
+
     base: Dict[str, Any] = {
         "base_week": base_week,
         "granularity": granularity,
@@ -616,7 +732,9 @@ def calculate_discount_types(
         "files_used": tables["files_used"],
         "currency": currency,
         "fx": fx,
+        "shopifyql": shopifyql,
         "periods": [],
+        "unknown_codes": [],
     }
     if daily.empty and totals.empty:
         return {**base, "error": "no_discount_type_files"}
@@ -626,7 +744,6 @@ def calculate_discount_types(
     if not totals.empty:
         totals["_week"] = _iso_week_series(totals["_date"])
 
-    week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
     if pd.isna(week_end):
         return {**base, "error": "Invalid base_week date range"}
 
@@ -686,8 +803,17 @@ def calculate_discount_types(
         hist_start = str(totals["_date"].min().date())
         hist_end = str(totals["_date"].max().date())
 
+    week_rng = get_week_date_range(base_week)
+    unknown_codes = _unknown_codes_in_window(
+        daily,
+        pd.Timestamp(week_rng["start"]).normalize(),
+        week_end,
+    )
+
     return {
         **base,
         "history_range": {"start": hist_start, "end": hist_end} if hist_start else None,
+        "unknown_codes": unknown_codes,
         "periods": periods_out,
+        "shopifyql": shopifyql,
     }

@@ -179,6 +179,26 @@ DISCOUNT_WEEK = (
 )
 
 
+def test_file_metadata_lists_discount_csv_from_another_week_folder(upload_env):
+    """Uploading under 2026-43 still shows up when Settings is on 2026-44."""
+    import asyncio
+
+    routes, data_root = upload_env
+    name = "discount_groups_daily_2026-10-19_to_2026-10-25.csv"
+
+    async def _run():
+        result = await _upload(routes, name, "discount_types", DISCOUNT_WEEK, week="2026-43")
+        assert result["success"] is True
+        response = await routes.get_file_metadata(week="2026-44")
+        return json.loads(response.body)
+
+    payload = asyncio.run(_run())
+    listed = {f["filename"] for f in payload["discount_types"]["files"]}
+    assert name in listed
+    assert (data_root / "raw" / "2026-43" / "discount_types" / name).is_file()
+    assert (data_root / "discount_types" / name).is_file()
+
+
 def test_upload_endpoint_stores_discount_csv_even_from_the_pricing_slot(upload_env):
     import asyncio
 
@@ -194,6 +214,8 @@ def test_upload_endpoint_stores_discount_csv_even_from_the_pricing_slot(upload_e
     payload = asyncio.run(_run())
     stored = data_root / "discount_types" / name
     assert stored.is_file()
+    week_copy = data_root / "raw" / WEEK / "discount_types" / name
+    assert week_copy.is_file()
     assert list_slot_files(data_root / "raw" / WEEK / "full_price_vs_sale_excl_exchanges") == []
     assert payload["discount_types"]["filename"] == name
 

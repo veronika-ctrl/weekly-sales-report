@@ -1,6 +1,11 @@
 'use client'
 
-import type { DiscountTypesPeriod, DiscountTypesResponse, DiscountTypeBucket } from '@/lib/api'
+import type {
+  DiscountTypesPeriod,
+  DiscountTypesResponse,
+  DiscountTypeBucket,
+  DiscountTypesUnknownCode,
+} from '@/lib/api'
 import type { SectionViewState } from '@/lib/full-price-vs-sale-load'
 import { monthlyTypesLayout, SHOPIFY_GROSS_EXCL_VAT_NOTE } from '@/lib/full-price-presentation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -145,6 +150,41 @@ function ByTypeCard({
   )
 }
 
+function UnknownCodesCard({ codes }: { codes: DiscountTypesUnknownCode[] }) {
+  if (!codes.length) return null
+  return (
+    <Card data-testid="discount-types-unknown-codes">
+      <CardHeader>
+        <CardTitle className="text-sm font-medium">Unknown discount codes</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Not in the mapping and not caught by the Welcome- / FS- / winback / CDLP care / exchange
+          rules. Add them to weekly_report/data/discount_types/discount_code_mapping.csv.
+        </p>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="py-2 pr-4 font-medium">Code or title</th>
+              <th className="py-2 px-3 font-medium text-right">Orders</th>
+              <th className="py-2 pl-3 font-medium text-right">Discount amount (SEK)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {codes.map((row) => (
+              <tr key={row.code_or_title} className="border-b last:border-0">
+                <td className="py-2 pr-4 font-medium text-gray-900">{row.code_or_title}</td>
+                <td className="py-2 px-3 text-right tabular-nums">{row.orders.toLocaleString('sv-SE')}</td>
+                <td className="py-2 pl-3 text-right tabular-nums">{sekExact(row.discount_amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DiscountTypesSection({
   view,
   weekly,
@@ -191,6 +231,11 @@ export default function DiscountTypesSection({
           off at checkout (not a count of discounts); Orders is the number of orders. Free shipping
           shows order counts only (0 value). {SHOPIFY_GROSS_EXCL_VAT_NOTE}
         </p>
+        {data?.history_range ? (
+          <p className="text-xs text-muted-foreground mt-1">
+            Discount codes: {data.history_range.start} → {data.history_range.end}
+          </p>
+        ) : null}
       </div>
 
       {state === 'loading' ? (
@@ -269,6 +314,7 @@ export default function DiscountTypesSection({
               testId="discount-types-mtd"
             />
           ) : null}
+          <UnknownCodesCard codes={data?.unknown_codes || []} />
         </>
       ) : null}
     </div>

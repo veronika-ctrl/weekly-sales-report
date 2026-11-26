@@ -118,6 +118,8 @@ describe('footnote and title wiring', () => {
     assert.doesNotMatch(types, /SEK [’']000/)
     assert.doesNotMatch(types, /Full Price vs Sale – Monthly detail/)
     assert.match(page, /\{periodHeader\}ly detail/)
+    assert.match(types, /discount-types-unknown-codes/)
+    assert.match(types, /Unknown discount codes/)
   })
 
   it('wires mix-chart y-axis to integer 0–100 ticks', () => {

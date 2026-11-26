@@ -12,8 +12,13 @@ from weekly_report.src.metrics.discount_types import (
     NOTE,
     apply_code_mapping,
     calculate_discount_types,
+    clip_to_week_end,
     load_discount_type_tables,
 )
+from weekly_report.src.metrics.commercial_full_price import calculate_commercial_full_price
+
+
+HEADER = "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
 
 
 @pytest.fixture(autouse=True)
@@ -34,8 +39,6 @@ def test_weekly_upload_keeps_history_and_replaces_that_day_only(tmp_path: Path):
         "2026-10-20,2 Customer care,Named / care codes,CARE,1,8,2\n",
         encoding="utf-8",
     )
-    old = path.stat().st_mtime - 10_000_000
-    os.utime(path, (old, old))
     tables = load_discount_type_tables(tmp_path)
     assert name in tables["files_used"]
     assert any(item.startswith("discount_groups_daily_2024-10-01_to_2026-10-18") for item in tables["files_used"])
@@ -49,15 +52,25 @@ def test_weekly_upload_keeps_history_and_replaces_that_day_only(tmp_path: Path):
     assert set(day20["code_or_title"].astype(str)) == {"W43", "CARE"}
 
 
-def test_week_file_is_read_whatever_the_name(tmp_path: Path):
+def test_week_file_is_read_whatever_the_name(tmp_path: Path, monkeypatch):
     """A weekly export in the slot or in the order-lines folder is appended by day."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "discount_groups_daily_2024-10-01_to_2026-10-18.csv").write_text(
+        HEADER + "2024-10-01,1 Klaviyo,Welcome code,OLD,1,10,1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: bundle,
+    )
     slot = tmp_path / "raw" / "2026-43" / "discounts"
     slot.mkdir(parents=True)
     (slot / "W43 export.csv").write_text(
-        "date,group,subgroup,code_or_title,orders,gross_sales_usd,discount_amount_usd\n"
-        "2026-10-19,1 Klaviyo,Welcome code,W43K,2,100,1200\n"
-        '2026-10-19,"5 Investors, team, PR & friends",Team,TEAM,1,80,1300\n'
-        "2026-10-21,2 Customer care,Named / care codes,CARE,1,8,0\n",
+        HEADER
+        + "2026-10-19,1 Klaviyo,Welcome code,W43K,2,100,1200\n"
+        + '2026-10-19,"5 Investors, team, PR & friends",Team,TEAM,1,80,1300\n'
+        + "2026-10-21,2 Customer care,Named / care codes,CARE,1,8,0\n",
         encoding="utf-8",
     )
     (slot / "order_lines.csv").write_text(
@@ -274,3 +287,132 @@ def test_real_csv_investor_subgroups_present():
     assert "Welcome code" in k_labels
     assert "Abandoned checkout / free shipping" not in k_labels
     assert "free_shipping" not in [s["id"] for s in groups["klaviyo"]["subgroups"]]
+
+
+def test_merge_by_day_across_week_folders(tmp_path: Path, monkeypatch):
+    """W43 under week 43 and W44 under week 44 both load for a week-44 report."""
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
+    w43 = tmp_path / "raw" / "2026-43" / "discount_types"
+    w44 = tmp_path / "raw" / "2026-44" / "discounts"
+    w43.mkdir(parents=True)
+    w44.mkdir(parents=True)
+    (w43 / "discount_groups_daily_2026-10-19_to_2026-10-25.csv").write_text(
+        HEADER + "2026-10-20,1 Klaviyo,Welcome code,W43K,1,10,4\n",
+        encoding="utf-8",
+    )
+    (w44 / "week-44-export.csv").write_text(
+        HEADER + "2026-10-27,1 Klaviyo,Welcome code,W44K,1,10,11\n",
+        encoding="utf-8",
+    )
+    tables = load_discount_type_tables(tmp_path)
+    assert "discount_groups_daily_2026-10-19_to_2026-10-25.csv" in tables["files_used"]
+    assert "week-44-export.csv" in tables["files_used"]
+    daily = tables["daily"].copy()
+    daily["_day"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    assert set(daily.loc[daily["_day"] == "2026-10-20", "code_or_title"].astype(str)) == {"W43K"}
+    assert set(daily.loc[daily["_day"] == "2026-10-27", "code_or_title"].astype(str)) == {"W44K"}
+
+
+def test_later_file_replaces_overlapping_days(tmp_path: Path, monkeypatch):
+    """Two week folders covering the same day: later file (mtime) wins."""
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
+    older = tmp_path / "raw" / "2026-43" / "discount_types"
+    newer = tmp_path / "raw" / "2026-44" / "discount_types"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    old_path = older / "discount_groups_daily_2026-10-19_to_2026-10-25.csv"
+    old_path.write_text(
+        HEADER + "2026-10-20,1 Klaviyo,Welcome code,OLD,1,10,1\n",
+        encoding="utf-8",
+    )
+    os.utime(old_path, (old_path.stat().st_mtime - 10_000, old_path.stat().st_mtime - 10_000))
+    (newer / "discount_groups_daily_2026-10-19_to_2026-10-25.csv").write_text(
+        HEADER + "2026-10-20,2 Customer care,Named / care codes,NEW,2,20,9\n",
+        encoding="utf-8",
+    )
+    tables = load_discount_type_tables(tmp_path)
+    daily = tables["daily"].copy()
+    daily["_day"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    day = daily.loc[daily["_day"] == "2026-10-20"]
+    assert set(day["code_or_title"].astype(str)) == {"NEW"}
+    assert float(day["discount_amount_usd"].iloc[0]) == pytest.approx(9.0)
+
+
+def test_cap_at_week_sunday_drops_monday_after(tmp_path: Path, monkeypatch):
+    """Selected week 44 ends 1 Nov; 2 Nov must not enter history or the week totals."""
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
+    folder = tmp_path / "discount_types"
+    folder.mkdir()
+    (folder / "discount_groups_daily_fix.csv").write_text(
+        HEADER
+        + "2026-11-01,1 Klaviyo,Welcome code,SUN,1,10,5\n"
+        + "2026-11-02,1 Klaviyo,Welcome code,MON,1,10,999\n",
+        encoding="utf-8",
+    )
+    payload = calculate_discount_types(
+        "2026-44", tmp_path, granularity="week", num_weeks=1, fetch_shopify=False
+    )
+    assert payload["history_range"]["end"] == "2026-11-01"
+    week = next(p for p in payload["periods"] if p["key"] == "2026-44")
+    groups = {g["id"]: g for g in week["groups"]}
+    assert groups["klaviyo"]["discount_amount"] == pytest.approx(5.0)
+    assert week["end"] == "2026-11-01"
+
+    extra = pd.DataFrame(
+        {
+            "_date": pd.to_datetime(["2026-11-01", "2026-11-02"]),
+            "discount_amount_usd": [5.0, 999.0],
+        }
+    )
+    capped = clip_to_week_end(extra, "_date", pd.Timestamp("2026-11-01"))
+    assert list(capped["_date"].dt.strftime("%Y-%m-%d")) == ["2026-11-01"]
+
+
+def test_unknown_codes_listed_for_selected_week(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "weekly_report.src.metrics.discount_types._bundled_dir",
+        lambda: tmp_path / "missing-bundle",
+    )
+    folder = tmp_path / "discount_types"
+    folder.mkdir()
+    (folder / "discount_groups_daily_fix.csv").write_text(
+        HEADER
+        + "2026-10-27,8 Other / unknown,MysteryCode,MysteryCode,1,10,3\n"
+        + "2026-10-27,1 Klaviyo,Welcome code,Welcome-AAA,1,10,2\n",
+        encoding="utf-8",
+    )
+    payload = calculate_discount_types(
+        "2026-44", tmp_path, granularity="week", num_weeks=1, fetch_shopify=False
+    )
+    codes = {row["code_or_title"]: row for row in payload["unknown_codes"]}
+    assert "MysteryCode" in codes
+    assert "Welcome-AAA" not in codes
+    assert codes["MysteryCode"]["discount_amount"] == pytest.approx(3.0)
+
+
+def test_w44_klaviyo_cc_internal_from_bundled_csv():
+    tables = load_discount_type_tables(Path("/tmp/does-not-exist"))
+    if not any("2026-10-26_to_2026-11-01" in name for name in tables["files_used"]):
+        pytest.skip("W44 discount_groups_daily CSV not bundled")
+    payload = calculate_discount_types(
+        "2026-44", Path("/tmp/does-not-exist"), granularity="week", num_weeks=1, fetch_shopify=False
+    )
+    assert payload["history_range"]["end"] == "2026-11-01"
+    week = next(p for p in payload["periods"] if p["key"] == "2026-44")
+    groups = {g["id"]: g for g in week["groups"]}
+    assert groups["klaviyo"]["discount_amount"] == pytest.approx(1175.02, abs=0.05)
+    assert groups["customer_care"]["discount_amount"] == pytest.approx(63.50, abs=0.05)
+    assert groups["investors"]["discount_amount"] == pytest.approx(0.0)
+    commercial = calculate_commercial_full_price(
+        "2026-44", Path("/tmp/does-not-exist"), granularity="week", num_weeks=1
+    )
+    assert commercial["discount_range"]["end"] == "2026-11-01"

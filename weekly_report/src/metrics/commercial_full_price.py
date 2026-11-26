@@ -16,6 +16,7 @@ import pandas as pd
 from weekly_report.src.metrics.discount_types import (
     _canonical_group_id,
     _prepare_money,
+    clip_to_week_end,
     load_discount_type_tables,
 )
 from weekly_report.src.metrics.discounts_sales import _build_display_weeks, _iso_week_series
@@ -263,13 +264,21 @@ def calculate_commercial_full_price(
 ) -> Dict[str, Any]:
     if granularity not in ("week", "month"):
         raise ValueError("granularity must be 'week' or 'month'")
+    week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
+    if pd.isna(week_end):
+        raise ValueError(f"Invalid base week: {base_week}")
+    week_end = pd.Timestamp(week_end).normalize()
+
     history = load_pricing_type_daily_history(Path(data_root))
     prepared = _prepared_discount_daily(Path(data_root))
-    triggers = trigger_discounts_from_daily(prepared["daily"])
+    daily = clip_to_week_end(prepared.get("daily"), "_date", week_end)
+    triggers = trigger_discounts_from_daily(daily)
     pricing = history.get("df")
     if pricing is None:
         pricing = pd.DataFrame()
+    pricing = clip_to_week_end(pricing, "_date", week_end)
     adjusted = attach_trigger_discounts(pricing, triggers)
+    adjusted = clip_to_week_end(adjusted, "_date", week_end)
     periods = build_commercial_periods(
         adjusted,
         base_week,
@@ -280,17 +289,19 @@ def calculate_commercial_full_price(
     has_last_year = any((p.get("last_year") or {}).get("total", 0) > 0 for p in periods)
     files = list(history.get("files_used") or []) + list(prepared.get("files_used") or [])
     hist = None
-    if not adjusted.empty:
+    if not adjusted.empty and "_date" in adjusted.columns:
         hist = {
             "start": str(adjusted["_date"].min().date()),
-            "end": str(adjusted["_date"].max().date()),
+            "end": str(min(adjusted["_date"].max(), week_end).date()),
         }
     discount_range = None
-    daily = prepared.get("daily")
     if daily is not None and not daily.empty and "_date" in daily.columns:
         dates = pd.to_datetime(daily["_date"], errors="coerce").dropna()
         if not dates.empty:
-            discount_range = {"start": str(dates.min().date()), "end": str(dates.max().date())}
+            discount_range = {
+                "start": str(dates.min().date()),
+                "end": str(min(dates.max(), week_end).date()),
+            }
     fx = history.get("fx") or prepared.get("fx") or {"applied": False}
     currency = history.get("currency") or ("SEK" if fx.get("applied") else "USD")
     return {

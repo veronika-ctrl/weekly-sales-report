@@ -291,11 +291,15 @@ def calculate_full_price_vs_sale_excl_exchanges(
     df["_date"] = pd.to_datetime(df["_date"], errors="coerce")
     df = df.dropna(subset=["_date"])
     df["_date"] = df["_date"].dt.normalize()
-    df["_week"] = _iso_week_series(df["_date"])
 
     week_end = pd.to_datetime(get_week_date_range(base_week)["end"], errors="coerce")
     if pd.isna(week_end):
         return {**base, "error": "Invalid base_week date range", "days": [], "weeks": [], "months_data": [], "period": None}
+    week_end = pd.Timestamp(week_end).normalize()
+    df = df.loc[df["_date"] <= week_end].copy()
+    if df.empty:
+        return {**base, "days": [], "weeks": [], "months_data": [], "period": None, "history_range": None}
+    df["_week"] = _iso_week_series(df["_date"])
 
     expected_weeks: List[str] = []
     month_keys: List[Any] = []
